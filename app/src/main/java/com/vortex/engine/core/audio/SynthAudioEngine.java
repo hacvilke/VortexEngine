@@ -18,6 +18,7 @@ public class SynthAudioEngine {
     private final Map<String, short[]> clips = new HashMap<>();
     private final ExecutorService audioPool = Executors.newFixedThreadPool(3);
     private volatile boolean muted = false;
+    private AudioTrack musicTrack = null;
 
     public SynthAudioEngine() {
         generatePresets();
@@ -138,7 +139,43 @@ public class SynthAudioEngine {
         });
     }
 
+    public synchronized void startMusicLoop(String pattern, int bpm) {
+        stopMusicLoop();
+        if (muted) return;
+        try {
+            short[] pcm = ChiptuneGenerator.synthesizeLoop(pattern, bpm);
+            AudioAttributes attrs = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_GAME)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build();
+            AudioFormat format = new AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(SAMPLE_RATE)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build();
+            musicTrack = new AudioTrack(
+                    attrs, format, pcm.length * 2,
+                    AudioTrack.MODE_STATIC, AudioManager.AUDIO_SESSION_ID_GENERATE);
+            musicTrack.write(pcm, 0, pcm.length);
+            musicTrack.setLoopPoints(0, pcm.length, -1);
+            musicTrack.play();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public synchronized void stopMusicLoop() {
+        if (musicTrack != null) {
+            try {
+                musicTrack.stop();
+                musicTrack.release();
+            } catch (Throwable ignored) {
+            }
+            musicTrack = null;
+        }
+    }
+
     public void shutdown() {
+        stopMusicLoop();
         audioPool.shutdownNow();
     }
 }

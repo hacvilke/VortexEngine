@@ -1,12 +1,27 @@
-# Vortex Engine v2.0.0 — 2D & 3D Game Engine + Cross-Platform Studio
+# Vortex Engine v3.0.0 ("Apex Edition") — 2D & 3D Game Engine + Cross-Platform Studio
 
-**Create, script, paint, simulate, and export real 2D & 3D games — on Android (with Termux `.apk` compilation, zero laptop needed!), Windows PC (`.exe`), and Linux!**
+**Create, wire visually with No-Code Flow or Lua 5.2, compose 16-step Chiptune music, paint sprites, simulate Box2D & Theta\* AI, and export real 2D & 3D games to Android (`.apk` via Termux, zero laptop needed!), HTML5 Web (`.html`), Windows PC (`.exe`), and Linux!**
 
 ---
 
-## What's New in v2.0.0
+## Massive New Upgrades in v3.0.0 ("Apex Edition")
 
-### 1. Open-Source Engine Powerhouses Integrated
+1. **⚡ "Vortex Flow" Visual Event-Sheet Builder (No-Code ➔ Lua 5.2 Compiler)**
+   - Build complete 2D & 3D game logic using Construct/GDevelop-style `WHEN [Event] ➔ DO [Action]` cards on phone or PC — then compile **1-to-1 into clean, editable Lua 5.2** with a single tap!
+2. **🧠 Autonomous Theta\* & A\* AI Pathfinding + 2D/3D Raycasting (`xaguzman/pathfinding`, Apache-2.0)**
+   - Dynamic `NavigationGrid` + `ThetaStarGridFinder` obstacle-avoiding enemy navigation (`vortex.chaseAI`, `vortex.chaseTagAI`) + analytical 2D/3D Slab Raycasting (`vortex.raycast`) for line-of-sight and hitscan lasers!
+3. **✨ Pro Easing & Yoyo Animations (`Universal Tween Engine 6.3.3`, Apache-2.0)**
+   - Animate positions, scales, and rotations with Robert Penner curves (`BOUNCE`, `ELASTIC`, `BACK`, `SINE`, `QUAD`, `EXPO`) and infinite Yoyo loops (`vortex.tweenPos`, `vortex.tweenScale`, `vortex.tweenRot`, `vortex.tweenTagYoyo`)!
+4. **🎵 Built-in 16-Step Polyphonic Chiptune Music Composer & Synth**
+   - 4-channel retro tracker (25%-pulse Square Lead + Triangle Bass + Pitch-Sweep Kick + Noise Hi-Hat) with interactive 16-step note grid and 4 instant genre presets (`CYBERPUNK`, `DUNGEON`, `BOSS`, `SKYCHILL`) — zero MP3 asset bloat!
+5. **🌐 1-Click Single-File HTML5 Web Game Exporter (`.html`)**
+   - Exports any 2D or 3D game into a **100% self-contained `.html` file** (Canvas 2D + Perspective 3D Renderer + WebAudio Chiptune & SFX Synth + Mobile Touch D-Pad + WASD Keyboard) ready for **itch.io**, Chrome, Discord, or mobile sharing!
+6. **↶ / ↷ 40-State Undo / Redo History + 10 Built-in Starter Templates**
+   - Includes **Cyber Hunters AI Maze 2D** (Theta\* AI + Tweens + Chiptune + Flow Sheet) and **Neon Citadel Siege 3D** (Universal Tween Crushers + 3D Raycast Boss Battle)!
+
+---
+
+## Core Engine Powerhouses (v2.0 + v3.0)
 - **Lua 5.2 Scripting VM (`LuaJ 3.0.1`, MIT)** alongside **VortexScript (`.vxs`)** — write full Lua 5.2 scripts (`math`, tables, closures, `vortex.*` bindings) or VortexScript in the same project!
 - **Box2D 2D Rigid-Body Physics (`JBox2D 2.2.1.1`, BSD-3)** — realistic tumbling crates, rotational torque, restitution/bounce, friction, impulses (`vortex.applyImpulse`), and sensor triggers!
 - **3D Procedural Worlds (`FastNoiseLite`, MIT)** — generate sunlit 3D mountain & valley heightfield terrains (`TERRAIN` primitive + `vortex.noise2D` / `vortex.terrainHeight` APIs) with 1-tap seed randomization!
@@ -28,16 +43,17 @@
 
 ---
 
-## Downloads (GitHub Releases — `v2.0.0`)
+## Downloads (GitHub Releases — `v3.0.0`)
 
 | Platform | File | Description |
 |---|---|---|
-| **Android (Phone/Tablet)** | `VortexEngine-Studio-v2.0.0.apk` | Full 2D/3D Mobile Game Engine IDE + Termux APK Builder |
-| **Windows 10/11 (64-bit)** | `VortexEngine-Studio-Windows-x64.exe` | Native Windows Studio IDE + `.exe` / `.jar` / Android Exporter (requires 64-bit Java 11+ or `./jre`) |
+| **Android (Phone/Tablet)** | `VortexEngine-Studio-v3.0.0.apk` | Full 2D/3D Mobile Game Engine IDE + Flow + Chiptune + Termux APK & HTML5 Exporter |
+| **HTML5 Web (Instant Play)** | `CyberMazeHunters-Web.html` | Zero-dependency playable HTML5 Web export of *Cyber Hunters: Theta\* AI Maze* |
+| **Windows 10/11 (64-bit)** | `VortexEngine-Studio-Windows-x64.exe` | Native Windows Studio IDE + `.html` / `.exe` / `.jar` / Android Exporter |
 | **Linux (x86_64)** | `VortexEngine-Studio-Linux-x86_64` | Self-contained Linux Desktop Studio IDE (`chmod +x` & run) |
-| **Cross-Platform JVM** | `VortexEngine-Studio-Desktop-v2.0.0.jar` | Portable Desktop Studio (`java -jar VortexEngine-Studio-Desktop-v2.0.0.jar`) |
-| **Sample Game (Android)** | `AngryCratesBox2D-Android-Sample.apk` | Standalone Lua 5.2 + JBox2D Physics game compiled via Termux pipeline |
-| **Sample Game (Windows)** | `AngryCratesBox2D-Windows-Sample.exe` | Standalone Lua 5.2 + JBox2D Physics game exported as a Windows `.exe` |
+| **Cross-Platform JVM** | `VortexEngine-Studio-Desktop-v3.0.0.jar` | Portable Desktop Studio (`java -jar VortexEngine-Studio-Desktop-v3.0.0.jar`) |
+| **Sample Game (Android)** | `CyberHuntersAI-Android-Sample.apk` | Standalone Theta\* AI + Tween + Chiptune + Box2D game compiled via Termux pipeline |
+| **Sample Game (Windows)** | `CyberHuntersAI-Windows-Sample.exe` | Standalone Theta\* AI + Tween + Chiptune + Box2D game exported as a Windows `.exe` |
 
 ---
 

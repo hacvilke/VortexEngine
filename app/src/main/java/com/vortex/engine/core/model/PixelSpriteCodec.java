@@ -84,6 +84,28 @@ public class PixelSpriteCodec {
         return fromAsciiArt(rows);
     }
 
+    public static String createSlimeSprite() {
+        String[] rows = new String[]{
+                "................",
+                ".....RRRRRR.....",
+                "...RRRRRRRRRR...",
+                "..RRRRRRRRRRRR..",
+                "..RRWWKRRWWKRR..",
+                "..RRWWKRRWWKRR..",
+                ".RRRRRRRRRRRRRR.",
+                ".RRRRYYYYYYRRRR.",
+                ".RRRRYKKKKYRRRR.",
+                ".RRRRRRRRRRRRRR.",
+                "..RRRRRRRRRRRR..",
+                "..RR.RR..RR.RR..",
+                ".RR..RR..RR..RR.",
+                "................",
+                "................",
+                "................"
+        };
+        return fromAsciiArt(rows);
+    }
+
     private static String fromAsciiArt(String[] rows16) {
         StringBuilder sb = new StringBuilder();
         for (int y = 0; y < SIZE; y++) {

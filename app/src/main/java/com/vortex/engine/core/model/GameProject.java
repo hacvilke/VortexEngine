@@ -1,5 +1,7 @@
 package com.vortex.engine.core.model;
 
+import com.vortex.engine.core.audio.ChiptuneGenerator;
+import com.vortex.engine.core.flow.VortexFlowCompiler;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -24,6 +26,14 @@ public class GameProject {
     // Custom Procedural Terrain Parameters (FastNoiseLite)
     public int terrainSeed = 1337;
     public float terrainFreq = 0.065f;
+
+    // Built-in 16-Step Polyphonic Chiptune Sequencer (v3.0)
+    public boolean musicEnabled = false;
+    public int musicBpm = 128;
+    public String musicPattern = ChiptuneGenerator.PRESET_CYBERPUNK;
+
+    // Visual Event-Sheet Rules ("Vortex Flow" v3.0)
+    public final List<VortexFlowCompiler.FlowRule> flowRules = new ArrayList<>();
 
     // Custom Icon Theme
     public String iconBgHex = "#0D1321";
@@ -115,6 +125,10 @@ public class GameProject {
             o.put("useBox2D", useBox2D);
             o.put("terrainSeed", terrainSeed);
             o.put("terrainFreq", terrainFreq);
+            o.put("musicEnabled", musicEnabled);
+            o.put("musicBpm", musicBpm);
+            o.put("musicPattern", musicPattern);
+            o.put("flowRules", VortexFlowCompiler.toJsonArray(flowRules));
             o.put("iconBgHex", iconBgHex);
             o.put("iconAccentHex", iconAccentHex);
             o.put("iconGlyph", iconGlyph);
@@ -177,6 +191,10 @@ public class GameProject {
         p.useBox2D = o.optBoolean("useBox2D", true);
         p.terrainSeed = o.optInt("terrainSeed", 1337);
         p.terrainFreq = (float) o.optDouble("terrainFreq", 0.065);
+        p.musicEnabled = o.optBoolean("musicEnabled", false);
+        p.musicBpm = o.optInt("musicBpm", 128);
+        p.musicPattern = o.optString("musicPattern", ChiptuneGenerator.PRESET_CYBERPUNK);
+        p.flowRules.addAll(VortexFlowCompiler.fromJsonArray(o.optJSONArray("flowRules")));
         p.iconBgHex = o.optString("iconBgHex", "#0D1321");
         p.iconAccentHex = o.optString("iconAccentHex", "#00E5FF");
         p.iconGlyph = o.optString("iconGlyph", "CUBE");

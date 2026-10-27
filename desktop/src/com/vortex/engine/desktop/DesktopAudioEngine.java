@@ -1,5 +1,6 @@
 package com.vortex.engine.desktop;
 
+import com.vortex.engine.core.audio.ChiptuneGenerator;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -16,9 +17,53 @@ public class DesktopAudioEngine {
     private static final int SAMPLE_RATE = 22050;
     private final ExecutorService pool = Executors.newFixedThreadPool(3);
     private volatile boolean muted = false;
+    private volatile Thread musicThread = null;
+    private volatile boolean musicRunning = false;
 
     public void setMuted(boolean muted) {
         this.muted = muted;
+        if (muted) stopMusicLoop();
+    }
+
+    public synchronized void startMusicLoop(final String pattern, final int bpm) {
+        stopMusicLoop();
+        if (muted) return;
+        musicRunning = true;
+        musicThread = new Thread(() -> {
+            try {
+                short[] samples = ChiptuneGenerator.synthesizeLoop(pattern, bpm);
+                byte[] pcm = new byte[samples.length * 2];
+                for (int i = 0; i < samples.length; i++) {
+                    pcm[i * 2] = (byte) (samples[i] & 0xFF);
+                    pcm[i * 2 + 1] = (byte) ((samples[i] >> 8) & 0xFF);
+                }
+                AudioFormat fmt = new AudioFormat(SAMPLE_RATE, 16, 1, true, false);
+                try (SourceDataLine line = AudioSystem.getSourceDataLine(fmt)) {
+                    line.open(fmt, 8192);
+                    line.start();
+                    int offset = 0;
+                    int chunk = 2048;
+                    while (musicRunning && !muted) {
+                        int len = Math.min(chunk, pcm.length - offset);
+                        line.write(pcm, offset, len);
+                        offset += len;
+                        if (offset >= pcm.length) offset = 0;
+                    }
+                    line.stop();
+                }
+            } catch (Throwable ignored) {
+            }
+        }, "Vortex-Chiptune-Thread");
+        musicThread.setDaemon(true);
+        musicThread.start();
+    }
+
+    public synchronized void stopMusicLoop() {
+        musicRunning = false;
+        if (musicThread != null) {
+            musicThread.interrupt();
+            musicThread = null;
+        }
     }
 
     public void play(final String presetName) {
@@ -115,6 +160,7 @@ public class DesktopAudioEngine {
     }
 
     public void shutdown() {
+        stopMusicLoop();
         pool.shutdownNow();
     }
 }

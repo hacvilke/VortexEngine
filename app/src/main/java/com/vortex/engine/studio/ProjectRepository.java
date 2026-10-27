@@ -37,18 +37,34 @@ public class ProjectRepository {
             }
         }
         if (list.isEmpty()) {
+            GameProject cyberMaze = ProjectTemplates.create("CYBER_MAZE_AI_2D", "Cyber Hunters AI Maze", "com.vortex.game.cyberhunters");
+            GameProject citadel3D = ProjectTemplates.create("CITADEL_TWEEN_3D", "Neon Citadel Siege 3D", "com.vortex.game.citadel3d");
             GameProject box2dLua = ProjectTemplates.create("ANGRY_BOX2D_LUA", "Angry Crates Siege", "com.vortex.game.angrycrates");
             GameProject terrain3D = ProjectTemplates.create("FRONTIER_TERRAIN_3D_LUA", "Procedural Frontier 3D", "com.vortex.game.frontier3d");
-            GameProject neon3D = ProjectTemplates.create("NEON_3D", "Neon Horizon 3D", "com.vortex.game.neonhorizon");
-            GameProject platformer2D = ProjectTemplates.create("PLATFORMER_2D", "Starbound Cavern 2D", "com.vortex.game.starbound");
-            saveProject(ctx, box2dLua);
             saveProject(ctx, terrain3D);
-            saveProject(ctx, neon3D);
-            saveProject(ctx, platformer2D);
+            saveProject(ctx, box2dLua);
+            saveProject(ctx, citadel3D);
+            saveProject(ctx, cyberMaze);
+            list.add(cyberMaze);
+            list.add(citadel3D);
             list.add(box2dLua);
             list.add(terrain3D);
-            list.add(neon3D);
-            list.add(platformer2D);
+            try { new File(dir, "v3_seeded.flag").createNewFile(); } catch (Exception ignored) {}
+        } else {
+            File v3Flag = new File(dir, "v3_seeded.flag");
+            if (!v3Flag.exists()) {
+                try {
+                    v3Flag.createNewFile();
+                    GameProject citadel3D = ProjectTemplates.create("CITADEL_TWEEN_3D", "Neon Citadel Siege 3D", "com.vortex.game.citadel3d");
+                    GameProject cyberMaze = ProjectTemplates.create("CYBER_MAZE_AI_2D", "Cyber Hunters AI Maze", "com.vortex.game.cyberhunters");
+                    saveProject(ctx, citadel3D);
+                    Thread.sleep(5);
+                    saveProject(ctx, cyberMaze);
+                    list.add(citadel3D);
+                    list.add(cyberMaze);
+                } catch (Exception ignored) {
+                }
+            }
         }
         Collections.sort(list, (a, b) -> Long.compare(b.updatedAt, a.updatedAt));
         return list;

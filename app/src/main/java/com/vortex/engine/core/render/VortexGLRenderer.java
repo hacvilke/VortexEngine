@@ -137,7 +137,21 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
             public void onPlaySound(String soundName) {
                 audioEngine.play(soundName);
             }
+
+            @Override
+            public void onPlayMusic(String pattern, int bpm) {
+                audioEngine.startMusicLoop(pattern, bpm);
+            }
+
+            @Override
+            public void onStopMusic() {
+                audioEngine.stopMusicLoop();
+            }
         });
+
+        if (!startPlaying) {
+            audioEngine.stopMusicLoop();
+        }
 
         if (project != null) {
             editor2DZoom = project.zoom2D;

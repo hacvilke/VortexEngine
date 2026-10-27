@@ -1,11 +1,14 @@
 package com.vortex.engine.core.script;
 
+import com.vortex.engine.core.ai.VortexAIEngine;
+import com.vortex.engine.core.audio.ChiptuneGenerator;
 import com.vortex.engine.core.math.Vec3;
 import com.vortex.engine.core.model.Entity;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.noise.FastNoiseLite;
 import com.vortex.engine.core.noise.TerrainGenerator;
 import com.vortex.engine.core.physics.PhysicsWorld;
+import com.vortex.engine.core.tween.VortexTweenSystem;
 import org.luaj.vm2.Globals;
 import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaValue;
@@ -31,6 +34,8 @@ public class VortexScriptEngine {
         void onCameraShake(float intensity, float duration);
         void onEmitParticles(float x, float y, float z, int count, String colorHex);
         void onPlaySound(String soundName);
+        default void onPlayMusic(String pattern, int bpm) {}
+        default void onStopMusic() {}
     }
 
     // Shared Input & HUD State
@@ -50,6 +55,8 @@ public class VortexScriptEngine {
     private GameProject project;
     private PhysicsWorld physicsWorld;
     private HostBridge hostBridge;
+    public final VortexTweenSystem tweenSystem = new VortexTweenSystem();
+    public final VortexAIEngine aiEngine = new VortexAIEngine();
     private FastNoiseLite fastNoise = TerrainGenerator.createConfiguredNoise(1337, 0.065f);
     private final Random rng = new Random();
 
@@ -68,6 +75,8 @@ public class VortexScriptEngine {
         this.project = project;
         this.physicsWorld = physicsWorld;
         this.hostBridge = hostBridge;
+        this.tweenSystem.reset();
+        this.aiEngine.reset();
         if (project != null) {
             this.fastNoise = TerrainGenerator.createConfiguredNoise(project.terrainSeed, project.terrainFreq);
         }
@@ -118,6 +127,12 @@ public class VortexScriptEngine {
         elapsedTime = 0f;
         lastError = null;
         compiledOk = false;
+        tweenSystem.reset();
+        aiEngine.reset();
+
+        if (project != null && project.musicEnabled && hostBridge != null) {
+            hostBridge.onPlayMusic(project.musicPattern, project.musicBpm);
+        }
 
         String lang = project != null ? project.scriptLanguage : "VXS";
         usingLua = detectLuaMode(lang, sourceCode);
@@ -163,14 +178,16 @@ public class VortexScriptEngine {
         String[] apiNames = new String[]{
                 "joyX", "inputX", "joyY", "inputY", "btnA", "btnB", "touchDown", "touchX", "touchY",
                 "exists", "getX", "getY", "getZ", "getVX", "getVY", "getVZ", "getRotY", "getRotZ", "getTag",
-                "isGrounded", "dist", "countByTag",
+                "isGrounded", "dist", "distance", "countByTag",
                 "setPos", "move", "setVel", "addVel", "applyImpulse", "setAngularVel", "setFixedRotation",
                 "jump", "setRot", "rotate", "setScale", "setSpin", "setColor", "destroy",
-                "spawn3D", "spawn2D", "particles", "emitParticles", "playSound", "shake", "shakeCamera",
-                "setCamTarget", "setCamDist", "setSky",
+                "spawn3D", "spawn2D", "particles", "emitParticles", "playSound", "playMusic", "stopMusic",
+                "shake", "shakeCamera", "setCamTarget", "setCamDist", "setSky",
                 "addScore", "setScore", "getScore", "setHealth", "addHealth", "getHealth",
                 "setBanner", "setHudText", "log",
-                "noise2D", "noise3D", "rand", "clamp", "time"
+                "chaseAI", "chaseTagAI", "raycast",
+                "tweenPos", "tweenScale", "tweenRot", "tweenTagYoyo",
+                "noise2D", "noise3D", "terrainHeight", "rand", "clamp", "time"
         };
 
         for (final String fnName : apiNames) {
@@ -216,6 +233,8 @@ public class VortexScriptEngine {
 
     public synchronized void update(float dt) {
         elapsedTime += dt;
+        aiEngine.onFrameTick();
+        tweenSystem.update(dt);
         if (!compiledOk) return;
         callHook("onUpdate", (double) dt);
     }
@@ -471,6 +490,97 @@ public class VortexScriptEngine {
             }
             case "playSound": {
                 if (hostBridge != null) hostBridge.onPlaySound(str(a, 0));
+                return 0.0;
+            }
+            case "playMusic": {
+                String pat = a.length > 0 ? ChiptuneGenerator.resolvePresetOrCustom(str(a, 0)) : project.musicPattern;
+                int bpm = a.length > 1 ? (int) flt(a, 1, project.musicBpm) : project.musicBpm;
+                project.musicEnabled = true;
+                project.musicPattern = pat;
+                project.musicBpm = bpm;
+                if (hostBridge != null) hostBridge.onPlayMusic(pat, bpm);
+                return 0.0;
+            }
+            case "stopMusic": {
+                if (hostBridge != null) hostBridge.onStopMusic();
+                return 0.0;
+            }
+            // v3.0 AI Pathfinding & Raycasting (xaguzman/pathfinding Theta* & A*)
+            case "distance": {
+                Entity ea = project.findByName(str(a, 0));
+                Entity eb = project.findByName(str(a, 1));
+                if (ea == null || eb == null) return 9999.0;
+                return Math.sqrt((ea.x - eb.x) * (ea.x - eb.x) + (ea.y - eb.y) * (ea.y - eb.y) + (ea.z - eb.z) * (ea.z - eb.z));
+            }
+            case "chaseAI": {
+                Entity seeker = project.findByName(str(a, 0));
+                Entity target = project.findByName(str(a, 1));
+                float spd = flt(a, 2, 5.0f);
+                aiEngine.chaseEntityAI(project, physicsWorld, seeker, target, spd);
+                return 0.0;
+            }
+            case "chaseTagAI": {
+                String tag = str(a, 0);
+                Entity target = project.findByName(str(a, 1));
+                float spd = flt(a, 2, 4.5f);
+                if (target != null) {
+                    for (int i = 0; i < project.entities.size(); i++) {
+                        Entity se = project.entities.get(i);
+                        if (se.alive && tag.equalsIgnoreCase(se.tag)) {
+                            aiEngine.chaseEntityAI(project, physicsWorld, se, target, spd);
+                        }
+                    }
+                }
+                return 0.0;
+            }
+            case "raycast": {
+                float ox = flt(a, 0, 0f), oy = flt(a, 1, 0f), oz = flt(a, 2, 0f);
+                float dx = flt(a, 3, 1f), dy = flt(a, 4, 0f), dz = flt(a, 5, 0f);
+                float maxD = flt(a, 6, 40f);
+                return aiEngine.raycast(project, null, ox, oy, oz, dx, dy, dz, maxD);
+            }
+            // v3.0 Universal Tween Engine (Bounce, Elastic, Back, Sine, Quad, Expo + Yoyo)
+            case "tweenPos": {
+                Entity e = project.findByName(str(a, 0));
+                if (e != null) {
+                    tweenSystem.tweenPos(e, flt(a, 1, e.x), flt(a, 2, e.y), flt(a, 3, e.z),
+                            flt(a, 4, 1.0f), a.length > 5 ? str(a, 5) : "SINE", (int) flt(a, 6, 0f));
+                }
+                return 0.0;
+            }
+            case "tweenScale": {
+                Entity e = project.findByName(str(a, 0));
+                if (e != null) {
+                    tweenSystem.tweenScale(e, flt(a, 1, e.scaleX), flt(a, 2, e.scaleY), flt(a, 3, e.scaleZ),
+                            flt(a, 4, 0.6f), a.length > 5 ? str(a, 5) : "ELASTIC", (int) flt(a, 6, 0f));
+                }
+                return 0.0;
+            }
+            case "tweenRot": {
+                Entity e = project.findByName(str(a, 0));
+                if (e != null) {
+                    tweenSystem.tweenRot(e, flt(a, 1, e.rotX), flt(a, 2, e.rotY), flt(a, 3, e.rotZ),
+                            flt(a, 4, 1.0f), a.length > 5 ? str(a, 5) : "QUAD", (int) flt(a, 6, 0f));
+                }
+                return 0.0;
+            }
+            case "tweenTagYoyo": {
+                String tag = str(a, 0);
+                float dy = flt(a, 1, 0.55f);
+                float dur = flt(a, 2, 1.0f);
+                String ease = a.length > 3 ? str(a, 3) : "SINE";
+                for (int i = 0; i < project.entities.size(); i++) {
+                    Entity te = project.entities.get(i);
+                    if (te.alive && tag.equalsIgnoreCase(te.tag)) {
+                        tweenSystem.tweenPos(te, te.x, te.y + dy, te.z, dur, ease, -1);
+                    }
+                }
+                return 0.0;
+            }
+            case "terrainHeight": {
+                if (physicsWorld != null) {
+                    return (double) physicsWorld.sampleTerrainHeightAt(project, flt(a, 0, 0f), flt(a, 1, 0f));
+                }
                 return 0.0;
             }
             case "shake":

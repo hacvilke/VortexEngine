@@ -29,15 +29,21 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import com.vortex.engine.core.audio.ChiptuneGenerator;
 import com.vortex.engine.core.audio.SynthAudioEngine;
+import com.vortex.engine.core.export.Html5WebExporter;
+import com.vortex.engine.core.flow.VortexFlowCompiler;
 import com.vortex.engine.core.model.Entity;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.model.PixelSpriteCodec;
 import com.vortex.engine.core.render.VortexGLRenderer;
 import com.vortex.engine.core.script.VortexScriptEngine;
 import com.vortex.engine.core.ui.VortexGameSurfaceView;
+import android.os.Environment;
 import java.io.File;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -71,11 +77,15 @@ public class EditorActivity extends Activity {
     private TextView scriptStatusTv;
     private TextView langToggleBtn;
     private LinearLayout snippetBar;
+    private ScrollView flowPanel;
+    private LinearLayout flowRuleListContainer;
     private ScrollView sfxPanel;
     private ScrollView buildPanel;
     private TextView buildLogTv;
     private TextView telemetryChip;
     private TextView dimToggleBtn;
+    private final Deque<String> undoStack = new ArrayDeque<>();
+    private final Deque<String> redoStack = new ArrayDeque<>();
 
     private final List<TextView> tabButtons = new ArrayList<>();
     private String currentMode = "SCENE";
@@ -194,6 +204,10 @@ public class EditorActivity extends Activity {
         workspace.addView(scriptPanel, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
+        flowPanel = buildFlowPanel();
+        workspace.addView(flowPanel, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
         sfxPanel = buildSfxLabPanel();
         workspace.addView(sfxPanel, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -242,18 +256,24 @@ public class EditorActivity extends Activity {
 
         dimToggleBtn = makeChip(project.dimensionMode, "#1E1B4B", "#818CF8");
         dimToggleBtn.setOnClickListener(v -> {
+            pushUndoSnapshot();
             project.dimensionMode = "3D".equalsIgnoreCase(project.dimensionMode) ? "2D" : "3D";
             dimToggleBtn.setText(project.dimensionMode);
             viewportSurface.renderer.resetEditorCamera();
             rebuildSceneToolbarButtons();
             saveProjectQuiet();
         });
-        LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        dLp.rightMargin = dp(6);
-        row1.addView(dimToggleBtn, dLp);
+        row1.addView(dimToggleBtn, rightMarginLp(4));
 
-        TextView saveBtn = makeChip("💾 SAVE", "#064E3B", "#10B981");
+        TextView undoBtn = makeChip("↶", "#1E293B", "#475569");
+        undoBtn.setOnClickListener(v -> performUndo());
+        row1.addView(undoBtn, rightMarginLp(4));
+
+        TextView redoBtn = makeChip("↷", "#1E293B", "#475569");
+        redoBtn.setOnClickListener(v -> performRedo());
+        row1.addView(redoBtn, rightMarginLp(4));
+
+        TextView saveBtn = makeChip("💾", "#064E3B", "#10B981");
         saveBtn.setOnClickListener(v -> {
             syncCodeFromEditor();
             ProjectRepository.saveProject(this, project);
@@ -273,12 +293,13 @@ public class EditorActivity extends Activity {
 
         String[][] modes = {
                 {"SCENE", "🌐 SCENE"},
-                {"INSPECTOR", "🎛 INSPECTOR"},
-                {"PIXEL", "🎨 PIXEL ART"},
+                {"INSPECTOR", "🎛 INSPECT"},
+                {"FLOW", "⚡ FLOW"},
                 {"SCRIPT", "📜 SCRIPT"},
-                {"SFX", "🔊 SFX"},
+                {"PIXEL", "🎨 PIXEL"},
+                {"SFX", "🎵 MUSIC/SFX"},
                 {"PLAY", "▶ PLAY"},
-                {"BUILD", "📦 BUILD APK"}
+                {"BUILD", "📦 EXPORT"}
         };
         for (String[] m : modes) {
             TextView tb = makeChip(m[1], "#162032", "#334155");
@@ -363,7 +384,56 @@ public class EditorActivity extends Activity {
         row.addView(btn, lp);
     }
 
+    private void pushUndoSnapshot() {
+        if (project == null) return;
+        syncCodeFromEditor();
+        undoStack.push(project.toJsonString());
+        while (undoStack.size() > 40) undoStack.removeLast();
+        redoStack.clear();
+    }
+
+    private void performUndo() {
+        if (undoStack.isEmpty()) {
+            Toast.makeText(this, "Nothing to undo", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            syncCodeFromEditor();
+            redoStack.push(project.toJsonString());
+            project = GameProject.fromJsonString(undoStack.pop());
+            applyRestoredProject("↶ Undid last change");
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void performRedo() {
+        if (redoStack.isEmpty()) {
+            Toast.makeText(this, "Nothing to redo", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            syncCodeFromEditor();
+            undoStack.push(project.toJsonString());
+            project = GameProject.fromJsonString(redoStack.pop());
+            applyRestoredProject("↷ Redid change");
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void applyRestoredProject(String msg) {
+        dimToggleBtn.setText(project.dimensionMode);
+        if (scriptEditor != null) scriptEditor.setText(project.scriptCode);
+        if (langToggleBtn != null) langToggleBtn.setText("LANG: " + project.scriptLanguage);
+        viewportSurface.loadProjectForEdit(project);
+        rebuildSceneToolbarButtons();
+        if ("INSPECTOR".equals(currentMode)) populateInspector();
+        if ("FLOW".equals(currentMode)) refreshFlowRuleList();
+        saveProjectQuiet();
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
+
     private void spawnPrimitive(String prim, String color) {
+        pushUndoSnapshot();
         String name = prim.toLowerCase(Locale.US) + "_" + (project.entities.size() + 1);
         Entity e;
         if ("3D".equalsIgnoreCase(project.dimensionMode)) {
@@ -392,6 +462,7 @@ public class EditorActivity extends Activity {
     }
 
     private void spawnOrRandomizeTerrain3D() {
+        pushUndoSnapshot();
         Entity existing = null;
         for (Entity e : project.entities) {
             if ("TERRAIN".equalsIgnoreCase(e.primitive)) { existing = e; break; }
@@ -417,6 +488,7 @@ public class EditorActivity extends Activity {
     }
 
     private void spawnBox2DCrate() {
+        pushUndoSnapshot();
         if (!project.customSprites.containsKey("crate")) {
             project.customSprites.put("crate", PixelSpriteCodec.createCrateSprite());
         }
@@ -434,6 +506,7 @@ public class EditorActivity extends Activity {
     }
 
     private void duplicateSelected() {
+        pushUndoSnapshot();
         String selId = viewportSurface.renderer.getSelectedEntityId();
         Entity src = project.findById(selId);
         if (src == null) return;
@@ -867,9 +940,12 @@ public class EditorActivity extends Activity {
         boolean isLua = "LUA".equalsIgnoreCase(project.scriptLanguage);
         String[] snippets = isLua
                 ? new String[]{
-                        "vortex.joyX()", "vortex.jump('Player', 12)", "vortex.setVel('Player', 0, 0, 0)",
-                        "vortex.particles(0, 1, 0, 20, '#00E5FF')", "vortex.playSound('coin')",
-                        "vortex.noise2D(x, z)", "vortex.applyImpulse('Player', 0, 10)", "function onUpdate(dt)\nend"}
+                        "vortex.joyX()", "vortex.chaseTagAI('enemy', 'Player', 4.5)",
+                        "vortex.tweenTagYoyo('coin', 0.4, 0.9, 'SINE')",
+                        "vortex.playMusic('CYBERPUNK', 132)",
+                        "vortex.raycast(x, y, z, 0, 0, -1, 35)",
+                        "vortex.jump('Player', 12)", "vortex.particles(0, 1, 0, 20, '#00E5FF')",
+                        "vortex.playSound('coin')", "vortex.noise2D(x, z)"}
                 : new String[]{
                         "joyX()", "jump('Player', 12.0);", "setVel('Player', 0, 0, 0);",
                         "particles(0, 1, 0, 20, '#00E5FF');", "playSound('coin');",
@@ -961,6 +1037,14 @@ public class EditorActivity extends Activity {
                 "  vortex.spawn3D(name, tag, prim, x, y, z, sx, sy, sz, hex, body)\n" +
                 "  vortex.particles(x, y, z, count, hex)\n" +
                 "  vortex.playSound('jump'|'coin'|'laser'|'explosion'|'hit'|'powerup')\n\n" +
+                "=== v3.0 AI, TWEENS & CHIPTUNE ===\n" +
+                "  vortex.chaseAI(seeker, target, speed)   -- Theta* A*!\n" +
+                "  vortex.chaseTagAI('enemy', 'Player', 4.5)\n" +
+                "  vortex.raycast(ox,oy,oz, dx,dy,dz, maxDist)\n" +
+                "  vortex.tweenPos(n, tx,ty,tz, dur, 'BOUNCE', -1)\n" +
+                "  vortex.tweenScale(n, sx,sy,sz, dur, 'ELASTIC', 1)\n" +
+                "  vortex.tweenTagYoyo('coin', 0.4, 0.9, 'SINE')\n" +
+                "  vortex.playMusic('CYBERPUNK'|'DUNGEON'|'BOSS'|'SKYCHILL', bpm)\n\n" +
                 "=== VORTEXSCRIPT (.vxs) ===\n" +
                 "Same functions called directly: joyX(), setVel(...), jump(...), playSound(...);";
         new AlertDialog.Builder(this)
@@ -971,7 +1055,194 @@ public class EditorActivity extends Activity {
     }
 
     // =========================================================================
-    // Procedural Retro SFX Lab Panel
+    // ⚡ VORTEX FLOW: Visual No-Code Event-Sheet Builder (Compiles 1:1 to Lua 5.2)
+    // =========================================================================
+    private ScrollView buildFlowPanel() {
+        ScrollView sv = new ScrollView(this);
+        sv.setBackgroundColor(Color.parseColor("#0B0F17"));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(14), dp(12), dp(14), dp(28));
+
+        TextView head = new TextView(this);
+        head.setText("⚡ VORTEX FLOW — NO-CODE VISUAL LOGIC");
+        head.setTextColor(Color.parseColor("#00E5FF"));
+        head.setTextSize(15.5f);
+        head.setTypeface(Typeface.DEFAULT_BOLD);
+        box.addView(head);
+
+        TextView desc = new TextView(this);
+        desc.setText("Build complete 2D & 3D game rules without writing code (like Construct / GDevelop), then compile 1-to-1 into clean Lua 5.2 anytime!");
+        desc.setTextColor(Color.parseColor("#94A3B8"));
+        desc.setTextSize(11.5f);
+        desc.setPadding(0, dp(3), 0, dp(10));
+        box.addView(desc);
+
+        // Compile Flow -> Lua 5.2 Action Button
+        TextView compileBtn = makeChip("⚡ COMPILE FLOW RULES ➔ LUA 5.2 SCRIPT", "#064E3B", "#00E676");
+        compileBtn.setGravity(Gravity.CENTER);
+        compileBtn.setPadding(dp(10), dp(11), dp(10), dp(11));
+        compileBtn.setOnClickListener(v -> {
+            if (project.flowRules.isEmpty()) {
+                Toast.makeText(this, "Add at least 1 Flow rule below first!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            pushUndoSnapshot();
+            String lua = VortexFlowCompiler.compileToLua(project);
+            project.scriptLanguage = "LUA";
+            project.scriptCode = lua;
+            if (scriptEditor != null) scriptEditor.setText(lua);
+            if (langToggleBtn != null) langToggleBtn.setText("LANG: LUA");
+            saveProjectQuiet();
+            Toast.makeText(this, "✓ Compiled " + project.flowRules.size() + " Flow rules into Lua 5.2!", Toast.LENGTH_LONG).show();
+        });
+        box.addView(compileBtn);
+
+        // Add New Rule Card
+        LinearLayout builderCard = new LinearLayout(this);
+        builderCard.setOrientation(LinearLayout.VERTICAL);
+        builderCard.setPadding(dp(12), dp(10), dp(12), dp(12));
+        GradientDrawable cardBg = new GradientDrawable();
+        cardBg.setColor(Color.parseColor("#111A2C"));
+        cardBg.setCornerRadius(dp(10));
+        cardBg.setStroke(dp(1), Color.parseColor("#243656"));
+        builderCard.setBackground(cardBg);
+        LinearLayout.LayoutParams bcLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        bcLp.topMargin = dp(10);
+        bcLp.bottomMargin = dp(12);
+
+        TextView addTitle = new TextView(this);
+        addTitle.setText("➕ CREATE EVENT ➔ ACTION RULE");
+        addTitle.setTextColor(Color.parseColor("#FFD54F"));
+        addTitle.setTextSize(12.5f);
+        addTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        builderCard.addView(addTitle);
+
+        Spinner evSpin = addLabeledSpinner(builderCard, "WHEN Event Happens:",
+                VortexFlowCompiler.EVENT_LABELS, VortexFlowCompiler.EVENT_LABELS[0]);
+
+        LinearLayout evRow = new LinearLayout(this);
+        evRow.setOrientation(LinearLayout.HORIZONTAL);
+        EditText evP1 = addLabeledEditCompact(evRow, "Tag A / Seconds (e.g. player)", "player");
+        EditText evP2 = addLabeledEditCompact(evRow, "Tag B (e.g. coin / enemy)", "coin");
+        builderCard.addView(evRow);
+
+        Spinner actSpin = addLabeledSpinner(builderCard, "DO Game Action:",
+                VortexFlowCompiler.ACTION_LABELS, VortexFlowCompiler.ACTION_LABELS[0]);
+
+        LinearLayout actRow = new LinearLayout(this);
+        actRow.setOrientation(LinearLayout.HORIZONTAL);
+        EditText actP1 = addLabeledEditCompact(actRow, "Target / Tag / Score / Preset", "Player");
+        EditText actP2 = addLabeledEditCompact(actRow, "Speed / Force / SFX / BPM", "10");
+        builderCard.addView(actRow);
+
+        TextView addRuleBtn = makeChip("＋ ADD RULE TO EVENT SHEET", "#16263D", "#00E5FF");
+        addRuleBtn.setGravity(Gravity.CENTER);
+        addRuleBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
+        addRuleBtn.setOnClickListener(v -> {
+            pushUndoSnapshot();
+            String evKey = VortexFlowCompiler.EVENT_KEYS[evSpin.getSelectedItemPosition()];
+            String actKey = VortexFlowCompiler.ACTION_KEYS[actSpin.getSelectedItemPosition()];
+            project.flowRules.add(new VortexFlowCompiler.FlowRule(
+                    evKey, evP1.getText().toString().trim(), evP2.getText().toString().trim(),
+                    actKey, actP1.getText().toString().trim(), actP2.getText().toString().trim()));
+            refreshFlowRuleList();
+            saveProjectQuiet();
+            Toast.makeText(this, "Added Flow rule!", Toast.LENGTH_SHORT).show();
+        });
+        LinearLayout.LayoutParams arLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        arLp.topMargin = dp(8);
+        builderCard.addView(addRuleBtn, arLp);
+        box.addView(builderCard, bcLp);
+
+        TextView listHead = new TextView(this);
+        listHead.setText("ACTIVE EVENT SHEET RULES:");
+        listHead.setTextColor(Color.parseColor("#CBD5E1"));
+        listHead.setTextSize(12f);
+        listHead.setTypeface(Typeface.DEFAULT_BOLD);
+        listHead.setPadding(0, 0, 0, dp(6));
+        box.addView(listHead);
+
+        flowRuleListContainer = new LinearLayout(this);
+        flowRuleListContainer.setOrientation(LinearLayout.VERTICAL);
+        box.addView(flowRuleListContainer);
+        refreshFlowRuleList();
+
+        sv.addView(box);
+        return sv;
+    }
+
+    private EditText addLabeledEditCompact(LinearLayout row, String label, String val) {
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(0, dp(4), dp(6), 0);
+        TextView tv = new TextView(this);
+        tv.setText(label);
+        tv.setTextColor(Color.parseColor("#94A3B8"));
+        tv.setTextSize(10.5f);
+        col.addView(tv);
+        EditText et = new EditText(this);
+        et.setText(val);
+        et.setTextColor(Color.WHITE);
+        et.setTextSize(12.5f);
+        et.setSingleLine(true);
+        col.addView(et);
+        row.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        return et;
+    }
+
+    private void refreshFlowRuleList() {
+        if (flowRuleListContainer == null) return;
+        flowRuleListContainer.removeAllViews();
+        if (project.flowRules.isEmpty()) {
+            TextView empty = new TextView(this);
+            empty.setText("No visual rules yet — add rules above or open 'Cyber Hunters AI Maze' to inspect a complete Flow sheet!");
+            empty.setTextColor(Color.parseColor("#64748B"));
+            empty.setTextSize(12f);
+            flowRuleListContainer.addView(empty);
+            return;
+        }
+        for (int i = 0; i < project.flowRules.size(); i++) {
+            final int idx = i;
+            VortexFlowCompiler.FlowRule r = project.flowRules.get(i);
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.HORIZONTAL);
+            card.setGravity(Gravity.CENTER_VERTICAL);
+            card.setPadding(dp(10), dp(8), dp(10), dp(8));
+            GradientDrawable gd = new GradientDrawable();
+            gd.setColor(Color.parseColor("#131C2E"));
+            gd.setCornerRadius(dp(8));
+            gd.setStroke(dp(1), Color.parseColor("#2A3B59"));
+            card.setBackground(gd);
+
+            TextView tv = new TextView(this);
+            tv.setText((idx + 1) + ". " + r.describe());
+            tv.setTextColor(Color.parseColor("#E2E8F0"));
+            tv.setTextSize(12f);
+            card.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+            TextView del = makeChip("✕", "#2D161E", "#FF5252");
+            del.setPadding(dp(8), dp(4), dp(8), dp(4));
+            del.setOnClickListener(v -> {
+                pushUndoSnapshot();
+                project.flowRules.remove(idx);
+                refreshFlowRuleList();
+                saveProjectQuiet();
+            });
+            card.addView(del);
+
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.bottomMargin = dp(6);
+            flowRuleListContainer.addView(card, lp);
+        }
+    }
+
+    // =========================================================================
+    // 🎵 16-Step Chiptune Tracker & Procedural SFX Lab Panel
     // =========================================================================
     private ScrollView buildSfxLabPanel() {
         ScrollView sv = new ScrollView(this);
@@ -981,6 +1252,127 @@ public class EditorActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(16), dp(14), dp(16), dp(24));
 
+        // --- SECTION 1: 16-STEP POLYPHONIC CHIPTUNE COMPOSER ---
+        TextView musicHead = new TextView(this);
+        musicHead.setText("🎵 16-STEP CHIPTUNE MUSIC COMPOSER");
+        musicHead.setTextColor(Color.parseColor("#00E676"));
+        musicHead.setTextSize(15.5f);
+        musicHead.setTypeface(Typeface.DEFAULT_BOLD);
+        box.addView(musicHead);
+
+        TextView musicSub = new TextView(this);
+        musicSub.setText("4-Channel Polyphonic Synth (Square Lead + Triangle Bass + Kick/Hat). Loops in Android APKs, Desktop .exe & HTML5 Web exports with zero MP3 bloat!");
+        musicSub.setTextColor(Color.parseColor("#94A3B8"));
+        musicSub.setTextSize(11.5f);
+        musicSub.setPadding(0, dp(3), 0, dp(8));
+        box.addView(musicSub);
+
+        CheckBox musicEnableCb = new CheckBox(this);
+        musicEnableCb.setText("Auto-play Chiptune Soundtrack when game starts (" + project.musicBpm + " BPM)");
+        musicEnableCb.setTextColor(Color.WHITE);
+        musicEnableCb.setChecked(project.musicEnabled);
+        musicEnableCb.setOnCheckedChangeListener((b, checked) -> {
+            project.musicEnabled = checked;
+            saveProjectQuiet();
+        });
+        box.addView(musicEnableCb);
+
+        // Genre Preset Row
+        LinearLayout presetRow = new LinearLayout(this);
+        presetRow.setOrientation(LinearLayout.HORIZONTAL);
+        presetRow.setPadding(0, dp(6), 0, dp(6));
+
+        final TextView[] stepBtns = new TextView[16];
+        final Runnable refreshStepUi = () -> {
+            int[] steps = ChiptuneGenerator.parseSteps(project.musicPattern);
+            for (int i = 0; i < 16; i++) {
+                int idx = Math.max(0, Math.min(ChiptuneGenerator.NOTE_LABELS.length - 1, steps[i]));
+                String lbl = idx == 0 ? "-" : ChiptuneGenerator.NOTE_LABELS[idx];
+                if (stepBtns[i] != null) {
+                    stepBtns[i].setText((i + 1) + ":" + lbl);
+                    boolean active = idx > 0;
+                    styleChip(stepBtns[i], active ? "#142E24" : "#162032", active ? "#00E676" : "#334155");
+                }
+            }
+            musicEnableCb.setText("Auto-play Chiptune Soundtrack when game starts (" + project.musicBpm + " BPM)");
+        };
+
+        String[][] genrePresets = {
+                {"⚡ CYBER", ChiptuneGenerator.PRESET_CYBERPUNK, "134"},
+                {"🏰 DUNG", ChiptuneGenerator.PRESET_DUNGEON, "112"},
+                {"🔥 BOSS", ChiptuneGenerator.PRESET_BOSS, "148"},
+                {"☁️ CHILL", ChiptuneGenerator.PRESET_SKYCHILL, "118"}
+        };
+        for (int g = 0; g < genrePresets.length; g++) {
+            final String[] gp = genrePresets[g];
+            TextView pb = makeChip(gp[0], "#16263D", "#00E5FF");
+            pb.setGravity(Gravity.CENTER);
+            pb.setOnClickListener(v -> {
+                pushUndoSnapshot();
+                project.musicPattern = gp[1];
+                project.musicBpm = Integer.parseInt(gp[2]);
+                project.musicEnabled = true;
+                musicEnableCb.setChecked(true);
+                refreshStepUi.run();
+                sfxPreview.startMusicLoop(project.musicPattern, project.musicBpm);
+                saveProjectQuiet();
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            if (g < 3) lp.rightMargin = dp(5);
+            presetRow.addView(pb, lp);
+        }
+        box.addView(presetRow);
+
+        // 16-Step Interactive Lead Note Grid (4 rows x 4 steps — super clean on 360dp portrait!)
+        for (int r = 0; r < 4; r++) {
+            LinearLayout sRow = new LinearLayout(this);
+            sRow.setOrientation(LinearLayout.HORIZONTAL);
+            sRow.setPadding(0, dp(3), 0, dp(3));
+            for (int c = 0; c < 4; c++) {
+                final int stepIdx = r * 4 + c;
+                TextView sb = makeChip((stepIdx + 1) + ":-", "#162032", "#334155");
+                sb.setGravity(Gravity.CENTER);
+                sb.setPadding(dp(4), dp(7), dp(4), dp(7));
+                sb.setOnClickListener(v -> {
+                    int[] steps = ChiptuneGenerator.parseSteps(project.musicPattern);
+                    steps[stepIdx] = (steps[stepIdx] + 1) % ChiptuneGenerator.NOTE_LABELS.length;
+                    StringBuilder joined = new StringBuilder();
+                    for (int k = 0; k < 16; k++) {
+                        if (k > 0) joined.append(',');
+                        joined.append(steps[k]);
+                    }
+                    project.musicPattern = joined.toString();
+                    refreshStepUi.run();
+                    saveProjectQuiet();
+                });
+                stepBtns[stepIdx] = sb;
+                LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                if (c < 3) slp.rightMargin = dp(5);
+                sRow.addView(sb, slp);
+            }
+            box.addView(sRow);
+        }
+        refreshStepUi.run();
+
+        // Loop Preview / Stop Row
+        LinearLayout transportRow = new LinearLayout(this);
+        transportRow.setOrientation(LinearLayout.HORIZONTAL);
+        transportRow.setPadding(0, dp(8), 0, dp(16));
+
+        TextView playLoopBtn = makeChip("▶ PREVIEW LOOP", "#064E3B", "#00E676");
+        playLoopBtn.setGravity(Gravity.CENTER);
+        playLoopBtn.setOnClickListener(v -> sfxPreview.startMusicLoop(project.musicPattern, project.musicBpm));
+        LinearLayout.LayoutParams plLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        plLp.rightMargin = dp(6);
+        transportRow.addView(playLoopBtn, plLp);
+
+        TextView stopLoopBtn = makeChip("■ STOP MUSIC", "#2D161E", "#FF5252");
+        stopLoopBtn.setGravity(Gravity.CENTER);
+        stopLoopBtn.setOnClickListener(v -> sfxPreview.stopMusicLoop());
+        transportRow.addView(stopLoopBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        box.addView(transportRow);
+
+        // --- SECTION 2: ONE-SHOT ARCADE SFX SYNTH ---
         TextView head = new TextView(this);
         head.setText("🔊 PROCEDURAL RETRO SFX SYNTHESIZER");
         head.setTextColor(Color.parseColor("#00E5FF"));
@@ -1067,18 +1459,28 @@ public class EditorActivity extends Activity {
         box.setPadding(dp(16), dp(14), dp(16), dp(32));
 
         TextView head = new TextView(this);
-        head.setText("📦 BUILD STANDALONE ANDROID GAME (.APK)");
+        head.setText("📦 MULTI-PLATFORM EXPORT (ANDROID APK + HTML5 WEB)");
         head.setTextColor(Color.parseColor("#00E5FF"));
-        head.setTextSize(16f);
+        head.setTextSize(15.5f);
         head.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(head);
 
         TextView sub = new TextView(this);
-        sub.setText("Packages your 2D/3D scene, custom pixel sprites, .obj meshes, Lua 5.2 (LuaJ) + JBox2D + FastNoiseLite runtime, and procedural launcher icons into a standalone signed Android .apk!");
+        sub.setText("Export a 1-file playable HTML5 Web Game (.html for itch.io / Chrome / sharing) OR build a signed standalone Android .apk with LuaJ + JBox2D + Theta* AI + Tween Engine!");
         sub.setTextColor(Color.parseColor("#94A3B8"));
         sub.setTextSize(12f);
         sub.setPadding(0, dp(4), 0, dp(10));
         box.addView(sub);
+
+        // Instant Single-File HTML5 Web Exporter Button!
+        TextView webExportBtn = makeChip("🌐 EXPORT PLAYABLE HTML5 WEB GAME (.HTML)", "#102A43", "#00E5FF");
+        webExportBtn.setGravity(Gravity.CENTER);
+        webExportBtn.setPadding(dp(10), dp(12), dp(10), dp(12));
+        webExportBtn.setOnClickListener(v -> exportPlayableHtml5Web());
+        LinearLayout.LayoutParams webBtnLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        webBtnLp.bottomMargin = dp(10);
+        box.addView(webExportBtn, webBtnLp);
 
         EditText titleEt = addLabeledEdit(box, "APK Display Name", project.title, false);
         EditText pkgEt = addLabeledEdit(box, "Android Package ID (unique per game)", project.packageName, false);
@@ -1229,12 +1631,44 @@ public class EditorActivity extends Activity {
         }
     }
 
+    private void exportPlayableHtml5Web() {
+        try {
+            syncCodeFromEditor();
+            ProjectRepository.saveProject(this, project);
+            File dlDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VortexEngine/Web");
+            File outFile = new File(dlDir, project.getSlug() + "-web.html");
+            try {
+                Html5WebExporter.exportToFile(project, outFile);
+            } catch (Exception fallbackEx) {
+                File appDir = new File(getExternalFilesDir(null), "Web");
+                outFile = new File(appDir, project.getSlug() + "-web.html");
+                Html5WebExporter.exportToFile(project, outFile);
+            }
+            appendBuildLog("\n[🌐 HTML5] Exported standalone 60FPS Web Game:\n    " + outFile.getAbsolutePath());
+            Toast.makeText(this, "✓ Exported HTML5 Game: " + outFile.getName(), Toast.LENGTH_LONG).show();
+
+            try {
+                android.net.Uri uri = VortexFileProvider.getUriForFile(this, outFile);
+                Intent share = new Intent(Intent.ACTION_SEND);
+                share.setType("text/html");
+                share.putExtra(Intent.EXTRA_STREAM, uri);
+                share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivity(Intent.createChooser(share, "Share or Open HTML5 Web Game"));
+            } catch (Exception ignored) {
+            }
+        } catch (Exception ex) {
+            appendBuildLog("[HTML5 ERROR] " + ex.getMessage());
+            Toast.makeText(this, "HTML5 export failed: " + ex.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void appendBuildLog(String msg) {
         if (buildLogTv != null) buildLogTv.append("\n" + msg);
     }
 
     private void switchMode(String mode) {
         syncCodeFromEditor();
+        sfxPreview.stopMusicLoop();
         currentMode = mode;
 
         for (TextView tb : tabButtons) {
@@ -1245,10 +1679,13 @@ public class EditorActivity extends Activity {
 
         sceneBottomToolbar.setVisibility("SCENE".equals(mode) ? View.VISIBLE : View.GONE);
         inspectorDrawer.setVisibility("INSPECTOR".equals(mode) ? View.VISIBLE : View.GONE);
+        flowPanel.setVisibility("FLOW".equals(mode) ? View.VISIBLE : View.GONE);
         pixelArtPanel.setVisibility("PIXEL".equals(mode) ? View.VISIBLE : View.GONE);
         scriptPanel.setVisibility("SCRIPT".equals(mode) ? View.VISIBLE : View.GONE);
         sfxPanel.setVisibility("SFX".equals(mode) ? View.VISIBLE : View.GONE);
         buildPanel.setVisibility("BUILD".equals(mode) ? View.VISIBLE : View.GONE);
+
+        if ("FLOW".equals(mode)) refreshFlowRuleList();
 
         if ("PLAY".equals(mode)) {
             if (!validateCurrentScript()) {

@@ -1,5 +1,8 @@
 package com.vortex.engine.desktop;
 
+import com.vortex.engine.core.audio.ChiptuneGenerator;
+import com.vortex.engine.core.export.Html5WebExporter;
+import com.vortex.engine.core.flow.VortexFlowCompiler;
 import com.vortex.engine.core.model.Entity;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.model.PixelSpriteCodec;
@@ -18,6 +21,8 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import javax.swing.BorderFactory;
@@ -62,12 +67,24 @@ public class VortexDesktopStudio extends JFrame {
     private JButton playStopBtn;
     private JButton dimBtn;
     private JButton langBtn;
+    private final Deque<String> undoStack = new ArrayDeque<>();
+    private final Deque<String> redoStack = new ArrayDeque<>();
 
     public static void main(String[] args) throws Exception {
-        // 1) Headless CI / Self-Test Mode (verifies LuaJ + JBox2D + FastNoiseLite + VortexScript + Exporters!)
-        for (String arg : args) {
-            if ("--headless-test".equals(arg)) {
+        // 1) Headless CI / Self-Test & CLI HTML5 Web Export Modes
+        for (int i = 0; i < args.length; i++) {
+            if ("--headless-test".equals(args[i])) {
                 runHeadlessSelfTests();
+                return;
+            }
+            if ("--export-html".equals(args[i]) && i + 2 < args.length) {
+                String tplKey = args[i + 1];
+                File outHtml = new File(args[i + 2]);
+                GameProject gp = ProjectTemplates.create(tplKey,
+                        "CYBER_MAZE_AI_2D".equals(tplKey) ? "Cyber Hunters: Theta* AI Labyrinth" : tplKey,
+                        "com.vortex.web." + tplKey.toLowerCase(Locale.US));
+                Html5WebExporter.exportToFile(gp, outHtml);
+                System.out.println("[HTML5] Exported playable Web Game -> " + outHtml.getAbsolutePath() + " (" + outHtml.length() + " bytes)");
                 return;
             }
         }
@@ -92,14 +109,14 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio() {
-        super("Vortex Engine Studio v2.0.0 — 2D & 3D Game Engine (Lua 5.2 • JBox2D • FastNoiseLite • Android/PC)");
+        super("Vortex Engine Studio v3.0.0 (Apex Edition) — 2D/3D • Theta* AI • Tween Engine • Flow • Chiptune • APK/PC/HTML5");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1380, 840);
+        setSize(1420, 860);
         setLocationRelativeTo(null);
         getContentPane().setBackground(new Color(9, 13, 22));
         setLayout(new BorderLayout());
 
-        project = ProjectTemplates.create("ANGRY_BOX2D_LUA", "Angry Crates Siege", "com.vortex.game.angrycrates");
+        project = ProjectTemplates.create("CYBER_MAZE_AI_2D", "Cyber Hunters AI Maze", "com.vortex.game.cyberhunters");
 
         add(buildTopToolbar(), BorderLayout.NORTH);
 
@@ -112,10 +129,11 @@ public class VortexDesktopStudio extends JFrame {
         consoleArea.setBackground(new Color(6, 9, 15));
         consoleArea.setForeground(new Color(167, 243, 208));
         consoleArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        consoleArea.setText("Vortex Engine v2.0.0 Desktop Studio Initialized.\n"
-                + "• Scripting: Lua 5.2 (LuaJ 3.0.1) + VortexScript (.vxs)\n"
-                + "• Physics  : JBox2D 2.2.1.1 Rigid-Body Solver + 3D AABB & FastNoiseLite Terrain\n"
-                + "• Controls : Play Mode uses WASD / Arrows + Space/J (Button A) + Shift/K (Button B) or Mouse Clicks!\n");
+        consoleArea.setText("Vortex Engine v3.0.0 (Apex Edition) Desktop Studio Initialized.\n"
+                + "• Scripting & Logic: Lua 5.2 (LuaJ) + Vortex Flow Visual Event-Sheet + VortexScript (.vxs)\n"
+                + "• AI & Animation   : Theta* / A* Obstacle Pathfinding + Universal Tween Engine + 3D Raycast\n"
+                + "• Physics & Audio  : JBox2D Rigid-Body + FastNoiseLite Terrain + 16-Step Chiptune Synth\n"
+                + "• Multi-Export     : Windows .exe • Linux • HTML5 Web (.html) • Android APK\n");
         consoleScroll.setPreferredSize(new Dimension(600, 145));
 
         JSplitPane centerSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, viewport, consoleScroll);
@@ -172,12 +190,21 @@ public class VortexDesktopStudio extends JFrame {
         openBtn.addActionListener(e -> openProjectJson());
         bar.add(openBtn);
 
-        JButton saveBtn = styledBtn("💾 Save .json", new Color(6, 78, 59), Color.WHITE);
+        JButton saveBtn = styledBtn("💾 Save", new Color(6, 78, 59), Color.WHITE);
         saveBtn.addActionListener(e -> saveProjectJson());
         bar.add(saveBtn);
 
+        JButton undoBtn = styledBtn("↶ Undo", new Color(30, 41, 59), Color.WHITE);
+        undoBtn.addActionListener(e -> performUndo());
+        bar.add(undoBtn);
+
+        JButton redoBtn = styledBtn("↷ Redo", new Color(30, 41, 59), Color.WHITE);
+        redoBtn.addActionListener(e -> performRedo());
+        bar.add(redoBtn);
+
         dimBtn = styledBtn("Mode: 2D", new Color(30, 27, 75), new Color(190, 200, 255));
         dimBtn.addActionListener(e -> {
+            pushUndo();
             syncCode();
             project.dimensionMode = "3D".equalsIgnoreCase(project.dimensionMode) ? "2D" : "3D";
             dimBtn.setText("Mode: " + project.dimensionMode);
@@ -186,15 +213,19 @@ public class VortexDesktopStudio extends JFrame {
         });
         bar.add(dimBtn);
 
-        JButton addObjBtn = styledBtn("＋ Add Entity ▾", new Color(30, 41, 59), new Color(56, 189, 248));
+        JButton addObjBtn = styledBtn("＋ Entity ▾", new Color(30, 41, 59), new Color(56, 189, 248));
         addObjBtn.addActionListener(e -> showAddEntityMenu(addObjBtn));
         bar.add(addObjBtn);
+
+        JButton flowBtn = styledBtn("⚡ Flow Logic", new Color(20, 50, 75), new Color(0, 229, 255));
+        flowBtn.addActionListener(e -> openVortexFlowDialog());
+        bar.add(flowBtn);
 
         JButton pixelBtn = styledBtn("🎨 Pixel Art", new Color(45, 25, 65), new Color(225, 190, 255));
         pixelBtn.addActionListener(e -> openPixelArtStudio());
         bar.add(pixelBtn);
 
-        JButton sfxBtn = styledBtn("🔊 SFX Lab", new Color(30, 41, 59), new Color(255, 213, 79));
+        JButton sfxBtn = styledBtn("🎵 Music & SFX", new Color(30, 41, 59), new Color(255, 213, 79));
         sfxBtn.addActionListener(e -> showSfxPopup(sfxBtn));
         bar.add(sfxBtn);
 
@@ -202,7 +233,7 @@ public class VortexDesktopStudio extends JFrame {
         playStopBtn.addActionListener(e -> togglePlayMode());
         bar.add(playStopBtn);
 
-        JButton exportBtn = styledBtn("📦 Export (.exe / .jar / Android) ▾", new Color(88, 28, 135), Color.WHITE);
+        JButton exportBtn = styledBtn("📦 Export (HTML5 / .exe / APK) ▾", new Color(88, 28, 135), Color.WHITE);
         exportBtn.addActionListener(e -> showExportMenu(exportBtn));
         bar.add(exportBtn);
 
@@ -487,6 +518,28 @@ public class VortexDesktopStudio extends JFrame {
 
     private void showSfxPopup(JButton invoker) {
         JPopupMenu m = new JPopupMenu();
+        addMenuAction(m, "🎵 Loop Cyberpunk Synth (134 BPM)", () -> {
+            project.musicEnabled = true; project.musicBpm = 134; project.musicPattern = ChiptuneGenerator.PRESET_CYBERPUNK;
+            viewport.audioEngine.startMusicLoop(project.musicPattern, project.musicBpm);
+            log("[🎵] Set soundtrack: CYBERPUNK (134 BPM)");
+        });
+        addMenuAction(m, "🏰 Loop Dungeon Synth (112 BPM)", () -> {
+            project.musicEnabled = true; project.musicBpm = 112; project.musicPattern = ChiptuneGenerator.PRESET_DUNGEON;
+            viewport.audioEngine.startMusicLoop(project.musicPattern, project.musicBpm);
+            log("[🎵] Set soundtrack: DUNGEON (112 BPM)");
+        });
+        addMenuAction(m, "🔥 Loop Boss Battle Synth (148 BPM)", () -> {
+            project.musicEnabled = true; project.musicBpm = 148; project.musicPattern = ChiptuneGenerator.PRESET_BOSS;
+            viewport.audioEngine.startMusicLoop(project.musicPattern, project.musicBpm);
+            log("[🎵] Set soundtrack: BOSS (148 BPM)");
+        });
+        addMenuAction(m, "☁️ Loop Sky Chill Synth (118 BPM)", () -> {
+            project.musicEnabled = true; project.musicBpm = 118; project.musicPattern = ChiptuneGenerator.PRESET_SKYCHILL;
+            viewport.audioEngine.startMusicLoop(project.musicPattern, project.musicBpm);
+            log("[🎵] Set soundtrack: SKYCHILL (118 BPM)");
+        });
+        addMenuAction(m, "■ Stop Music Preview", () -> viewport.audioEngine.stopMusicLoop());
+        m.addSeparator();
         String[] sounds = {"jump", "coin", "laser", "explosion", "hit", "powerup"};
         for (String s : sounds) {
             addMenuAction(m, "▶ Play '" + s + "' (+ Copy to Script)", () -> {
@@ -521,6 +574,7 @@ public class VortexDesktopStudio extends JFrame {
     private void showExportMenu(JButton invoker) {
         syncCode();
         JPopupMenu m = new JPopupMenu();
+        addMenuAction(m, "🌐 Export Playable HTML5 Web Game (.html — itch.io / Browser)", () -> exportWithDialog("html"));
         addMenuAction(m, "🪟 Export Standalone Windows Game (.exe)", () -> exportWithDialog("exe"));
         addMenuAction(m, "🐧 Export Standalone Linux Binary", () -> exportWithDialog("linux"));
         addMenuAction(m, "☕ Export Cross-Platform Desktop Game (.jar)", () -> exportWithDialog("jar"));
@@ -531,7 +585,8 @@ public class VortexDesktopStudio extends JFrame {
     private void exportWithDialog(String kind) {
         JFileChooser fc = new JFileChooser();
         String slug = project.getSlug();
-        String defaultName = slug + ("exe".equals(kind) ? "-Windows-x64.exe"
+        String defaultName = slug + ("html".equals(kind) ? "-Web.html"
+                : "exe".equals(kind) ? "-Windows-x64.exe"
                 : "linux".equals(kind) ? "-Linux-x86_64"
                 : "jar".equals(kind) ? "-Desktop.jar"
                 : "-Android-Termux.zip");
@@ -539,7 +594,8 @@ public class VortexDesktopStudio extends JFrame {
         if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             File out = fc.getSelectedFile();
             try {
-                if ("exe".equals(kind)) DesktopExporter.exportStandaloneWindowsExe(project, out);
+                if ("html".equals(kind)) Html5WebExporter.exportToFile(project, out);
+                else if ("exe".equals(kind)) DesktopExporter.exportStandaloneWindowsExe(project, out);
                 else if ("linux".equals(kind)) DesktopExporter.exportStandaloneLinuxBinary(project, out);
                 else if ("jar".equals(kind)) DesktopExporter.exportStandaloneGameJar(project, out);
                 else DesktopExporter.exportAndroidTermuxZip(project, out);
@@ -549,6 +605,101 @@ public class VortexDesktopStudio extends JFrame {
                 log("[ERROR] Export failed: " + ex.getMessage());
                 JOptionPane.showMessageDialog(this, "Export failed:\n" + ex.getMessage(), "Export Error", JOptionPane.ERROR_MESSAGE);
             }
+        }
+    }
+
+    private void pushUndo() {
+        syncCode();
+        undoStack.push(project.toJsonString());
+        while (undoStack.size() > 40) undoStack.removeLast();
+        redoStack.clear();
+    }
+
+    private void performUndo() {
+        if (undoStack.isEmpty()) return;
+        try {
+            syncCode();
+            redoStack.push(project.toJsonString());
+            loadProjectIntoStudio(GameProject.fromJsonString(undoStack.pop()));
+            log("↶ Undid last change.");
+        } catch (Exception ignored) {}
+    }
+
+    private void performRedo() {
+        if (redoStack.isEmpty()) return;
+        try {
+            syncCode();
+            undoStack.push(project.toJsonString());
+            loadProjectIntoStudio(GameProject.fromJsonString(redoStack.pop()));
+            log("↷ Redid change.");
+        } catch (Exception ignored) {}
+    }
+
+    private void openVortexFlowDialog() {
+        JPanel p = new JPanel(new BorderLayout(8, 8));
+        p.setPreferredSize(new Dimension(640, 440));
+        DefaultListModel<String> rModel = new DefaultListModel<>();
+        for (int i = 0; i < project.flowRules.size(); i++) {
+            rModel.addElement((i + 1) + ". " + project.flowRules.get(i).describe());
+        }
+        JList<String> rList = new JList<>(rModel);
+        p.add(new JScrollPane(rList), BorderLayout.CENTER);
+
+        JPanel addBox = new JPanel(new GridLayout(0, 2, 6, 4));
+        JComboBox<String> evCb = new JComboBox<>(VortexFlowCompiler.EVENT_LABELS);
+        JTextField ev1 = new JTextField("player");
+        JTextField ev2 = new JTextField("coin");
+        JComboBox<String> acCb = new JComboBox<>(VortexFlowCompiler.ACTION_LABELS);
+        JTextField ac1 = new JTextField("Player");
+        JTextField ac2 = new JTextField("10");
+
+        addBox.add(new JLabel("WHEN Event:")); addBox.add(evCb);
+        addBox.add(new JLabel("Event Tag A / Sec:")); addBox.add(ev1);
+        addBox.add(new JLabel("Event Tag B:")); addBox.add(ev2);
+        addBox.add(new JLabel("DO Action:")); addBox.add(acCb);
+        addBox.add(new JLabel("Target / Score / Preset:")); addBox.add(ac1);
+        addBox.add(new JLabel("Speed / Force / BPM:")); addBox.add(ac2);
+
+        JButton addRuleBtn = new JButton("＋ Add Rule");
+        addRuleBtn.addActionListener(e -> {
+            pushUndo();
+            VortexFlowCompiler.FlowRule r = new VortexFlowCompiler.FlowRule(
+                    VortexFlowCompiler.EVENT_KEYS[evCb.getSelectedIndex()],
+                    ev1.getText().trim(), ev2.getText().trim(),
+                    VortexFlowCompiler.ACTION_KEYS[acCb.getSelectedIndex()],
+                    ac1.getText().trim(), ac2.getText().trim());
+            project.flowRules.add(r);
+            rModel.addElement(project.flowRules.size() + ". " + r.describe());
+        });
+        JButton delRuleBtn = new JButton("🗑 Remove Selected");
+        delRuleBtn.addActionListener(e -> {
+            int idx = rList.getSelectedIndex();
+            if (idx >= 0 && idx < project.flowRules.size()) {
+                pushUndo();
+                project.flowRules.remove(idx);
+                rModel.clear();
+                for (int i = 0; i < project.flowRules.size(); i++) {
+                    rModel.addElement((i + 1) + ". " + project.flowRules.get(i).describe());
+                }
+            }
+        });
+        addBox.add(addRuleBtn);
+        addBox.add(delRuleBtn);
+        p.add(addBox, BorderLayout.SOUTH);
+
+        int res = JOptionPane.showOptionDialog(this, p,
+                "⚡ Vortex Flow — Visual Event Sheet (Compiles 1:1 to Lua 5.2)",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE, null,
+                new String[]{"⚡ Compile Flow ➔ Lua 5.2 Script", "Close"}, "⚡ Compile Flow ➔ Lua 5.2 Script");
+        if (res == 0 && !project.flowRules.isEmpty()) {
+            pushUndo();
+            String lua = VortexFlowCompiler.compileToLua(project);
+            project.scriptLanguage = "LUA";
+            project.scriptCode = lua;
+            scriptArea.setText(lua);
+            langBtn.setText("Lang: LUA");
+            checkScriptSyntax();
+            log("[⚡ FLOW] Compiled " + project.flowRules.size() + " visual rules into Lua 5.2!");
         }
     }
 
@@ -781,6 +932,23 @@ public class VortexDesktopStudio extends JFrame {
                     + " / entities=" + p.entities.size() + " / banner='" + vm.hudBanner + "')");
         }
 
+        // Test v3.0 Chiptune Synthesizer + Vortex Flow Compiler + HTML5 Web Exporter!
+        short[] pcm = ChiptuneGenerator.synthesizeLoop(ChiptuneGenerator.PRESET_CYBERPUNK, 134);
+        if (pcm.length < 10_000) throw new RuntimeException("Chiptune PCM loop too short!");
+        System.out.println("  [PASS] Chiptune 4-Channel Synth (" + pcm.length + " PCM samples @ 22.05kHz)");
+
+        GameProject cyber = ProjectTemplates.create("CYBER_MAZE_AI_2D", "Cyber Hunters", "com.vortex.cyber");
+        String compiledFlowLua = VortexFlowCompiler.compileToLua(cyber);
+        String flowSyntax = VortexScriptEngine.validateSyntax("LUA", compiledFlowLua);
+        if (!flowSyntax.startsWith("OK")) throw new RuntimeException("Flow -> Lua compile invalid: " + flowSyntax);
+        System.out.println("  [PASS] Vortex Flow Visual Compiler -> " + flowSyntax + " (" + cyber.flowRules.size() + " rules)");
+
+        File tmpHtml = File.createTempFile("cyber_hunters_web_", ".html");
+        Html5WebExporter.exportToFile(cyber, tmpHtml);
+        if (tmpHtml.length() < 12_000) throw new RuntimeException("HTML5 Web export unexpectedly small!");
+        System.out.println("  [PASS] Single-File HTML5 Web Exporter (" + (tmpHtml.length() / 1024) + " KB standalone .html)");
+        tmpHtml.delete();
+
         // Test Standalone Game .exe & .jar & Android Bundle Export!
         GameProject sample = ProjectTemplates.create("ANGRY_BOX2D_LUA", "Angry Crates Siege", "com.vortex.game.angrycrates");
         File tmpExe = File.createTempFile("angry_crates_test_", ".exe");
@@ -795,6 +963,6 @@ public class VortexDesktopStudio extends JFrame {
         tmpExe.delete();
         tmpZip.delete();
 
-        System.out.println("=== ALL VORTEX v2.0.0 HEADLESS TESTS PASSED 100%! ===");
+        System.out.println("=== ALL VORTEX v3.0.0 (APEX EDITION) HEADLESS TESTS PASSED 100%! ===");
     }
 }

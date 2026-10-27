@@ -1,12 +1,17 @@
 package com.vortex.engine.core.model;
 
+import com.vortex.engine.core.audio.ChiptuneGenerator;
+import com.vortex.engine.core.flow.VortexFlowCompiler;
+
 /**
- * Pure-Java Cross-Platform Starter Game Templates (shared by Android Studio APK, Windows .exe & Linux Studio).
- * Showcases Lua 5.2 (LuaJ), JBox2D Rigid-Body Physics, FastNoiseLite 3D Procedural Terrain, Pixel Art & VortexScript!
+ * Pure-Java Cross-Platform Starter Game Templates (shared by Android Studio APK, Windows .exe, Linux Studio & HTML5 Web).
+ * Showcases v3.0 Theta* AI Pathfinding, Universal Tween Engine, 16-Step Chiptune Synth, Vortex Flow, LuaJ 5.2, JBox2D & FastNoiseLite!
  */
 public class ProjectTemplates {
 
     public static final String[] TEMPLATE_KEYS = {
+            "CYBER_MAZE_AI_2D",
+            "CITADEL_TWEEN_3D",
             "ANGRY_BOX2D_LUA",
             "FRONTIER_TERRAIN_3D_LUA",
             "NEON_3D",
@@ -18,6 +23,8 @@ public class ProjectTemplates {
     };
 
     public static final String[] TEMPLATE_NAMES = {
+            "2D AI Maze: Cyber Hunters (Theta* Pathfinding + Chiptune + Tweens)",
+            "3D Siege: Neon Citadel (Universal Tween Engine + Raycast + Boss Synth)",
             "2D Physics: Angry Crates Siege (Lua 5.2 + JBox2D Rigid-Body)",
             "3D World: Procedural Frontier (Lua 5.2 + FastNoiseLite Terrain)",
             "3D Sci-Fi: Neon Horizon Runner (Custom .obj Starfighter)",
@@ -30,6 +37,8 @@ public class ProjectTemplates {
 
     public static GameProject create(String templateKey, String title, String pkgName) {
         switch (templateKey) {
+            case "CYBER_MAZE_AI_2D":        return buildCyberMazeAI2D(title, pkgName);
+            case "CITADEL_TWEEN_3D":        return buildCitadelTween3D(title, pkgName);
             case "ANGRY_BOX2D_LUA":         return buildAngryCratesBox2D(title, pkgName);
             case "FRONTIER_TERRAIN_3D_LUA": return buildFrontierTerrain3D(title, pkgName);
             case "SKY_ISLANDS_3D":          return buildSkyIslands3D(title, pkgName);
@@ -456,6 +465,266 @@ public class ProjectTemplates {
                     "function onUpdate(dt)\n    vortex.setVel('Player', vortex.joyX() * 8.5, vortex.getVY('Player'))\nend\n\n" +
                     "function onButton(btn)\n    if btn == 'A' then vortex.jump('Player', 12.5) end\nend\n";
         }
+        return p;
+    }
+
+    private static GameProject buildCyberMazeAI2D(String title, String pkgName) {
+        GameProject p = new GameProject();
+        p.title = title;
+        p.packageName = pkgName;
+        p.dimensionMode = "2D";
+        p.scriptLanguage = "LUA";
+        p.useBox2D = true;
+        p.gravityX = 0f;
+        p.gravityY = 0f; // Top-down labyrinth!
+        p.cameraMode = "FOLLOW";
+        p.cameraTargetName = "Player";
+        p.zoom2D = 16.5f;
+        p.skyColorHex = "#060B16";
+        p.iconBgHex = "#0A1024";
+        p.iconAccentHex = "#00E5FF";
+        p.iconGlyph = "ROCKET";
+        p.musicEnabled = true;
+        p.musicBpm = 134;
+        p.musicPattern = ChiptuneGenerator.PRESET_CYBERPUNK;
+
+        p.customSprites.put("knight", PixelSpriteCodec.createDefaultKnightSprite());
+        p.customSprites.put("slime", PixelSpriteCodec.createSlimeSprite());
+        p.customSprites.put("crate", PixelSpriteCodec.createCrateSprite());
+
+        // Outer neon arena walls
+        p.entities.add(Entity.create2D("WallTop", "solid", "RECT", 0f, 9.5f, 26f, 1.0f, "#183052", "STATIC"));
+        p.entities.add(Entity.create2D("WallBot", "solid", "RECT", 0f, -9.5f, 26f, 1.0f, "#183052", "STATIC"));
+        p.entities.add(Entity.create2D("WallLeft", "solid", "RECT", -12.5f, 0f, 1.0f, 20f, "#183052", "STATIC"));
+        p.entities.add(Entity.create2D("WallRight", "solid", "RECT", 12.5f, 0f, 1.0f, 20f, "#183052", "STATIC"));
+
+        // Interior maze obstacles that Theta* / A* AI navigates around!
+        float[][] mazeBlocks = {
+                {-6f, 4.2f, 5.5f, 1.1f}, {6f, 4.2f, 5.5f, 1.1f},
+                {0f, 1.2f, 1.2f, 5.2f},
+                {-6f, -3.8f, 5.5f, 1.1f}, {6f, -3.8f, 5.5f, 1.1f},
+                {-3.2f, 0f, 1.1f, 3.6f}, {3.2f, 0f, 1.1f, 3.6f}
+        };
+        for (int i = 0; i < mazeBlocks.length; i++) {
+            float[] m = mazeBlocks[i];
+            p.entities.add(Entity.create2D("MazeWall_" + i, "solid", "RECT", m[0], m[1], m[2], m[3], "#005B7F", "STATIC"));
+        }
+
+        // Player cyber-runner
+        Entity player = Entity.create2D("Player", "player", "CUSTOM_SPRITE", 0f, -6.8f, 1.25f, 1.25f, "#00E5FF", "DYNAMIC");
+        player.customSpriteName = "knight";
+        player.drag = 0.25f;
+        p.entities.add(player);
+
+        // Autonomous Theta* Pathfinding Hunters!
+        float[][] hunterSpawns = {{-9.5f, 7.0f}, {9.5f, 7.0f}, {0f, 7.2f}};
+        for (int i = 0; i < hunterSpawns.length; i++) {
+            Entity h = Entity.create2D("Hunter_" + (i + 1), "enemy", "CUSTOM_SPRITE",
+                    hunterSpawns[i][0], hunterSpawns[i][1], 1.25f, 1.25f, "#FF1744", "DYNAMIC");
+            h.customSpriteName = "slime";
+            h.drag = 0.15f;
+            p.entities.add(h);
+        }
+
+        // Tweened Cyber Data Cores (coins) around the labyrinth
+        float[][] corePts = {
+                {-9.5f, -7f}, {9.5f, -7f}, {-9.5f, 0f}, {9.5f, 0f},
+                {-6f, 7f}, {6f, 7f}, {-1.8f, 4.2f}, {1.8f, 4.2f}, {0f, -2.5f}
+        };
+        for (int i = 0; i < corePts.length; i++) {
+            Entity c = Entity.create2D("DataCore_" + i, "coin", "CIRCLE", corePts[i][0], corePts[i][1], 0.72f, 0.72f, "#FFD54F", "STATIC");
+            c.isTrigger = true;
+            p.entities.add(c);
+        }
+
+        // Pre-populate Vortex Flow Visual Rules so users can inspect or edit no-code logic immediately!
+        p.flowRules.add(new VortexFlowCompiler.FlowRule("ON_START", "Player", "", "PLAY_MUSIC", 134f, "CYBERPUNK"));
+        p.flowRules.add(new VortexFlowCompiler.FlowRule("ON_START", "coin", "", "FLOAT_TWEEN_TAG", 0.35f, "SINE"));
+        p.flowRules.add(new VortexFlowCompiler.FlowRule("JOYSTICK_MOVE", "Player", "", "MOVE_2D_TOPDOWN", 8.2f, ""));
+        p.flowRules.add(new VortexFlowCompiler.FlowRule("AI_HUNTER_TICK", "enemy", "Player", "AI_CHASE_PATHFIND", 4.35f, ""));
+        p.flowRules.add(new VortexFlowCompiler.FlowRule("ON_BTN_A", "Player", "", "SHOOT_LASER_2D", 18.0f, "#00E5FF"));
+        p.flowRules.add(new VortexFlowCompiler.FlowRule("ON_COLLIDE", "player", "coin", "COLLECT_SCORE_DESTROY", 150f, "#FFD54F"));
+        p.flowRules.add(new VortexFlowCompiler.FlowRule("ON_COLLIDE", "player", "enemy", "DAMAGE_SHAKE", 20f, "#FF1744"));
+
+        p.scriptCode =
+                "-- Cyber Hunters 2D (v3.0 Showcase: Theta* Pathfinding + Universal Tween Engine + Chiptune Synth)\n" +
+                "local pulseCd = 0\n\n" +
+                "function onStart()\n" +
+                "    vortex.setFixedRotation('Player', true)\n" +
+                "    vortex.playMusic('CYBERPUNK', 134)\n" +
+                "    vortex.tweenTagYoyo('coin', 0.32, 0.85, 'SINE')\n" +
+                "    vortex.setBanner('THETA* AI LABYRINTH — COLLECT ALL 9 CORES! (A=EMP PULSE)')\n" +
+                "end\n\n" +
+                "function onUpdate(dt)\n" +
+                "    if not vortex.exists('Player') then return end\n" +
+                "    pulseCd = math.max(0, pulseCd - dt)\n" +
+                "    vortex.setVel('Player', vortex.joyX() * 8.2, vortex.joyY() * 8.2)\n" +
+                "    -- Theta* Any-Angle Obstacle-Avoiding Pathfinding on all 'enemy' hunters!\n" +
+                "    vortex.chaseTagAI('enemy', 'Player', 4.35)\n" +
+                "    local left = vortex.countByTag('coin')\n" +
+                "    if left == 0 then\n" +
+                "        vortex.setBanner('SYSTEM HACKED! ALL CORES SECURED! SCORE: ' .. vortex.getScore())\n" +
+                "    end\n" +
+                "end\n\n" +
+                "function onButton(btn)\n" +
+                "    if not vortex.exists('Player') then return end\n" +
+                "    if btn == 'A' and pulseCd <= 0 then\n" +
+                "        pulseCd = 1.6\n" +
+                "        local px, py = vortex.getX('Player'), vortex.getY('Player')\n" +
+                "        vortex.particles(px, py, 0, 34, '#00E5FF')\n" +
+                "        vortex.playSound('powerup')\n" +
+                "        vortex.shake(0.30, 0.20)\n" +
+                "        vortex.tweenScale('Player', 1.65, 1.65, 1.0, 0.22, 'ELASTIC', 1)\n" +
+                "        for i = 1, 3 do\n" +
+                "            local h = 'Hunter_' .. i\n" +
+                "            if vortex.exists(h) and vortex.distance('Player', h) < 5.5 then\n" +
+                "                local dx = vortex.getX(h) - px\n" +
+                "                local dy = vortex.getY(h) - py\n" +
+                "                vortex.setPos(h, px + dx * 2.2, py + dy * 2.2, 0)\n" +
+                "                vortex.particles(vortex.getX(h), vortex.getY(h), 0, 18, '#FF1744')\n" +
+                "            end\n" +
+                "        end\n" +
+                "    end\n" +
+                "end\n\n" +
+                "function onCollide(a, b, tagA, tagB)\n" +
+                "    local other, otherTag = nil, nil\n" +
+                "    if tagA == 'player' then other = b; otherTag = tagB\n" +
+                "    elseif tagB == 'player' then other = a; otherTag = tagA end\n" +
+                "    if not other then return end\n\n" +
+                "    if otherTag == 'coin' then\n" +
+                "        vortex.particles(vortex.getX(other), vortex.getY(other), 0, 22, '#FFD54F')\n" +
+                "        vortex.destroy(other)\n" +
+                "        vortex.addScore(150)\n" +
+                "        vortex.playSound('coin')\n" +
+                "    elseif otherTag == 'enemy' then\n" +
+                "        vortex.addHealth(-20)\n" +
+                "        vortex.shake(0.45, 0.25)\n" +
+                "        vortex.playSound('hit')\n" +
+                "        vortex.particles(vortex.getX('Player'), vortex.getY('Player'), 0, 25, '#FF1744')\n" +
+                "        vortex.setPos(other, 0, 7.2, 0)\n" +
+                "        if vortex.getHealth() <= 0 then\n" +
+                "            vortex.setBanner('CAUGHT BY THETA* HUNTERS! PRESS PLAY TO RETRY')\n" +
+                "            vortex.destroy('Player')\n" +
+                "        end\n" +
+                "    end\n" +
+                "end\n";
+        return p;
+    }
+
+    private static GameProject buildCitadelTween3D(String title, String pkgName) {
+        GameProject p = new GameProject();
+        p.title = title;
+        p.packageName = pkgName;
+        p.dimensionMode = "3D";
+        p.scriptLanguage = "LUA";
+        p.skyColorHex = "#080C1B";
+        p.ambientColorHex = "#2A3256";
+        p.fogEnabled = true;
+        p.fogNear = 20f;
+        p.fogFar = 78f;
+        p.cameraMode = "FOLLOW";
+        p.cameraTargetName = "Player";
+        p.cameraDistance = 12.5f;
+        p.cameraHeight = 6.5f;
+        p.iconBgHex = "#120B24";
+        p.iconAccentHex = "#FF4081";
+        p.iconGlyph = "SWORD";
+        p.musicEnabled = true;
+        p.musicBpm = 144;
+        p.musicPattern = ChiptuneGenerator.PRESET_BOSS;
+
+        Entity floor = Entity.create3D("CitadelBridge", "solid", "CUBE", 0f, -0.6f, -12f, 14f, 1.2f, 44f, "#1A243B", "STATIC");
+        floor.checkerTexture = true;
+        p.entities.add(floor);
+
+        Entity player = Entity.create3D("Player", "player", "SPHERE", 0f, 1.2f, 6f, 1.1f, 1.1f, 1.1f, "#00E5FF", "DYNAMIC");
+        p.entities.add(player);
+
+        // Tweened Crusher Gates (Universal Tween Engine Bounce & Sine Yoyo!)
+        for (int i = 0; i < 3; i++) {
+            float gz = -2f - i * 8.5f;
+            Entity gate = Entity.create3D("Gate_" + (i + 1), "hazard", "CUBE", -4.2f + (i % 2) * 8.4f, 1.4f, gz, 4.2f, 2.6f, 1.2f, "#FF1744", "KINEMATIC");
+            gate.isTrigger = true;
+            p.entities.add(gate);
+        }
+
+        // Floating Citadel Boss Core + Relic Shards
+        for (int i = 0; i < 5; i++) {
+            Entity shard = Entity.create3D("Shard_" + i, "coin", "PYRAMID", (i % 2 == 0 ? -2.8f : 2.8f), 1.4f, 1f - i * 5.5f, 0.95f, 1.2f, 0.95f, "#FFD54F", "STATIC");
+            shard.spinY = 120f;
+            shard.isTrigger = true;
+            p.entities.add(shard);
+        }
+
+        Entity boss = Entity.create3D("CitadelCore", "enemy", "CYLINDER", 0f, 2.2f, -28f, 2.8f, 3.2f, 2.8f, "#E040FB", "KINEMATIC");
+        boss.spinY = 90f;
+        p.entities.add(boss);
+
+        p.scriptCode =
+                "-- Neon Citadel 3D (v3.0 Showcase: Universal Tween Engine + 3D Raycast Laser + Boss Chiptune)\n" +
+                "local bossHp = 5\n\n" +
+                "function onStart()\n" +
+                "    vortex.playMusic('BOSS', 144)\n" +
+                "    -- Universal Tween Engine infinite Yoyo animations!\n" +
+                "    vortex.tweenPos('Gate_1', 4.2, 1.4, -2.0, 1.35, 'SINE', -1)\n" +
+                "    vortex.tweenPos('Gate_2', -4.2, 1.4, -10.5, 1.15, 'QUAD', -1)\n" +
+                "    vortex.tweenPos('Gate_3', 4.2, 1.4, -19.0, 0.95, 'BOUNCE', -1)\n" +
+                "    vortex.tweenPos('CitadelCore', 0, 4.2, -28.0, 1.4, 'SINE', -1)\n" +
+                "    vortex.tweenTagYoyo('coin', 0.65, 0.9, 'SINE')\n" +
+                "    vortex.setBanner('CITADEL SIEGE 3D — A=JUMP, B=3D RAYCAST BEAM!')\n" +
+                "end\n\n" +
+                "function onUpdate(dt)\n" +
+                "    if not vortex.exists('Player') then return end\n" +
+                "    vortex.setVel('Player', vortex.joyX() * 9.0, vortex.getVY('Player'), -vortex.joyY() * 9.0)\n" +
+                "    if vortex.getY('Player') < -8 then\n" +
+                "        vortex.setPos('Player', 0, 2.0, 6.0)\n" +
+                "        vortex.addHealth(-20)\n" +
+                "    end\n" +
+                "end\n\n" +
+                "function onButton(btn)\n" +
+                "    if not vortex.exists('Player') then return end\n" +
+                "    if btn == 'A' then\n" +
+                "        vortex.jump('Player', 12.0)\n" +
+                "        vortex.playSound('jump')\n" +
+                "    elseif btn == 'B' then\n" +
+                "        -- Instant 3D Raycast Plasma Beam forward (-Z)!\n" +
+                "        local px, py, pz = vortex.getX('Player'), vortex.getY('Player'), vortex.getZ('Player')\n" +
+                "        vortex.playSound('laser')\n" +
+                "        vortex.particles(px, py, pz - 2.0, 18, '#00E5FF')\n" +
+                "        local hit = vortex.raycast(px, py, pz - 0.8, 0, 0, -1, 38.0)\n" +
+                "        if hit == 'CitadelCore' then\n" +
+                "            bossHp = bossHp - 1\n" +
+                "            vortex.tweenScale('CitadelCore', 3.6, 4.0, 3.6, 0.25, 'ELASTIC', 1)\n" +
+                "            vortex.particles(vortex.getX('CitadelCore'), vortex.getY('CitadelCore'), -28, 35, '#E040FB')\n" +
+                "            vortex.shake(0.45, 0.22)\n" +
+                "            vortex.addScore(250)\n" +
+                "            if bossHp <= 0 then\n" +
+                "                vortex.destroy('CitadelCore')\n" +
+                "                vortex.playSound('explosion')\n" +
+                "                vortex.setBanner('CITADEL CORE DESTROYED! VICTORY! SCORE: ' .. vortex.getScore())\n" +
+                "            else\n" +
+                "                vortex.setBanner('CORE HIT BY 3D RAYCAST! BOSS HP: ' .. bossHp)\n" +
+                "            end\n" +
+                "        end\n" +
+                "    end\n" +
+                "end\n\n" +
+                "function onCollide(a, b, tagA, tagB)\n" +
+                "    local other, otherTag = nil, nil\n" +
+                "    if tagA == 'player' then other = b; otherTag = tagB\n" +
+                "    elseif tagB == 'player' then other = a; otherTag = tagA end\n" +
+                "    if not other then return end\n" +
+                "    if otherTag == 'coin' then\n" +
+                "        vortex.particles(vortex.getX(other), vortex.getY(other), vortex.getZ(other), 20, '#FFD54F')\n" +
+                "        vortex.destroy(other)\n" +
+                "        vortex.addScore(100)\n" +
+                "        vortex.playSound('coin')\n" +
+                "    elseif otherTag == 'hazard' then\n" +
+                "        vortex.addHealth(-25)\n" +
+                "        vortex.shake(0.5, 0.25)\n" +
+                "        vortex.playSound('hit')\n" +
+                "        vortex.setPos('Player', 0, 2.0, 6.0)\n" +
+                "    end\n" +
+                "end\n";
         return p;
     }
 }

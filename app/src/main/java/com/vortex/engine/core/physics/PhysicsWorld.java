@@ -286,6 +286,17 @@ public class PhysicsWorld {
 
     // ===================== 3D + FALLBACK SOLVER & FASTNOISELITE TERRAIN =====================
 
+    public float sampleTerrainHeightAt(GameProject p, float wx, float wz) {
+        if (p == null) return 0f;
+        for (int i = 0; i < p.entities.size(); i++) {
+            Entity e = p.entities.get(i);
+            if (e.alive && "TERRAIN".equalsIgnoreCase(e.primitive)) {
+                return TerrainGenerator.sampleWorldHeight(e, getTerrainNoise(p), wx, wz);
+            }
+        }
+        return 0f;
+    }
+
     private FastNoiseLite getTerrainNoise(GameProject p) {
         if (cachedTerrainNoise == null || cachedNoiseSeed != p.terrainSeed || Math.abs(cachedNoiseFreq - p.terrainFreq) > 1e-5f) {
             cachedNoiseSeed = p.terrainSeed;

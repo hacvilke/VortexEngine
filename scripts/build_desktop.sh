@@ -19,6 +19,8 @@ JAR="$JAVA_HOME/bin/jar"
 
 LUAJ_JAR="$ROOT_DIR/app/libs/luaj-jse-3.0.1.jar"
 JBOX2D_JAR="$ROOT_DIR/app/libs/jbox2d-library-2.2.1.1.jar"
+TWEEN_JAR="$ROOT_DIR/app/libs/universal-tween-engine-6.3.3.jar"
+PATHFINDING_JAR="$ROOT_DIR/app/libs/pathfinding-0.2.6.jar"
 JSON_JAR="$ROOT_DIR/desktop/libs/json-20240303.jar"
 
 BUILD_DESK="$ROOT_DIR/build_desktop"
@@ -107,23 +109,28 @@ x86_64-w64-mingw32-gcc -O2 -s -mwindows -municode \
 ls -lh "$BUILD_DESK/win/win-launcher-stub.exe"
 
 echo "=== [2/5] Compiling Pure-Java Core Engine + Desktop Studio IDE ==="
-# Note: Compile ONLY pure-Java core packages (math, model, noise, physics, script) + desktop/*
+# Note: Compile ONLY pure-Java core packages + ChiptuneGenerator + desktop/*
 # Zero Android SDK classes required!
-find app/src/main/java/com/vortex/engine/core/math \
+find app/src/main/java/com/vortex/engine/core/ai \
+     app/src/main/java/com/vortex/engine/core/export \
+     app/src/main/java/com/vortex/engine/core/flow \
+     app/src/main/java/com/vortex/engine/core/math \
      app/src/main/java/com/vortex/engine/core/model \
      app/src/main/java/com/vortex/engine/core/noise \
      app/src/main/java/com/vortex/engine/core/physics \
      app/src/main/java/com/vortex/engine/core/script \
+     app/src/main/java/com/vortex/engine/core/tween \
      desktop/src \
      -name "*.java" > "$BUILD_DESK/sources.txt"
+echo "app/src/main/java/com/vortex/engine/core/audio/ChiptuneGenerator.java" >> "$BUILD_DESK/sources.txt"
 
 "$JAVAC" --release 11 -encoding UTF-8 \
-    -cp "$LUAJ_JAR:$JBOX2D_JAR:$JSON_JAR" \
+    -cp "$LUAJ_JAR:$JBOX2D_JAR:$TWEEN_JAR:$PATHFINDING_JAR:$JSON_JAR" \
     -d "$BUILD_DESK/classes" \
     @"$BUILD_DESK/sources.txt"
 
-echo "=== [3/5] Assembling All-in-One Desktop Fat JAR (Core + LuaJ + JBox2D + org.json + Toolchain) ==="
-(cd "$BUILD_DESK/fatjar" && unzip -qo "$LUAJ_JAR" && unzip -qo "$JBOX2D_JAR" && unzip -qo "$JSON_JAR")
+echo "=== [3/5] Assembling All-in-One Desktop Fat JAR (Core + LuaJ + JBox2D + Tween + Pathfinding + org.json) ==="
+(cd "$BUILD_DESK/fatjar" && unzip -qo "$LUAJ_JAR" && unzip -qo "$JBOX2D_JAR" && unzip -qo "$TWEEN_JAR" && unzip -qo "$PATHFINDING_JAR" && unzip -qo "$JSON_JAR")
 rm -rf "$BUILD_DESK/fatjar/META-INF"
 cp -R "$BUILD_DESK/classes"/* "$BUILD_DESK/fatjar/"
 
@@ -140,7 +147,7 @@ Manifest-Version: 1.0
 Main-Class: com.vortex.engine.desktop.VortexDesktopStudio
 EOF
 
-FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v2.0.0.jar"
+FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v3.0.0.jar"
 "$JAR" cfm "$FAT_JAR" "$BUILD_DESK/manifest.mf" -C "$BUILD_DESK/fatjar" .
 
 echo "=== [4/5] Building Self-Contained Windows x64 .EXE & Linux x86_64 Binary ==="

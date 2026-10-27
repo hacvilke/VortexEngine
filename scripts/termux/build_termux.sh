@@ -21,7 +21,7 @@ while [ $# -gt 0 ]; do
 done
 
 echo "============================================================"
-echo "  Vortex Engine v2.0 APK Builder (Lua 5.2 + JBox2D + 3D GL)"
+echo "  Vortex Engine v3.0 APK Builder (LuaJ + Box2D + AI + Tween)"
 echo "============================================================"
 
 find_tool() {

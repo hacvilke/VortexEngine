@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
         brandRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         TextView verChip = new TextView(this);
-        verChip.setText("v2.0");
+        verChip.setText("v3.0 APEX");
         verChip.setTextColor(Color.parseColor("#00E676"));
         verChip.setTextSize(10.5f);
         verChip.setTypeface(Typeface.DEFAULT_BOLD);
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         header.addView(brandRow);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("2D & 3D Game Studio • Lua 5.2 (LuaJ) • JBox2D • FastNoiseLite • Termux APK");
+        subtitle.setText("2D/3D Studio • Theta* AI • Tween Engine • Flow No-Code • Chiptune • APK + HTML5");
         subtitle.setTextColor(Color.parseColor("#94A3B8"));
         subtitle.setTextSize(11.5f);
         subtitle.setPadding(0, dp(3), 0, dp(10));
@@ -279,8 +279,9 @@ public class MainActivity extends Activity {
             infoCol.addView(nameTv);
 
             TextView metaTv = new TextView(this);
-            metaTv.setText(p.packageName + " • " + p.entities.size() + " objects"
-                    + (!is3D && p.useBox2D ? " • JBox2D" : ""));
+            metaTv.setText(p.packageName + " • " + p.entities.size() + " objs"
+                    + (!is3D && p.useBox2D ? " • Box2D" : "")
+                    + (p.musicEnabled ? " • 🎵Synth" : ""));
             metaTv.setTextColor(Color.parseColor("#94A3B8"));
             metaTv.setTextSize(11.5f);
             metaTv.setSingleLine(true);
@@ -320,7 +321,7 @@ public class MainActivity extends Activity {
             b2.rightMargin = dp(6);
             btnRow.addView(editBtn, b2);
 
-            TextView apkBtn = makePillButton("📦 APK", "#261B38", "#B388FF");
+            TextView apkBtn = makePillButton("📦 EXPORT", "#261B38", "#B388FF");
             apkBtn.setGravity(Gravity.CENTER);
             apkBtn.setOnClickListener(v -> openEditor(p.id, "BUILD"));
             btnRow.addView(apkBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f));

@@ -1,6 +1,6 @@
 # Third-Party Open-Source Licenses
 
-Vortex Engine v2.0 integrates the following permissive open-source libraries:
+Vortex Engine v3.0 ("Apex Edition") integrates the following permissive open-source libraries:
 
 ---
 
@@ -48,3 +48,14 @@ copies of the Software.
 
 ## 4. JSON-java (`org.json:json:20240303`, Desktop JVM builds) — Public-Domain / JSON License
 Copyright (c) 2002 JSON.org. Used in Desktop `.exe`/`.jar` builds to match Android's built-in `org.json` API.
+
+---
+
+## 5. Universal Tween Engine (`org.mini2Dx:universal-tween-engine:6.3.3`) — Apache License 2.0
+Original author: Aurelien Ribon; maintained by mini2Dx. Licensed under the Apache License, Version 2.0 (`http://www.apache.org/licenses/LICENSE-2.0`).
+
+---
+
+## 6. Pathfinding (`com.github.xaguzman:pathfinding:0.2.6`) — Apache License 2.0
+Author: Xavier Guzman (`github.com/xaguzman/pathfinding`). Provides `NavigationGrid`, `AStarGridFinder`, and `ThetaStarGridFinder` under the Apache License, Version 2.0 (`http://www.apache.org/licenses/LICENSE-2.0`).
+
