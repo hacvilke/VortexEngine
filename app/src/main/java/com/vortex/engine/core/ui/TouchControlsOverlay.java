@@ -10,7 +10,7 @@ import android.view.View;
 import com.vortex.engine.core.script.VortexScriptEngine;
 
 /**
- * Multi-touch virtual analog joystick + dual arcade buttons (A / B) + live game HUD overlay.
+ * Multi-touch virtual analog joystick + non-overlapping dual arcade buttons (A / B) + live HUD overlay.
  */
 public class TouchControlsOverlay extends View {
 
@@ -24,7 +24,6 @@ public class TouchControlsOverlay extends View {
     private int health = 100;
     private String banner = "";
 
-    // Multi-touch pointer tracking
     private int joyPointerId = -1;
     private float joyCenterX, joyCenterY, joyRadius;
     private float joyKnobX, joyKnobY;
@@ -70,17 +69,18 @@ public class TouchControlsOverlay extends View {
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         float minDim = Math.min(w, h);
-        joyRadius = Math.max(76f, minDim * 0.14f);
+        joyRadius = Math.max(72f, minDim * 0.135f);
         joyCenterX = joyRadius * 1.45f;
         joyCenterY = h - joyRadius * 1.40f;
         joyKnobX = joyCenterX;
         joyKnobY = joyCenterY;
 
-        btnRadius = Math.max(54f, minDim * 0.095f);
-        btnAX = w - btnRadius * 2.85f;
+        btnRadius = Math.max(52f, minDim * 0.09f);
+        // Clean diagonal arcade spacing with guaranteed gap between A and B!
+        btnAX = w - btnRadius * 3.55f;
         btnAY = h - btnRadius * 1.45f;
-        btnBX = w - btnRadius * 1.35f;
-        btnBY = h - btnRadius * 2.55f;
+        btnBX = w - btnRadius * 1.40f;
+        btnBY = h - btnRadius * 2.75f;
     }
 
     @Override
@@ -89,8 +89,7 @@ public class TouchControlsOverlay extends View {
         int w = getWidth();
 
         if (hudVisible) {
-            // Top translucent HUD pill
-            paintFill.setColor(Color.argb(155, 11, 15, 23));
+            paintFill.setColor(Color.argb(165, 11, 15, 23));
             hpRect.set(20f, 18f, Math.min(w - 20f, 540f), 84f);
             canvas.drawRoundRect(hpRect, 18f, 18f, paintFill);
 
@@ -106,7 +105,7 @@ public class TouchControlsOverlay extends View {
             canvas.drawText(fps + " FPS", 395f, 58f, paintText);
 
             if (banner != null && !banner.isEmpty()) {
-                paintText.setTextSize(34f);
+                paintText.setTextSize(32f);
                 paintText.setColor(Color.rgb(255, 213, 79));
                 float tw = paintText.measureText(banner);
                 canvas.drawText(banner, Math.max(24f, (w - tw) * 0.5f), 132f, paintText);
@@ -126,7 +125,6 @@ public class TouchControlsOverlay extends View {
         }
 
         if (showActionButtons) {
-            // Button A (Jump / Primary)
             paintFill.setColor(btnAPointerId != -1
                     ? Color.argb(225, 0, 230, 118)
                     : Color.argb(120, 0, 200, 105));
@@ -137,7 +135,6 @@ public class TouchControlsOverlay extends View {
             paintText.setTextSize(32f);
             canvas.drawText("A", btnAX - 11f, btnAY + 11f, paintText);
 
-            // Button B (Action / Shoot / Boost)
             paintFill.setColor(btnBPointerId != -1
                     ? Color.argb(225, 124, 77, 255)
                     : Color.argb(120, 105, 65, 225));
@@ -166,7 +163,7 @@ public class TouchControlsOverlay extends View {
                     invalidate();
                     return true;
                 }
-                if (showActionButtons && dist(tx, ty, btnAX, btnAY) <= btnRadius * 1.28f && btnAPointerId == -1) {
+                if (showActionButtons && dist(tx, ty, btnAX, btnAY) <= btnRadius * 1.25f && btnAPointerId == -1) {
                     btnAPointerId = pid;
                     if (scriptEngine != null) {
                         scriptEngine.inputBtnA = true;
@@ -175,7 +172,7 @@ public class TouchControlsOverlay extends View {
                     invalidate();
                     return true;
                 }
-                if (showActionButtons && dist(tx, ty, btnBX, btnBY) <= btnRadius * 1.28f && btnBPointerId == -1) {
+                if (showActionButtons && dist(tx, ty, btnBX, btnBY) <= btnRadius * 1.25f && btnBPointerId == -1) {
                     btnBPointerId = pid;
                     if (scriptEngine != null) {
                         scriptEngine.inputBtnB = true;
@@ -238,7 +235,7 @@ public class TouchControlsOverlay extends View {
         joyKnobY = joyCenterY + dy;
         if (scriptEngine != null) {
             scriptEngine.inputJoyX = dx / joyRadius;
-            scriptEngine.inputJoyY = -dy / joyRadius; // +1 up, -1 down
+            scriptEngine.inputJoyY = -dy / joyRadius;
         }
     }
 

@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Vortex Engine — One-Step Termux Toolchain Installer (Android ARM64 / ARM / x86_64)
-# Installs native Termux APK build tools & enables RUN_COMMAND external app access.
+# Vortex Engine v2.0 — Smart Termux Toolchain Setup (Android ARM64 / ARM / x86_64)
+# Skips already-installed tools so re-running finishes in ~1 second!
 # ============================================================================
 set -e
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║   Vortex Engine — Termux APK Toolchain Setup v1.0.0      ║"
+echo "║   Vortex Engine v2.0 — Termux APK Toolchain Setup        ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 
-# 1. Enable allow-external-apps=true so Vortex Studio can trigger builds directly
 mkdir -p "$HOME/.termux"
 PROPS="$HOME/.termux/termux.properties"
 touch "$PROPS"
@@ -22,27 +21,33 @@ fi
 if command -v termux-reload-settings >/dev/null 2>&1; then
     termux-reload-settings || true
 fi
-echo "[✓] Enabled allow-external-apps = true in ~/.termux/termux.properties"
+echo "[✓] Configured allow-external-apps = true"
 
-# 2. Request shared storage symlink if running interactively in Termux
 if command -v termux-setup-storage >/dev/null 2>&1 && [ ! -d "$HOME/storage" ]; then
-    echo "[*] Requesting shared storage access (tap Allow if prompted)..."
+    echo "[*] Requesting shared storage access..."
     termux-setup-storage || true
 fi
 
-# 3. Install native Termux build packages
-if command -v pkg >/dev/null 2>&1; then
-    echo "[*] Updating Termux package index..."
+NEED_INSTALL=0
+for tool in javac aapt2 zipalign apksigner zip unzip; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        NEED_INSTALL=1
+    fi
+done
+
+if [ "$NEED_INSTALL" -eq 1 ] && command -v pkg >/dev/null 2>&1; then
+    echo "[*] Installing missing Android APK build packages..."
     pkg update -y
-    echo "[*] Installing OpenJDK, aapt, aapt2, d8/dx, apksigner, zipalign..."
-    pkg install -y openjdk-17 aapt aapt2 apksigner zip unzip curl || \
-    pkg install -y openjdk-21 aapt aapt2 apksigner zip unzip curl
-    # Optional dexers depending on Termux mirror state
-    pkg install -y d8 2>/dev/null || true
-    pkg install -y dx 2>/dev/null || true
+    # apksigner depends on openjdk-21 in Termux, avoiding duplicate JDK downloads!
+    pkg install -y openjdk-21 aapt aapt2 apksigner zip unzip || \
+    pkg install -y openjdk-17 aapt aapt2 apksigner zip unzip
+    if ! command -v d8 >/dev/null 2>&1 && ! command -v dx >/dev/null 2>&1; then
+        pkg install -y d8 2>/dev/null || pkg install -y dx 2>/dev/null || true
+    fi
+else
+    echo "[✓] Termux build tools (javac, aapt2, zipalign, apksigner) already installed!"
 fi
 
-# 4. Prepare reusable signing keystore for Android 11-16 v1/v2/v3 signing
 SDK_CACHE="$HOME/.vortex-sdk"
 mkdir -p "$SDK_CACHE"
 KEYSTORE="$SDK_CACHE/vortex-release.keystore"
@@ -60,8 +65,15 @@ if [ ! -f "$KEYSTORE" ] && command -v keytool >/dev/null 2>&1; then
         -dname "CN=Vortex Engine Developer, OU=Mobile Games, O=VortexEngine, L=Studio, S=Mobile, C=US"
 fi
 
+if [ -d "/sdcard/Download" ] && [ -w "/sdcard/Download" ]; then
+    mkdir -p "/sdcard/Download/VortexEngine"
+    date > "/sdcard/Download/VortexEngine/.toolchain_ready" 2>/dev/null || true
+fi
+
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║ [SUCCESS] Termux APK Build Toolchain is READY!           ║"
-echo "║ Return to Vortex Engine Studio and tap 'Build Game APK'. ║"
+echo "║ [SUCCESS] Termux APK Toolchain is 100% READY!            ║"
+echo "║ Tip: For 1-tap background builds without copy/paste,     ║"
+echo "║ grant 'Run commands in Termux environment' in Android    ║"
+echo "║ Settings -> Apps -> Vortex Engine -> Permissions.        ║"
 echo "╚══════════════════════════════════════════════════════════╝"

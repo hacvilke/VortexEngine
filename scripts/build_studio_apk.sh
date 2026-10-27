@@ -1,91 +1,167 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Vortex Engine — Full Studio APK & Bundled Runtime Toolchain Builder
-# Produces:
-#   - app/src/main/assets/toolchain/vortex-runtime.dex
-#   - app/src/main/assets/toolchain/vortex-runtime-src.zip
-#   - app/src/main/assets/toolchain/build_termux.sh & setup_termux.sh
-#   - dist/VortexEngine-Studio-v1.0.0.apk (aligned & v1+v2+v3 signed)
+# Vortex Engine Studio v2.0.0 — Full Android APK Build Script
+# Compiles Core + LuaJ (Lua 5.2) + JBox2D + FastNoiseLite + Studio IDE
 # ============================================================================
 set -euo pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$PROJECT_ROOT"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
 
 export JAVA_HOME="${JAVA_HOME:-/opt/jdk-17}"
-export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/opt/android-sdk}"
 export PATH="$JAVA_HOME/bin:$PATH"
+export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/opt/android-sdk}"
+BUILD_TOOLS="$ANDROID_SDK_ROOT/build-tools/34.0.0"
+PLATFORM_JAR="$ANDROID_SDK_ROOT/platforms/android-34/android.jar"
 
-BUILD_TOOLS_DIR=$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
-ANDROID_JAR="$ANDROID_SDK_ROOT/platforms/android-34/android.jar"
+JAVAC="$JAVA_HOME/bin/javac"
+JAVA="$JAVA_HOME/bin/java"
+KEYTOOL="$JAVA_HOME/bin/keytool"
+AAPT2="$BUILD_TOOLS/aapt2"
+D8="$BUILD_TOOLS/d8"
+ZIPALIGN="$BUILD_TOOLS/zipalign"
+APKSIGNER="$BUILD_TOOLS/apksigner"
 
-AAPT2="$BUILD_TOOLS_DIR/aapt2"
-D8="$BUILD_TOOLS_DIR/d8"
-ZIPALIGN="$BUILD_TOOLS_DIR/zipalign"
-APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
+LUAJ_JAR="$ROOT_DIR/app/libs/luaj-jse-3.0.1.jar"
+JBOX2D_JAR="$ROOT_DIR/app/libs/jbox2d-library-2.2.1.1.jar"
+LIB_CP="$PLATFORM_JAR:$LUAJ_JAR:$JBOX2D_JAR"
 
-WORK="/tmp/vortex-studio-build"
-rm -rf "$WORK"
-mkdir -p "$WORK"/{rt_classes,rt_dex,rt_src_stage,gen,studio_classes,studio_dex}
-mkdir -p "$PROJECT_ROOT/app/src/main/assets/toolchain" "$PROJECT_ROOT/dist"
+BUILD_DIR="$ROOT_DIR/build_studio"
+DIST_DIR="$ROOT_DIR/dist"
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR/runtime_classes" \
+         "$BUILD_DIR/runtime_dex" \
+         "$BUILD_DIR/studio_gen" \
+         "$BUILD_DIR/studio_classes" \
+         "$BUILD_DIR/studio_dex" \
+         "$BUILD_DIR/assets/toolchain" \
+         "$BUILD_DIR/res/values" \
+         "$DIST_DIR"
 
-echo "=== [1/6] Building Standalone 2D/3D Engine Runtime DEX (vortex-runtime.dex) ==="
-find app/src/main/java/com/vortex/engine/core app/src/main/java/com/vortex/engine/runtime -name "*.java" > "$WORK/rt_sources.txt"
-javac --release 8 -encoding UTF-8 -cp "$ANDROID_JAR" -d "$WORK/rt_classes" @"$WORK/rt_sources.txt"
-(cd "$WORK/rt_classes" && zip -qr "$WORK/rt_classes.jar" .)
-"$D8" --min-api 24 --lib "$ANDROID_JAR" --output "$WORK/rt_dex" "$WORK/rt_classes.jar"
-cp "$WORK/rt_dex/classes.dex" "$PROJECT_ROOT/app/src/main/assets/toolchain/vortex-runtime.dex"
+echo "=== [1/7] Compiling Standalone Game Runtime (GLES + LuaJ + JBox2D + FastNoiseLite) ==="
+find app/src/main/java/com/vortex/engine/core \
+     app/src/main/java/com/vortex/engine/runtime \
+     -name "*.java" > "$BUILD_DIR/runtime_sources.txt"
 
-echo "=== [2/6] Packaging Standalone Engine Java Sources & Termux Build Scripts ==="
-mkdir -p "$WORK/rt_src_stage/src/main/java/com/vortex/engine"
-cp -R app/src/main/java/com/vortex/engine/core "$WORK/rt_src_stage/src/main/java/com/vortex/engine/"
-cp -R app/src/main/java/com/vortex/engine/runtime "$WORK/rt_src_stage/src/main/java/com/vortex/engine/"
-rm -f "$PROJECT_ROOT/app/src/main/assets/toolchain/vortex-runtime-src.zip"
-(cd "$WORK/rt_src_stage" && zip -qr "$PROJECT_ROOT/app/src/main/assets/toolchain/vortex-runtime-src.zip" src)
+"$JAVAC" --release 8 -encoding UTF-8 \
+    -cp "$LIB_CP" \
+    -d "$BUILD_DIR/runtime_classes" \
+    @"$BUILD_DIR/runtime_sources.txt"
 
-cp scripts/termux/build_termux.sh "$PROJECT_ROOT/app/src/main/assets/toolchain/build_termux.sh"
-cp scripts/termux/setup_termux.sh "$PROJECT_ROOT/app/src/main/assets/toolchain/setup_termux.sh"
+(cd "$BUILD_DIR/runtime_classes" && zip -qr "$BUILD_DIR/runtime.jar" .)
+"$D8" --min-api 24 --lib "$PLATFORM_JAR" \
+    --output "$BUILD_DIR/runtime_dex" \
+    "$BUILD_DIR/runtime.jar" "$LUAJ_JAR" "$JBOX2D_JAR"
+cp "$BUILD_DIR/runtime_dex/classes.dex" "$BUILD_DIR/assets/toolchain/vortex-runtime.dex"
 
-echo "=== [3/6] Compiling Vortex Studio Resources & Assets with aapt2 ==="
-"$AAPT2" compile --dir app/src/main/res -o "$WORK/res.zip"
+echo "=== [2/7] Packaging Termux Toolchain & Open-Source Runtime Bundle ==="
+cp scripts/termux/build_termux.sh "$BUILD_DIR/assets/toolchain/build_termux.sh"
+cp scripts/termux/setup_termux.sh "$BUILD_DIR/assets/toolchain/setup_termux.sh"
+
+mkdir -p "$BUILD_DIR/src_bundle/src/main/java/com/vortex/engine" "$BUILD_DIR/src_bundle/libs"
+cp -R app/src/main/java/com/vortex/engine/core "$BUILD_DIR/src_bundle/src/main/java/com/vortex/engine/"
+cp -R app/src/main/java/com/vortex/engine/runtime "$BUILD_DIR/src_bundle/src/main/java/com/vortex/engine/"
+cp "$LUAJ_JAR" "$JBOX2D_JAR" "$BUILD_DIR/src_bundle/libs/"
+(cd "$BUILD_DIR/src_bundle" && zip -qr "$BUILD_DIR/assets/toolchain/vortex-runtime-src.zip" src libs)
+
+echo "=== [3/7] Generating Procedural Studio Launcher Icons ==="
+mkdir -p "$BUILD_DIR/icon_tool"
+cat > "$BUILD_DIR/icon_tool/GenStudioIcons.java" <<'EOF'
+import java.awt.*;
+import java.awt.geom.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import javax.imageio.ImageIO;
+
+public class GenStudioIcons {
+    public static void main(String[] args) throws Exception {
+        File res = new File(args[0]);
+        String[] dirs = {"mipmap-mdpi", "mipmap-hdpi", "mipmap-xhdpi", "mipmap-xxhdpi", "mipmap-xxxhdpi"};
+        int[] sizes = {48, 72, 96, 144, 192};
+        for (int i = 0; i < dirs.length; i++) {
+            int s = sizes[i];
+            BufferedImage img = new BufferedImage(s, s, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = img.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(new Color(9, 13, 22));
+            g.fill(new RoundRectangle2D.Float(0, 0, s, s, s * 0.22f, s * 0.22f));
+            g.setColor(new Color(0, 229, 255));
+            g.setStroke(new BasicStroke(Math.max(2f, s * 0.055f)));
+            float pad = s * 0.1f;
+            g.draw(new RoundRectangle2D.Float(pad, pad, s - pad * 2, s - pad * 2, s * 0.16f, s * 0.16f));
+
+            Path2D hex = new Path2D.Float();
+            float cx = s * 0.5f, cy = s * 0.48f, r = s * 0.26f;
+            for (int k = 0; k < 6; k++) {
+                double a = Math.toRadians(k * 60 - 90);
+                float px = cx + (float)(Math.cos(a) * r), py = cy + (float)(Math.sin(a) * r);
+                if (k == 0) hex.moveTo(px, py); else hex.lineTo(px, py);
+            }
+            hex.closePath();
+            g.setColor(new Color(0, 229, 255, 220));
+            g.fill(hex);
+            g.setColor(Color.WHITE);
+            g.setFont(new Font("SansSerif", Font.BOLD, Math.max(9, Math.round(s * 0.22f))));
+            FontMetrics fm = g.getFontMetrics();
+            String lbl = "V2";
+            g.drawString(lbl, (s - fm.stringWidth(lbl)) / 2, Math.round(s * 0.56f));
+            g.dispose();
+
+            File outDir = new File(res, dirs[i]);
+            outDir.mkdirs();
+            ImageIO.write(img, "PNG", new File(outDir, "ic_launcher.png"));
+        }
+    }
+}
+EOF
+"$JAVAC" -d "$BUILD_DIR/icon_tool" "$BUILD_DIR/icon_tool/GenStudioIcons.java"
+"$JAVA" -cp "$BUILD_DIR/icon_tool" GenStudioIcons "$BUILD_DIR/res"
+cp -R app/src/main/res/values/* "$BUILD_DIR/res/values/"
+
+echo "=== [4/7] Compiling & Linking Studio APK Resources with aapt2 ==="
+"$AAPT2" compile --dir "$BUILD_DIR/res" -o "$BUILD_DIR/resources.zip"
+
 "$AAPT2" link \
-    -I "$ANDROID_JAR" \
+    -I "$PLATFORM_JAR" \
     --manifest app/src/main/AndroidManifest.xml \
-    -A app/src/main/assets \
-    --java "$WORK/gen" \
+    -A "$BUILD_DIR/assets" \
+    --java "$BUILD_DIR/studio_gen" \
     --min-sdk-version 24 \
     --target-sdk-version 34 \
     --auto-add-overlay \
-    -o "$WORK/studio-unaligned.apk" \
-    "$WORK/res.zip"
+    -o "$BUILD_DIR/studio-unaligned.apk" \
+    "$BUILD_DIR/resources.zip"
 
-echo "=== [4/6] Compiling Vortex Studio IDE + 2D/3D Engine Java Sources ==="
-find app/src/main/java "$WORK/gen" -name "*.java" > "$WORK/studio_sources.txt"
-javac --release 11 -encoding UTF-8 -cp "$ANDROID_JAR" -d "$WORK/studio_classes" @"$WORK/studio_sources.txt"
-(cd "$WORK/studio_classes" && zip -qr "$WORK/studio_classes.jar" .)
-"$D8" --min-api 24 --lib "$ANDROID_JAR" --output "$WORK/studio_dex" "$WORK/studio_classes.jar"
+echo "=== [5/7] Compiling Full Studio IDE + Engine Java Sources ==="
+find app/src/main/java "$BUILD_DIR/studio_gen" -name "*.java" > "$BUILD_DIR/studio_sources.txt"
+"$JAVAC" --release 8 -encoding UTF-8 \
+    -cp "$LIB_CP" \
+    -d "$BUILD_DIR/studio_classes" \
+    @"$BUILD_DIR/studio_sources.txt"
 
-cp "$WORK/studio_dex/classes.dex" "$WORK/classes.dex"
-(cd "$WORK" && zip -qj studio-unaligned.apk classes.dex)
+(cd "$BUILD_DIR/studio_classes" && zip -qr "$BUILD_DIR/studio.jar" .)
+"$D8" --min-api 24 --lib "$PLATFORM_JAR" \
+    --output "$BUILD_DIR/studio_dex" \
+    "$BUILD_DIR/studio.jar" "$LUAJ_JAR" "$JBOX2D_JAR"
 
-echo "=== [5/6] Aligning & Signing VortexEngine-Studio-v1.0.0.apk ==="
-"$ZIPALIGN" -f -p 4 "$WORK/studio-unaligned.apk" "$WORK/studio-aligned.apk"
+echo "=== [6/7] Injecting DEX & Aligning APK ==="
+(cd "$BUILD_DIR/studio_dex" && zip -qj "$BUILD_DIR/studio-unaligned.apk" classes*.dex)
+"$ZIPALIGN" -f -p 4 "$BUILD_DIR/studio-unaligned.apk" "$BUILD_DIR/studio-aligned.apk"
 
-KEYSTORE="/tmp/vortex-studio-signing.p12"
-if [ ! -f "$KEYSTORE" ]; then
-    keytool -genkeypair \
-        -keystore "$KEYSTORE" \
-        -storetype PKCS12 \
-        -alias vortexstudio \
-        -keyalg RSA \
-        -keysize 2048 \
-        -validity 10000 \
-        -storepass vortex123 \
-        -keypass vortex123 \
-        -dname "CN=Vortex Engine Studio, OU=GameEngine, O=VortexEngine, L=Mobile, S=Android, C=US" >/dev/null 2>&1
-fi
+echo "=== [7/7] Signing Release APK (v1 + v2 + v3 schemes) ==="
+KEYSTORE="$BUILD_DIR/studio-release.keystore"
+"$KEYTOOL" -genkeypair \
+    -keystore "$KEYSTORE" \
+    -storetype PKCS12 \
+    -alias vortexstudio \
+    -keyalg RSA \
+    -keysize 2048 \
+    -validity 10000 \
+    -storepass vortex123 \
+    -keypass vortex123 \
+    -dname "CN=Vortex Engine Studio, OU=GameEngine, O=VortexEngine, L=Global, S=Mobile, C=US" >/dev/null 2>&1
 
-OUT_APK="$PROJECT_ROOT/dist/VortexEngine-Studio-v1.0.0.apk"
+OUT_APK="$DIST_DIR/VortexEngine-Studio-v2.0.0.apk"
 "$APKSIGNER" sign \
     --ks "$KEYSTORE" \
     --ks-pass pass:vortex123 \
@@ -94,9 +170,8 @@ OUT_APK="$PROJECT_ROOT/dist/VortexEngine-Studio-v1.0.0.apk"
     --v2-signing-enabled true \
     --v3-signing-enabled true \
     --out "$OUT_APK" \
-    "$WORK/studio-aligned.apk"
+    "$BUILD_DIR/studio-aligned.apk"
 
-echo "=== [6/6] Verifying Signed APK ==="
-"$APKSIGNER" verify --verbose "$OUT_APK" | head -n 12
-"$AAPT2" dump badging "$OUT_APK" | head -n 6
+"$APKSIGNER" verify --verbose "$OUT_APK" | head -n 10
 ls -lh "$OUT_APK"
+echo "[SUCCESS] Vortex Engine Studio v2.0.0 APK ready at: $OUT_APK"

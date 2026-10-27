@@ -1,19 +1,19 @@
 package com.vortex.engine.core.model;
 
-import android.graphics.Color;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.util.UUID;
 
 public class Entity {
-    // 3D Primitives: CUBE, SPHERE, PYRAMID, CYLINDER, PLANE, CUSTOM_OBJ
-    // 2D Primitives: RECT, CIRCLE, TRIANGLE, STAR, SPRITE_HERO, SPRITE_SHIP, SPRITE_SLIME, SPRITE_COIN
+    // 3D Primitives: CUBE, SPHERE, PYRAMID, CYLINDER, PLANE, TERRAIN, CUSTOM_OBJ
+    // 2D Primitives: RECT, CIRCLE, TRIANGLE, STAR, SPRITE_HERO, SPRITE_SHIP, SPRITE_SLIME, SPRITE_COIN, CUSTOM_SPRITE
     public String id;
     public String name;
     public String tag;        // player, solid, coin, enemy, hazard, goal, projectile, decor
     public boolean is3D;
     public String primitive;
     public String customObjName = "";
+    public String customSpriteName = "";
 
     // Transform
     public float x = 0f;
@@ -34,19 +34,23 @@ public class Entity {
     public boolean emissive = false;
     public boolean visible = true;
 
-    // Physics & Motion
+    // Physics & Motion (JBox2D + 3D Solver)
     public String bodyType = "STATIC"; // STATIC, DYNAMIC, KINEMATIC, NONE
     public String collider = "BOX";    // BOX, SPHERE, NONE
     public boolean isTrigger = false;
+    public boolean fixedRotation = true;
+    public float density = 1.0f;
     public float vx = 0f;
     public float vy = 0f;
     public float vz = 0f;
+    public float angularVel = 0f; // deg/sec for 2D rigid-body rotation
     public float gravityScale = 1.0f;
     public float bounce = 0.1f;
-    public float friction = 0.85f;
+    public float friction = 0.65f;
     public float drag = 0.02f;
     public boolean isGrounded = false;
     public boolean alive = true;
+    public transient boolean transformDirty = false;
 
     // Continuous spin (deg/sec) for collectibles, props, asteroids
     public float spinX = 0f;
@@ -97,6 +101,9 @@ public class Entity {
         e.scaleZ = 1f;
         e.colorHex = colorHex;
         e.bodyType = bodyType;
+        if ("CIRCLE".equalsIgnoreCase(primitive) || "SPRITE_COIN".equalsIgnoreCase(primitive)) {
+            e.collider = "SPHERE";
+        }
         return e;
     }
 
@@ -108,20 +115,35 @@ public class Entity {
         return hexToRgba(secondaryColorHex, alpha);
     }
 
+    /**
+     * Pure-Java hex color parser (#RGB, #RRGGBB, #AARRGGBB) — works identically on Android & Desktop JVM.
+     */
     public static float[] hexToRgba(String hex, float alphaOverride) {
+        int argb = hexToArgbInt(hex, 0xFF00E5FF);
+        float r = ((argb >> 16) & 0xFF) / 255f;
+        float g = ((argb >> 8) & 0xFF) / 255f;
+        float b = (argb & 0xFF) / 255f;
+        return new float[]{r, g, b, alphaOverride};
+    }
+
+    public static int hexToArgbInt(String hex, int fallback) {
+        if (hex == null) return fallback;
+        String s = hex.trim();
+        if (s.startsWith("#")) s = s.substring(1);
         try {
-            String clean = (hex == null || hex.isEmpty()) ? "#00E5FF" : hex.trim();
-            if (!clean.startsWith("#")) clean = "#" + clean;
-            int c = Color.parseColor(clean);
-            return new float[]{
-                    Color.red(c) / 255f,
-                    Color.green(c) / 255f,
-                    Color.blue(c) / 255f,
-                    alphaOverride
-            };
-        } catch (Exception ex) {
-            return new float[]{0.0f, 0.9f, 1.0f, alphaOverride};
+            if (s.length() == 3) {
+                int r = Integer.parseInt(s.substring(0, 1), 16) * 17;
+                int g = Integer.parseInt(s.substring(1, 2), 16) * 17;
+                int b = Integer.parseInt(s.substring(2, 3), 16) * 17;
+                return (0xFF << 24) | (r << 16) | (g << 8) | b;
+            } else if (s.length() == 6) {
+                return 0xFF000000 | Integer.parseInt(s, 16);
+            } else if (s.length() == 8) {
+                return (int) Long.parseLong(s, 16);
+            }
+        } catch (Exception ignored) {
         }
+        return fallback;
     }
 
     public Entity deepCopy() {
@@ -140,6 +162,7 @@ public class Entity {
         o.put("is3D", is3D);
         o.put("primitive", primitive);
         o.put("customObjName", customObjName);
+        o.put("customSpriteName", customSpriteName);
         o.put("x", x);
         o.put("y", y);
         o.put("z", z);
@@ -158,9 +181,12 @@ public class Entity {
         o.put("bodyType", bodyType);
         o.put("collider", collider);
         o.put("isTrigger", isTrigger);
+        o.put("fixedRotation", fixedRotation);
+        o.put("density", density);
         o.put("vx", vx);
         o.put("vy", vy);
         o.put("vz", vz);
+        o.put("angularVel", angularVel);
         o.put("gravityScale", gravityScale);
         o.put("bounce", bounce);
         o.put("friction", friction);
@@ -179,6 +205,7 @@ public class Entity {
         e.is3D = o.optBoolean("is3D", true);
         e.primitive = o.optString("primitive", e.is3D ? "CUBE" : "RECT");
         e.customObjName = o.optString("customObjName", "");
+        e.customSpriteName = o.optString("customSpriteName", "");
         e.x = (float) o.optDouble("x", 0.0);
         e.y = (float) o.optDouble("y", 0.0);
         e.z = (float) o.optDouble("z", 0.0);
@@ -197,12 +224,15 @@ public class Entity {
         e.bodyType = o.optString("bodyType", "STATIC");
         e.collider = o.optString("collider", "BOX");
         e.isTrigger = o.optBoolean("isTrigger", false);
+        e.fixedRotation = o.optBoolean("fixedRotation", true);
+        e.density = (float) o.optDouble("density", 1.0);
         e.vx = (float) o.optDouble("vx", 0.0);
         e.vy = (float) o.optDouble("vy", 0.0);
         e.vz = (float) o.optDouble("vz", 0.0);
+        e.angularVel = (float) o.optDouble("angularVel", 0.0);
         e.gravityScale = (float) o.optDouble("gravityScale", 1.0);
         e.bounce = (float) o.optDouble("bounce", 0.1);
-        e.friction = (float) o.optDouble("friction", 0.85);
+        e.friction = (float) o.optDouble("friction", 0.65);
         e.drag = (float) o.optDouble("drag", 0.02);
         e.spinX = (float) o.optDouble("spinX", 0.0);
         e.spinY = (float) o.optDouble("spinY", 0.0);

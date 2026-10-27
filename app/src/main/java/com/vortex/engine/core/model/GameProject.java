@@ -18,6 +18,12 @@ public class GameProject {
     public int versionCode = 1;
     public String orientation = "landscape"; // landscape, portrait, sensor
     public String dimensionMode = "3D";      // "3D" or "2D"
+    public String scriptLanguage = "LUA";    // "LUA" (LuaJ 5.2) or "VXS" (VortexScript)
+    public boolean useBox2D = true;          // JBox2D Rigid-Body solver for 2D
+
+    // Custom Procedural Terrain Parameters (FastNoiseLite)
+    public int terrainSeed = 1337;
+    public float terrainFreq = 0.065f;
 
     // Custom Icon Theme
     public String iconBgHex = "#0D1321";
@@ -29,7 +35,7 @@ public class GameProject {
     public String ambientColorHex = "#24344D";
     public boolean fogEnabled = true;
     public float fogNear = 18f;
-    public float fogFar = 65f;
+    public float fogFar = 68f;
 
     public float gravityX = 0f;
     public float gravityY = -22f;
@@ -40,7 +46,7 @@ public class GameProject {
     public float cameraDistance = 11f;
     public float cameraHeight = 5.5f;
     public float cameraFov = 60f;
-    public float zoom2D = 18f; // Visible vertical world units in 2D mode
+    public float zoom2D = 18f;
 
     // Controls & Editor Settings
     public boolean showGrid = true;
@@ -51,6 +57,8 @@ public class GameProject {
     public final List<Entity> entities = new ArrayList<>();
     public String scriptCode = "";
     public final Map<String, String> customObjMeshes = new LinkedHashMap<>();
+    // 16x16 pixel-art sprites encoded as 256 comma-separated #RRGGBB or '.' transparent tokens
+    public final Map<String, String> customSprites = new LinkedHashMap<>();
 
     public GameProject() {
         this.id = UUID.randomUUID().toString().substring(0, 8);
@@ -103,6 +111,10 @@ public class GameProject {
             o.put("versionCode", versionCode);
             o.put("orientation", orientation);
             o.put("dimensionMode", dimensionMode);
+            o.put("scriptLanguage", scriptLanguage);
+            o.put("useBox2D", useBox2D);
+            o.put("terrainSeed", terrainSeed);
+            o.put("terrainFreq", terrainFreq);
             o.put("iconBgHex", iconBgHex);
             o.put("iconAccentHex", iconAccentHex);
             o.put("iconGlyph", iconGlyph);
@@ -137,6 +149,12 @@ public class GameProject {
                 meshes.put(entry.getKey(), entry.getValue());
             }
             o.put("customObjMeshes", meshes);
+
+            JSONObject sprites = new JSONObject();
+            for (Map.Entry<String, String> entry : customSprites.entrySet()) {
+                sprites.put(entry.getKey(), entry.getValue());
+            }
+            o.put("customSprites", sprites);
             return o.toString(2);
         } catch (JSONException ex) {
             return "{}";
@@ -153,6 +171,12 @@ public class GameProject {
         p.versionCode = o.optInt("versionCode", 1);
         p.orientation = o.optString("orientation", "landscape");
         p.dimensionMode = o.optString("dimensionMode", "3D");
+        // Backwards compatible: existing v1.0 projects without scriptLanguage default to VXS
+        String defaultLang = o.has("scriptLanguage") ? "LUA" : "VXS";
+        p.scriptLanguage = o.optString("scriptLanguage", defaultLang);
+        p.useBox2D = o.optBoolean("useBox2D", true);
+        p.terrainSeed = o.optInt("terrainSeed", 1337);
+        p.terrainFreq = (float) o.optDouble("terrainFreq", 0.065);
         p.iconBgHex = o.optString("iconBgHex", "#0D1321");
         p.iconAccentHex = o.optString("iconAccentHex", "#00E5FF");
         p.iconGlyph = o.optString("iconGlyph", "CUBE");
@@ -160,7 +184,7 @@ public class GameProject {
         p.ambientColorHex = o.optString("ambientColorHex", "#24344D");
         p.fogEnabled = o.optBoolean("fogEnabled", true);
         p.fogNear = (float) o.optDouble("fogNear", 18.0);
-        p.fogFar = (float) o.optDouble("fogFar", 65.0);
+        p.fogFar = (float) o.optDouble("fogFar", 68.0);
         p.gravityX = (float) o.optDouble("gravityX", 0.0);
         p.gravityY = (float) o.optDouble("gravityY", -22.0);
         p.gravityZ = (float) o.optDouble("gravityZ", 0.0);
@@ -192,6 +216,15 @@ public class GameProject {
             while (keys.hasNext()) {
                 String k = keys.next();
                 p.customObjMeshes.put(k, meshes.optString(k, ""));
+            }
+        }
+
+        JSONObject sprites = o.optJSONObject("customSprites");
+        if (sprites != null) {
+            Iterator<String> keys = sprites.keys();
+            while (keys.hasNext()) {
+                String k = keys.next();
+                p.customSprites.put(k, sprites.optString(k, ""));
             }
         }
         return p;

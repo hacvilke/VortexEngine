@@ -30,13 +30,10 @@ import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Bridges Vortex Engine Studio with Termux on Android:
- *  1) Exports complete standalone Android game projects (Manifest, Icons, 2D/3D Scenes, VortexScript,
- *     Custom .obj Meshes, Prebuilt Engine DEX + Full Java Engine Source, and Termux build scripts).
- *  2) Writes BOTH direct shared folder (/sdcard/Download/VortexEngine/<slug>/) AND zero-permission
- *     MediaStore Downloads ZIP bundle (/sdcard/Download/VortexProject_<slug>.zip) for Android 10-16.
- *  3) Triggers builds directly via com.termux.RUN_COMMAND (background w/ stdout callback OR live session)
- *     plus provides one-tap Clipboard + Launch Termux fallback.
+ * Termux Bridge v2.0:
+ *  - Exports LuaJ + JBox2D + FastNoiseLite + OpenGL ES standalone projects
+ *  - Supports direct com.termux.RUN_COMMAND + App Details Permission Settings helper (for Samsung One UI / Android 14+)
+ *  - Supports zero-permission MediaStore Downloads ZIP export + Clipboard command fallback
  */
 public class TermuxBridge {
 
@@ -52,8 +49,8 @@ public class TermuxBridge {
     public static class ExportResult {
         public String slug;
         public File internalProjectDir;
-        public File sharedProjectDir; // Non-null if direct /sdcard/Download write succeeded
-        public String sharedZipPath;  // /sdcard/Download/VortexProject_<slug>.zip
+        public File sharedProjectDir;
+        public String sharedZipPath;
         public String termuxBuildCmd;
         public String expectedSharedApkPath;
     }
@@ -72,6 +69,15 @@ public class TermuxBridge {
             return ctx.checkSelfPermission(PERMISSION_RUN_COMMAND) == PackageManager.PERMISSION_GRANTED;
         }
         return true;
+    }
+
+    public static void openAppPermissionSettings(Activity activity) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.fromParts("package", activity.getPackageName(), null));
+            activity.startActivity(intent);
+        } catch (Exception ignored) {
+        }
     }
 
     public static boolean hasAllFilesAccess(Context ctx) {
@@ -106,38 +112,33 @@ public class TermuxBridge {
         }
     }
 
-    /**
-     * Builds the full standalone Android project tree and exports it for Termux.
-     */
     public static ExportResult exportStandaloneProject(Context ctx, GameProject project) throws Exception {
         String slug = project.getSlug();
         File stageRoot = new File(ctx.getCacheDir(), "export_stage/" + slug);
         deleteRecursive(stageRoot);
         stageRoot.mkdirs();
 
-        // 1. Write standalone AndroidManifest.xml
         writeText(new File(stageRoot, "AndroidManifest.xml"), generateStandaloneManifest(project));
 
-        // 2. Write res/values/strings.xml & custom launcher PNG icons
         File resDir = new File(stageRoot, "res");
         File valuesDir = new File(resDir, "values");
         valuesDir.mkdirs();
-        String escapedTitle = escapeXml(project.title);
         writeText(new File(valuesDir, "strings.xml"),
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
                 "<resources>\n" +
-                "    <string name=\"app_name\">" + escapedTitle + "</string>\n" +
+                "    <string name=\"app_name\">" + escapeXml(project.title) + "</string>\n" +
                 "</resources>\n");
 
         IconGenerator.generateLauncherIcons(
                 resDir, project.iconBgHex, project.iconAccentHex, project.iconGlyph, project.title);
 
-        // 3. Write assets/project.vortex.json, assets/scripts/main.vxs, and assets/meshes/*.obj
         File assetsDir = new File(stageRoot, "assets");
         File scriptsDir = new File(assetsDir, "scripts");
         scriptsDir.mkdirs();
         writeText(new File(assetsDir, "project.vortex.json"), project.toJsonString());
-        writeText(new File(scriptsDir, "main.vxs"), project.scriptCode == null ? "" : project.scriptCode);
+
+        String ext = "LUA".equalsIgnoreCase(project.scriptLanguage) ? "main.lua" : "main.vxs";
+        writeText(new File(scriptsDir, ext), project.scriptCode == null ? "" : project.scriptCode);
 
         if (!project.customObjMeshes.isEmpty()) {
             File meshesDir = new File(assetsDir, "meshes");
@@ -149,7 +150,6 @@ public class TermuxBridge {
             }
         }
 
-        // 4. Copy bundled Termux scripts, prebuilt vortex-runtime.dex, and full Java engine sources
         File prebuiltDir = new File(stageRoot, "prebuilt");
         prebuiltDir.mkdirs();
         copyAssetIfPresent(ctx, "toolchain/vortex-runtime.dex", new File(prebuiltDir, "vortex-runtime.dex"));
@@ -162,16 +162,13 @@ public class TermuxBridge {
         res.internalProjectDir = stageRoot;
         res.expectedSharedApkPath = "/sdcard/Download/VortexEngine/Builds/" + slug + "-release.apk";
 
-        // 5A. Export ZIP bundle to /sdcard/Download/ via MediaStore (works on Android 10-16 w/ ZERO permissions!)
         String zipFileName = "VortexProject_" + slug + ".zip";
         File localZip = new File(ctx.getCacheDir(), zipFileName);
         zipDirectory(stageRoot, localZip);
-        boolean mediaSaved = saveZipToDownloadsMediaStore(ctx, localZip, zipFileName);
-        if (mediaSaved) {
+        if (saveZipToDownloadsMediaStore(ctx, localZip, zipFileName)) {
             res.sharedZipPath = "/sdcard/Download/" + zipFileName;
         }
 
-        // 5B. Also export unzipped project folder directly to /sdcard/Download/VortexEngine/<slug> if permitted
         try {
             File dlRoot = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
             File directDir = new File(dlRoot, "VortexEngine/" + slug);
@@ -198,18 +195,13 @@ public class TermuxBridge {
         return res;
     }
 
-    /**
-     * Triggers Termux directly via com.termux.RUN_COMMAND.
-     */
     public static String triggerTermuxBuild(
             Activity activity,
             ExportResult export,
             boolean runInBackground,
             boolean forceFromSource
     ) {
-        if (!isTermuxInstalled(activity)) {
-            return "ERR_NO_TERMUX";
-        }
+        if (!isTermuxInstalled(activity)) return "ERR_NO_TERMUX";
         if (!hasRunCommandPermission(activity)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 activity.requestPermissions(new String[]{PERMISSION_RUN_COMMAND}, 401);
@@ -231,7 +223,6 @@ public class TermuxBridge {
             intent.putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0");
         }
 
-        // Explicit Service PendingIntent for Termux stdout/stderr/exitCode result bundle
         Intent resultIntent = new Intent(activity, TermuxResultService.class);
         int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -259,16 +250,14 @@ public class TermuxBridge {
                 + "|| echo 'allow-external-apps = true' >> ~/.termux/termux.properties) && "
                 + "(termux-reload-settings || true) && "
                 + "( [ -d ~/storage ] || termux-setup-storage ) && "
-                + "pkg update -y && pkg install -y openjdk-17 aapt aapt2 apksigner zip unzip && "
-                + "(pkg install -y d8 || pkg install -y dx || true) && "
-                + "echo 'Vortex Termux Toolchain Ready!'";
+                + "(command -v aapt2 >/dev/null && command -v apksigner >/dev/null || "
+                + "(pkg update -y && pkg install -y openjdk-21 aapt aapt2 d8 apksigner zip unzip)) && "
+                + "echo 'Vortex Termux Toolchain 100% Ready!'";
     }
 
     public static void copyToClipboard(Context ctx, String label, String text) {
         ClipboardManager cm = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-        if (cm != null) {
-            cm.setPrimaryClip(ClipData.newPlainText(label, text));
-        }
+        if (cm != null) cm.setPrimaryClip(ClipData.newPlainText(label, text));
     }
 
     public static boolean openTermuxApp(Context ctx) {
@@ -353,26 +342,18 @@ public class TermuxBridge {
 
     private static String escapeXml(String s) {
         if (s == null) return "";
-        return s.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&apos;");
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
     private static boolean saveZipToDownloadsMediaStore(Context ctx, File zipFile, String displayName) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false;
         try {
             ContentResolver resolver = ctx.getContentResolver();
-            // Remove older entry with same name owned by us so filename stays exact (no '(1)')
             try {
-                resolver.delete(
-                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                        MediaStore.MediaColumns.DISPLAY_NAME + "=?",
-                        new String[]{displayName}
-                );
-            } catch (Throwable ignored) {
-            }
+                resolver.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        MediaStore.MediaColumns.DISPLAY_NAME + "=?", new String[]{displayName});
+            } catch (Throwable ignored) {}
 
             ContentValues cv = new ContentValues();
             cv.put(MediaStore.MediaColumns.DISPLAY_NAME, displayName);
@@ -383,8 +364,7 @@ public class TermuxBridge {
             try (OutputStream os = resolver.openOutputStream(uri);
                  FileInputStream fis = new FileInputStream(zipFile)) {
                 if (os == null) return false;
-                byte[] buf = new byte[16384];
-                int n;
+                byte[] buf = new byte[16384]; int n;
                 while ((n = fis.read(buf)) > 0) os.write(buf, 0, n);
             }
             return true;
@@ -404,34 +384,28 @@ public class TermuxBridge {
         try (InputStream is = ctx.getAssets().open(assetName)) {
             if (dest.getParentFile() != null) dest.getParentFile().mkdirs();
             try (FileOutputStream fos = new FileOutputStream(dest)) {
-                byte[] buf = new byte[16384];
-                int r;
+                byte[] buf = new byte[16384]; int r;
                 while ((r = is.read(buf)) > 0) fos.write(buf, 0, r);
             }
-        } catch (IOException ignored) {
-        }
+        } catch (IOException ignored) {}
     }
 
     private static void unzipAssetIfPresent(Context ctx, String assetName, File destDir) {
         try (InputStream is = ctx.getAssets().open(assetName);
              ZipInputStream zis = new ZipInputStream(new BufferedInputStream(is))) {
-            ZipEntry ze;
-            byte[] buf = new byte[16384];
+            ZipEntry ze; byte[] buf = new byte[16384];
             while ((ze = zis.getNextEntry()) != null) {
                 File out = new File(destDir, ze.getName());
-                if (ze.isDirectory()) {
-                    out.mkdirs();
-                } else {
+                if (ze.isDirectory()) out.mkdirs();
+                else {
                     if (out.getParentFile() != null) out.getParentFile().mkdirs();
                     try (FileOutputStream fos = new FileOutputStream(out)) {
-                        int n;
-                        while ((n = zis.read(buf)) > 0) fos.write(buf, 0, n);
+                        int n; while ((n = zis.read(buf)) > 0) fos.write(buf, 0, n);
                     }
                 }
                 zis.closeEntry();
             }
-        } catch (IOException ignored) {
-        }
+        } catch (IOException ignored) {}
     }
 
     private static void zipDirectory(File rootDir, File outZip) throws IOException {
@@ -446,13 +420,11 @@ public class TermuxBridge {
         byte[] buf = new byte[16384];
         for (File child : children) {
             String rel = root.toURI().relativize(child.toURI()).getPath();
-            if (child.isDirectory()) {
-                zipWalk(root, child, zos);
-            } else {
+            if (child.isDirectory()) zipWalk(root, child, zos);
+            else {
                 zos.putNextEntry(new ZipEntry(rel));
                 try (FileInputStream fis = new FileInputStream(child)) {
-                    int n;
-                    while ((n = fis.read(buf)) > 0) zos.write(buf, 0, n);
+                    int n; while ((n = fis.read(buf)) > 0) zos.write(buf, 0, n);
                 }
                 zos.closeEntry();
             }
@@ -463,20 +435,15 @@ public class TermuxBridge {
         if (src.isDirectory()) {
             dst.mkdirs();
             File[] files = src.listFiles();
-            if (files != null) {
-                for (File f : files) copyDirectory(f, new File(dst, f.getName()));
-            }
-        } else {
-            copyFile(src, dst);
-        }
+            if (files != null) for (File f : files) copyDirectory(f, new File(dst, f.getName()));
+        } else copyFile(src, dst);
     }
 
     private static void copyFile(File src, File dst) throws IOException {
         if (dst.getParentFile() != null) dst.getParentFile().mkdirs();
         try (FileInputStream fis = new FileInputStream(src);
              FileOutputStream fos = new FileOutputStream(dst)) {
-            byte[] buf = new byte[16384];
-            int n;
+            byte[] buf = new byte[16384]; int n;
             while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
         }
     }
@@ -485,9 +452,7 @@ public class TermuxBridge {
         if (f == null || !f.exists()) return;
         if (f.isDirectory()) {
             File[] children = f.listFiles();
-            if (children != null) {
-                for (File c : children) deleteRecursive(c);
-            }
+            if (children != null) for (File c : children) deleteRecursive(c);
         }
         f.delete();
     }

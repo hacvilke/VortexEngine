@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Vortex Engine — On-Device Standalone Game APK Compiler for Termux & Linux
-# Compiles 2D & 3D Vortex Engine games into signed, aligned Android APKs.
+# Vortex Engine v2.0 — Standalone Game APK Builder (LuaJ + JBox2D + FastNoiseLite + GLES)
 # Usage:
 #   bash build_termux.sh [--from-source | --fast] [--zip /path/to/bundle.zip]
 # ============================================================================
@@ -22,10 +21,9 @@ while [ $# -gt 0 ]; do
 done
 
 echo "============================================================"
-echo "  Vortex Engine APK Builder (2D + 3D OpenGL ES Runtime)"
+echo "  Vortex Engine v2.0 APK Builder (Lua 5.2 + JBox2D + 3D GL)"
 echo "============================================================"
 
-# Locate tools (supports both Termux $PREFIX/bin and standard Android SDK)
 find_tool() {
     local name="$1"
     if command -v "$name" >/dev/null 2>&1; then
@@ -53,11 +51,10 @@ DX_BIN=$(find_tool dx || true)
 
 if [ -z "$AAPT2_BIN" ] || [ -z "$ZIPALIGN_BIN" ] || [ -z "$APKSIGNER_BIN" ]; then
     echo "[!] Missing Android build tools (aapt2 / zipalign / apksigner)."
-    echo "    In Termux, run: pkg install -y openjdk-17 aapt aapt2 apksigner zip unzip"
+    echo "    In Termux, run: pkg install -y openjdk-21 aapt aapt2 d8 apksigner zip unzip"
     exit 2
 fi
 
-# Resolve source project directory or unpack zero-permission MediaStore ZIP bundle
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_PROJECT_DIR="$SCRIPT_DIR"
 
@@ -76,7 +73,6 @@ fi
 SLUG=$(basename "$SRC_PROJECT_DIR" | tr -cd 'a-zA-Z0-9_-')
 [ -z "$SLUG" ] && SLUG="vortex_game"
 
-# Copy into native ext4 $HOME/.vortex-build/<slug> so Termux avoids /sdcard noexec/permission issues
 WORK_DIR="${VORTEX_WORK_DIR:-$HOME/.vortex-build/$SLUG}"
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
@@ -84,7 +80,6 @@ cp -R "$SRC_PROJECT_DIR"/. "$WORK_DIR"/
 cd "$WORK_DIR"
 mkdir -p build/gen build/classes build/dex dist
 
-# Locate Android framework jar for aapt2 link & javac
 ANDROID_JAR="${ANDROID_JAR:-}"
 if [ -z "$ANDROID_JAR" ] || [ ! -f "$ANDROID_JAR" ]; then
     for candidate in \
@@ -105,11 +100,9 @@ if [ -z "$ANDROID_JAR" ] || [ ! -f "$ANDROID_JAR" ]; then
 fi
 echo "[1/6] Using Android framework: $ANDROID_JAR"
 
-# Step 1: Compile resources with aapt2
 echo "[2/6] Compiling resources with aapt2..."
 "$AAPT2_BIN" compile --dir res -o build/resources.zip
 
-# Step 2: Link manifest + resources + game assets (project.vortex.json, scripts, .obj meshes)
 echo "[3/6] Linking APK manifest & 2D/3D game assets..."
 "$AAPT2_BIN" link \
     -I "$ANDROID_JAR" \
@@ -122,34 +115,40 @@ echo "[3/6] Linking APK manifest & 2D/3D game assets..."
     -o build/unaligned.apk \
     build/resources.zip
 
-# Step 3: Produce classes.dex (either full javac+d8/dx source compile OR fast prebuilt runtime dex)
 CAN_COMPILE_JAVA="false"
-if [ -n "$JAVAC_BIN" ] && { [ -n "$D8_BIN" ] || [ -n "$DX_BIN" ]; } && [[ "$ANDROID_JAR" == *.jar ]]; then
+if [ -n "$JAVAC_BIN" ] && [ -n "$D8_BIN" ] && [[ "$ANDROID_JAR" == *.jar ]]; then
     if [ -d "src/main/java" ] && [ -n "$(find src/main/java -name '*.java' -print -quit 2>/dev/null)" ]; then
         CAN_COMPILE_JAVA="true"
     fi
 fi
 
-if [ "$MODE" = "source" ] || { [ "$MODE" = "auto" ] && [ ! -f "prebuilt/vortex-runtime.dex" ] && [ "$CAN_COMPILE_JAVA" = "true" ]; }; then
-    echo "[4/6] Compiling Engine & Game Java sources from scratch..."
+EXTRA_CP="$ANDROID_JAR"
+EXTRA_JARS=()
+if [ -d "libs" ]; then
+    for jf in libs/*.jar; do
+        if [ -f "$jf" ]; then
+            EXTRA_CP="$EXTRA_CP:$jf"
+            EXTRA_JARS+=("$jf")
+        fi
+    done
+fi
+
+if [ "$MODE" = "source" ] && [ "$CAN_COMPILE_JAVA" = "true" ]; then
+    echo "[4/6] Compiling Engine + LuaJ + JBox2D Java sources from scratch..."
     find src/main/java build/gen -name "*.java" > build/sources.txt
-    "$JAVAC_BIN" --release 8 -encoding UTF-8 -cp "$ANDROID_JAR" -d build/classes @build/sources.txt
-    if [ -n "$D8_BIN" ]; then
-        (cd build/classes && zip -qr ../classes.jar .)
-        "$D8_BIN" --min-api 24 --lib "$ANDROID_JAR" --output build/dex build/classes.jar
-    else
-        "$DX_BIN" --dex --output=build/dex/classes.dex build/classes
-    fi
+    "$JAVAC_BIN" --release 8 -encoding UTF-8 -cp "$EXTRA_CP" -d build/classes @build/sources.txt
+    (cd build/classes && zip -qr ../classes.jar .)
+    "$D8_BIN" --min-api 24 --lib "$ANDROID_JAR" --output build/dex build/classes.jar "${EXTRA_JARS[@]}"
     cp build/dex/classes.dex "$WORK_DIR/classes.dex"
 elif [ -f "prebuilt/vortex-runtime.dex" ]; then
-    echo "[4/6] Injecting prebuilt Vortex 2D/3D OpenGL ES Runtime DEX..."
+    echo "[4/6] Injecting prebuilt Vortex v2.0 Runtime DEX (GLES + LuaJ + JBox2D + FastNoiseLite)..."
     cp prebuilt/vortex-runtime.dex "$WORK_DIR/classes.dex"
 elif [ "$CAN_COMPILE_JAVA" = "true" ]; then
     echo "[4/6] Compiling Engine Java sources..."
     find src/main/java build/gen -name "*.java" > build/sources.txt
-    "$JAVAC_BIN" --release 8 -encoding UTF-8 -cp "$ANDROID_JAR" -d build/classes @build/sources.txt
+    "$JAVAC_BIN" --release 8 -encoding UTF-8 -cp "$EXTRA_CP" -d build/classes @build/sources.txt
     (cd build/classes && zip -qr ../classes.jar .)
-    "$D8_BIN" --min-api 24 --lib "$ANDROID_JAR" --output build/dex build/classes.jar
+    "$D8_BIN" --min-api 24 --lib "$ANDROID_JAR" --output build/dex build/classes.jar "${EXTRA_JARS[@]}"
     cp build/dex/classes.dex "$WORK_DIR/classes.dex"
 else
     echo "[!] Neither prebuilt/vortex-runtime.dex nor full Java SDK compiler available."
@@ -158,11 +157,9 @@ fi
 
 zip -qj build/unaligned.apk classes.dex
 
-# Step 4: 4-byte page-aligned zipalign (required for Android 11-16)
 echo "[5/6] Optimizing alignment with zipalign..."
 "$ZIPALIGN_BIN" -f -p 4 build/unaligned.apk build/aligned.apk
 
-# Step 5: Ensure keystore exists and sign with APK Signature Scheme v1 + v2 + v3
 SDK_CACHE="$HOME/.vortex-sdk"
 mkdir -p "$SDK_CACHE"
 KEYSTORE="${VORTEX_KEYSTORE:-$SDK_CACHE/vortex-release.keystore}"
@@ -191,7 +188,6 @@ echo "[6/6] Signing standalone APK (v1 + v2 + v3 schemes)..."
     --out "$FINAL_APK" \
     build/aligned.apk
 
-# Export finished APK back to shared Downloads folder if available
 EXPORT_DEST=""
 if [ -n "$CUSTOM_OUT_DIR" ]; then
     mkdir -p "$CUSTOM_OUT_DIR"
@@ -215,7 +211,6 @@ echo "  Workspace APK : $FINAL_APK"
 [ -n "$EXPORT_DEST" ] && echo "  Shared APK    : $EXPORT_DEST"
 echo "============================================================"
 
-# Prompt package installer automatically if termux-open is available
 if [ -n "$EXPORT_DEST" ] && command -v termux-open >/dev/null 2>&1 && [ "${VORTEX_NO_OPEN:-0}" != "1" ]; then
     termux-open "$EXPORT_DEST" 2>/dev/null || true
 fi

@@ -10,6 +10,8 @@ import com.vortex.engine.core.math.Vec2;
 import com.vortex.engine.core.math.Vec3;
 import com.vortex.engine.core.model.Entity;
 import com.vortex.engine.core.model.GameProject;
+import com.vortex.engine.core.model.PixelSpriteCodec;
+import com.vortex.engine.core.noise.TerrainGenerator;
 import com.vortex.engine.core.physics.PhysicsWorld;
 import com.vortex.engine.core.script.VortexScriptEngine;
 import java.nio.ByteBuffer;
@@ -37,12 +39,17 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
     private Mesh3D pyramidMesh;
     private Mesh3D cylinderMesh;
     private Mesh3D planeMesh;
+    private Mesh3D cachedTerrainMesh;
+    private int cachedTerrainSeed = Integer.MIN_VALUE;
+    private float cachedTerrainFreq = -1f;
+
     private final Map<String, Mesh3D> customMeshCache = new HashMap<>();
+    private final Map<String, int[]> decodedSpriteCache = new HashMap<>();
 
     // Dynamic line/shape scratch buffer (pos3 + col4 = 7 floats per vertex)
-    private static final int SCRATCH_MAX_VERTS = 1024;
+    private static final int SCRATCH_MAX_VERTS = 2400;
     private final float[] scratchVerts = new float[SCRATCH_MAX_VERTS * 7];
-    private FloatBuffer scratchBuffer;
+    private final FloatBuffer scratchBuffer;
 
     private volatile GameProject activeProject;
     private volatile boolean playing = false;
@@ -98,14 +105,17 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         this.telemetryListener = listener;
     }
 
-    public synchronized void loadProject(GameProject project, boolean startPlaying) {
+    public synchronized void loadProject(final GameProject project, boolean startPlaying) {
         this.activeProject = project;
         this.customMeshCache.clear();
+        this.decodedSpriteCache.clear();
+        this.cachedTerrainMesh = null;
         this.particleSystem.clear();
+        this.physicsWorld.reset();
         this.playing = startPlaying;
         this.lastFrameNs = System.nanoTime();
 
-        scriptEngine.attach(project, particleSystem, audioEngine, new VortexScriptEngine.HostBridge() {
+        scriptEngine.attach(project, physicsWorld, new VortexScriptEngine.HostBridge() {
             @Override
             public void onLog(String message) {
                 if (telemetryListener != null) telemetryListener.onScriptLog(message);
@@ -115,6 +125,17 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
             public void onCameraShake(float intensity, float duration) {
                 shakeIntensity = intensity;
                 shakeTimer = duration;
+            }
+
+            @Override
+            public void onEmitParticles(float x, float y, float z, int count, String colorHex) {
+                boolean is3D = project != null && "3D".equalsIgnoreCase(project.dimensionMode);
+                particleSystem.emitBurst(x, y, z, count, colorHex, is3D);
+            }
+
+            @Override
+            public void onPlaySound(String soundName) {
+                audioEngine.play(soundName);
             }
         });
 
@@ -135,21 +156,15 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         }
     }
 
-    public GameProject getActiveProject() {
-        return activeProject;
+    public synchronized void invalidateSpriteCache() {
+        decodedSpriteCache.clear();
+        cachedTerrainMesh = null;
     }
 
-    public boolean isPlaying() {
-        return playing;
-    }
-
-    public void setSelectedEntityId(String id) {
-        this.selectedEntityId = id;
-    }
-
-    public String getSelectedEntityId() {
-        return selectedEntityId;
-    }
+    public GameProject getActiveProject() { return activeProject; }
+    public boolean isPlaying() { return playing; }
+    public void setSelectedEntityId(String id) { this.selectedEntityId = id; }
+    public String getSelectedEntityId() { return selectedEntityId; }
 
     public void resetEditorCamera() {
         editorYawDeg = 35f;
@@ -178,6 +193,7 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         cylinderMesh = Mesh3D.createCylinder(20);
         planeMesh = Mesh3D.createPlane();
         customMeshCache.clear();
+        cachedTerrainMesh = null;
         lastFrameNs = System.nanoTime();
         fpsTimerNs = lastFrameNs;
     }
@@ -204,11 +220,8 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
             GameProject p = activeProject;
             if (telemetryListener != null && p != null) {
                 telemetryListener.onHudUpdate(
-                        currentFps,
-                        p.entities.size(),
-                        scriptEngine.score,
-                        scriptEngine.health,
-                        scriptEngine.hudBanner
+                        currentFps, p.entities.size(),
+                        scriptEngine.score, scriptEngine.health, scriptEngine.hudBanner
                 );
             }
         }
@@ -237,8 +250,7 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         GLES20.glClearColor(sky[0], sky[1], sky[2], 1.0f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
 
-        boolean is3D = "3D".equalsIgnoreCase(project.dimensionMode);
-        if (is3D) {
+        if ("3D".equalsIgnoreCase(project.dimensionMode)) {
             render3DScene(project, dt, sky);
         } else {
             render2DScene(project, dt);
@@ -248,7 +260,7 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
     private void render3DScene(GameProject project, float dt, float[] sky) {
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
         float aspect = (float) viewportW / (float) viewportH;
-        Matrix.perspectiveM(projMatrix, 0, Math.max(30f, Math.min(100f, project.cameraFov)), aspect, 0.2f, 220f);
+        Matrix.perspectiveM(projMatrix, 0, Math.max(30f, Math.min(100f, project.cameraFov)), aspect, 0.2f, 240f);
 
         float camX, camY, camZ, lookX, lookY, lookZ;
         if (!playing) {
@@ -258,42 +270,27 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
             camX = editorTargetX + (float) (Math.sin(yawRad) * horiz);
             camY = editorTargetY + (float) (Math.sin(pitchRad) * editorDist);
             camZ = editorTargetZ + (float) (Math.cos(yawRad) * horiz);
-            lookX = editorTargetX;
-            lookY = editorTargetY;
-            lookZ = editorTargetZ;
+            lookX = editorTargetX; lookY = editorTargetY; lookZ = editorTargetZ;
         } else {
             Entity target = project.findByName(project.cameraTargetName);
             if (target != null && "FIRST_PERSON".equalsIgnoreCase(project.cameraMode)) {
                 double r = Math.toRadians(target.rotY);
-                camX = target.x;
-                camY = target.y + target.scaleY * 0.4f;
-                camZ = target.z;
-                lookX = camX - (float) Math.sin(r) * 10f;
-                lookY = camY;
-                lookZ = camZ - (float) Math.cos(r) * 10f;
+                camX = target.x; camY = target.y + target.scaleY * 0.4f; camZ = target.z;
+                lookX = camX - (float) Math.sin(r) * 10f; lookY = camY; lookZ = camZ - (float) Math.cos(r) * 10f;
             } else if (target != null && !"FIXED".equalsIgnoreCase(project.cameraMode)) {
-                float desiredLookX = target.x;
-                float desiredLookY = target.y + 0.6f;
-                float desiredLookZ = target.z;
-                float desiredCamX = target.x;
-                float desiredCamY = target.y + project.cameraHeight;
-                float desiredCamZ = target.z + project.cameraDistance;
-
                 float smooth = Math.min(1f, dt * 7.5f);
-                playLookX += (desiredLookX - playLookX) * smooth;
-                playLookY += (desiredLookY - playLookY) * smooth;
-                playLookZ += (desiredLookZ - playLookZ) * smooth;
-                playCamX += (desiredCamX - playCamX) * smooth;
-                playCamY += (desiredCamY - playCamY) * smooth;
-                playCamZ += (desiredCamZ - playCamZ) * smooth;
-
+                playLookX += (target.x - playLookX) * smooth;
+                playLookY += ((target.y + 0.6f) - playLookY) * smooth;
+                playLookZ += (target.z - playLookZ) * smooth;
+                playCamX += (target.x - playCamX) * smooth;
+                playCamY += ((target.y + project.cameraHeight) - playCamY) * smooth;
+                playCamZ += ((target.z + project.cameraDistance) - playCamZ) * smooth;
                 camX = playCamX; camY = playCamY; camZ = playCamZ;
                 lookX = playLookX; lookY = playLookY; lookZ = playLookZ;
             } else {
                 camX = 0f; camY = project.cameraHeight + 3f; camZ = project.cameraDistance + 4f;
                 lookX = 0f; lookY = 0f; lookZ = 0f;
             }
-
             if (shakeTimer > 0f) {
                 shakeTimer -= dt;
                 camX += (shakeRng.nextFloat() - 0.5f) * 2f * shakeIntensity;
@@ -305,9 +302,7 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         Matrix.multiplyMM(vpMatrix, 0, projMatrix, 0, viewMatrix, 0);
         System.arraycopy(vpMatrix, 0, lastFrameVP, 0, 16);
 
-        if (!playing || project.showGrid) {
-            draw3DGrid();
-        }
+        if (!playing || project.showGrid) draw3DGrid();
 
         lit3DShader.use();
         float[] amb = Entity.hexToRgba(project.ambientColorHex, 1f);
@@ -338,13 +333,10 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
                 Mat4.buildModelMatrix(modelMatrix, e.x, e.y, e.z, e.rotX, e.rotY, e.rotZ, e.scaleX, e.scaleY, e.scaleZ);
                 Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, modelMatrix, 0);
 
-                float[] col = e.parseColorRgba();
-                float[] sec = e.parseSecondaryRgba();
-
                 GLES20.glUniformMatrix4fv(uModel, 1, false, modelMatrix, 0);
                 GLES20.glUniformMatrix4fv(uMVP, 1, false, mvpMatrix, 0);
-                GLES20.glUniform4fv(uColor, 1, col, 0);
-                GLES20.glUniform4fv(uSecColor, 1, sec, 0);
+                GLES20.glUniform4fv(uColor, 1, e.parseColorRgba(), 0);
+                GLES20.glUniform4fv(uSecColor, 1, e.parseSecondaryRgba(), 0);
                 GLES20.glUniform1f(uChecker, e.checkerTexture ? 1f : 0f);
                 GLES20.glUniform1f(uEmissive, e.emissive ? 1f : 0f);
 
@@ -353,10 +345,7 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
             }
         }
 
-        if (!playing && selected != null) {
-            draw3DSelectionBoxAndGizmo(selected);
-        }
-
+        if (!playing && selected != null) draw3DSelectionBoxAndGizmo(selected);
         particleSystem.draw(flatShader, vpMatrix, 9.5f);
     }
 
@@ -367,6 +356,16 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
             case "PYRAMID": return pyramidMesh;
             case "CYLINDER": return cylinderMesh;
             case "PLANE": return planeMesh;
+            case "TERRAIN": {
+                if (cachedTerrainMesh == null || cachedTerrainSeed != project.terrainSeed
+                        || Math.abs(cachedTerrainFreq - project.terrainFreq) > 1e-5f) {
+                    cachedTerrainSeed = project.terrainSeed;
+                    cachedTerrainFreq = project.terrainFreq;
+                    cachedTerrainMesh = new Mesh3D(TerrainGenerator.buildInterleavedTerrainVertices(
+                            project.terrainSeed, project.terrainFreq, 34));
+                }
+                return cachedTerrainMesh;
+            }
             case "CUSTOM_OBJ": {
                 String key = (e.customObjName == null || e.customObjName.isEmpty()) ? "default" : e.customObjName;
                 Mesh3D cached = customMeshCache.get(key);
@@ -390,20 +389,15 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         float halfH = Math.max(3f, (playing ? project.zoom2D : editor2DZoom) * 0.5f);
         float halfW = halfH * aspect;
 
-        float cx = editor2DCamX;
-        float cy = editor2DCamY;
+        float cx = editor2DCamX, cy = editor2DCamY;
         if (playing) {
             Entity target = project.findByName(project.cameraTargetName);
             if (target != null && !"FIXED".equalsIgnoreCase(project.cameraMode)) {
                 float smooth = Math.min(1f, dt * 8f);
                 playCamX += (target.x - playCamX) * smooth;
                 playCamY += (target.y - playCamY) * smooth;
-                cx = playCamX;
-                cy = playCamY;
-            } else {
-                cx = 0f;
-                cy = 0f;
-            }
+                cx = playCamX; cy = playCamY;
+            } else { cx = 0f; cy = 0f; }
             if (shakeTimer > 0f) {
                 shakeTimer -= dt;
                 cx += (shakeRng.nextFloat() - 0.5f) * 2f * shakeIntensity;
@@ -414,9 +408,7 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         Matrix.orthoM(vpMatrix, 0, cx - halfW, cx + halfW, cy - halfH, cy + halfH, -10f, 10f);
         System.arraycopy(vpMatrix, 0, lastFrameVP, 0, 16);
 
-        if (!playing || project.showGrid) {
-            draw2DGrid(cx, cy, halfW, halfH);
-        }
+        if (!playing || project.showGrid) draw2DGrid(cx, cy, halfW, halfH);
 
         Entity selected = null;
         synchronized (this) {
@@ -424,25 +416,51 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
                 Entity e = project.entities.get(i);
                 if (!e.alive || !e.visible) continue;
                 if (e.id.equals(selectedEntityId)) selected = e;
-                draw2DEntity(e);
+                draw2DEntity(project, e);
             }
         }
 
-        if (!playing && selected != null) {
-            draw2DSelectionOutline(selected);
-        }
-
+        if (!playing && selected != null) draw2DSelectionOutline(selected);
         particleSystem.draw(flatShader, vpMatrix, 11.0f);
     }
 
-    private void draw2DEntity(Entity e) {
+    private void draw2DEntity(GameProject project, Entity e) {
         Mat4.buildModelMatrix(modelMatrix, e.x, e.y, 0f, 0f, 0f, e.rotZ, e.scaleX, e.scaleY, 1f);
         Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, modelMatrix, 0);
 
         float[] c = e.parseColorRgba();
         String prim = e.primitive == null ? "RECT" : e.primitive.toUpperCase();
-
         int vCount = 0;
+
+        if ("CUSTOM_SPRITE".equals(prim) || (e.customSpriteName != null && !e.customSpriteName.isEmpty())) {
+            String key = (e.customSpriteName != null && !e.customSpriteName.isEmpty()) ? e.customSpriteName : "default";
+            int[] px = decodedSpriteCache.get(key);
+            if (px == null) {
+                String encoded = project.customSprites.get(key);
+                if (encoded == null && !project.customSprites.isEmpty()) {
+                    encoded = project.customSprites.values().iterator().next();
+                }
+                px = PixelSpriteCodec.decodeToArgbPixels(encoded);
+                decodedSpriteCache.put(key, px);
+            }
+            float cell = 1.0f / PixelSpriteCodec.SIZE;
+            for (int py = 0; py < PixelSpriteCodec.SIZE; py++) {
+                for (int pxx = 0; pxx < PixelSpriteCodec.SIZE; pxx++) {
+                    int argb = px[py * PixelSpriteCodec.SIZE + pxx];
+                    int al = (argb >>> 24) & 0xFF;
+                    if (al < 32) continue;
+                    float pr = ((argb >> 16) & 0xFF) / 255f;
+                    float pg = ((argb >> 8) & 0xFF) / 255f;
+                    float pb = (argb & 0xFF) / 255f;
+                    float x0 = -0.5f + pxx * cell;
+                    float y1 = 0.5f - py * cell;
+                    vCount = putQuad2D(vCount, x0, y1 - cell, x0 + cell, y1, pr, pg, pb, e.alpha);
+                }
+            }
+            flushScratch(mvpMatrix, vCount, GLES20.GL_TRIANGLES, 1f);
+            return;
+        }
+
         switch (prim) {
             case "CIRCLE":
             case "SPRITE_COIN": {
@@ -465,13 +483,11 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
                 vCount = putScratchVert(vCount, -0.48f, -0.48f, 0f, c[0] * 0.7f, c[1] * 0.7f, c[2] * 0.7f, c[3]);
                 vCount = putScratchVert(vCount, 0.48f, -0.48f, 0f, c[0] * 0.7f, c[1] * 0.7f, c[2] * 0.7f, c[3]);
                 if ("SPRITE_SHIP".equals(prim)) {
-                    // Glowing cockpit visor
                     vCount = putQuad2D(vCount, -0.12f, -0.08f, 0.12f, 0.22f, 0.85f, 0.98f, 1.0f, c[3]);
                 }
                 break;
             }
             case "SPRITE_HERO": {
-                // Body + visor eyes
                 vCount = putQuad2D(vCount, -0.45f, -0.5f, 0.45f, 0.45f, c[0], c[1], c[2], c[3]);
                 vCount = putQuad2D(vCount, -0.30f, 0.08f, -0.08f, 0.28f, 1f, 1f, 1f, c[3]);
                 vCount = putQuad2D(vCount, 0.08f, 0.08f, 0.30f, 0.28f, 1f, 1f, 1f, c[3]);
@@ -507,18 +523,12 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
     }
 
     private void draw3DGrid() {
-        int vc = 0;
-        int half = 20;
+        int vc = 0, half = 20;
         for (int i = -half; i <= half; i += 2) {
             boolean center = (i == 0);
-            float r = center ? 0.0f : 0.18f;
-            float g = center ? 0.72f : 0.25f;
-            float b = center ? 0.90f : 0.36f;
-            float a = center ? 0.65f : 0.35f;
-
+            float r = center ? 0.0f : 0.18f, g = center ? 0.72f : 0.25f, b = center ? 0.90f : 0.36f, a = center ? 0.65f : 0.35f;
             vc = putScratchVert(vc, i, 0.01f, -half, r, g, b, a);
             vc = putScratchVert(vc, i, 0.01f, half, r, g, b, a);
-
             vc = putScratchVert(vc, -half, 0.01f, i, r, g, b, a);
             vc = putScratchVert(vc, half, 0.01f, i, r, g, b, a);
         }
@@ -527,11 +537,8 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
 
     private void draw2DGrid(float cx, float cy, float halfW, float halfH) {
         int vc = 0;
-        int startX = (int) Math.floor(cx - halfW) - 1;
-        int endX = (int) Math.ceil(cx + halfW) + 1;
-        int startY = (int) Math.floor(cy - halfH) - 1;
-        int endY = (int) Math.ceil(cy + halfH) + 1;
-
+        int startX = (int) Math.floor(cx - halfW) - 1, endX = (int) Math.ceil(cx + halfW) + 1;
+        int startY = (int) Math.floor(cy - halfH) - 1, endY = (int) Math.ceil(cy + halfH) + 1;
         for (int x = startX; x <= endX; x += 2) {
             boolean zero = (x == 0);
             vc = putScratchVert(vc, x, startY, 0f, 0.16f, zero ? 0.65f : 0.23f, zero ? 0.8f : 0.34f, zero ? 0.55f : 0.25f);
@@ -546,45 +553,27 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
     }
 
     private void draw3DSelectionBoxAndGizmo(Entity e) {
-        float hx = Math.abs(e.scaleX) * 0.54f;
-        float hy = Math.max(0.15f, Math.abs(e.scaleY) * 0.54f);
-        float hz = Math.abs(e.scaleZ) * 0.54f;
-        float x0 = e.x - hx, x1 = e.x + hx;
-        float y0 = e.y - hy, y1 = e.y + hy;
-        float z0 = e.z - hz, z1 = e.z + hz;
+        float hx = Math.abs(e.scaleX) * 0.54f, hy = Math.max(0.15f, Math.abs(e.scaleY) * 0.54f), hz = Math.abs(e.scaleZ) * 0.54f;
+        float x0 = e.x - hx, x1 = e.x + hx, y0 = e.y - hy, y1 = e.y + hy, z0 = e.z - hz, z1 = e.z + hz;
+        int vc = 0; float r = 0f, g = 0.95f, b = 1f, a = 1f;
+        vc = putLine(vc, x0, y0, z0, x1, y0, z0, r, g, b, a); vc = putLine(vc, x1, y0, z0, x1, y0, z1, r, g, b, a);
+        vc = putLine(vc, x1, y0, z1, x0, y0, z1, r, g, b, a); vc = putLine(vc, x0, y0, z1, x0, y0, z0, r, g, b, a);
+        vc = putLine(vc, x0, y1, z0, x1, y1, z0, r, g, b, a); vc = putLine(vc, x1, y1, z0, x1, y1, z1, r, g, b, a);
+        vc = putLine(vc, x1, y1, z1, x0, y1, z1, r, g, b, a); vc = putLine(vc, x0, y1, z1, x0, y1, z0, r, g, b, a);
+        vc = putLine(vc, x0, y0, z0, x0, y1, z0, r, g, b, a); vc = putLine(vc, x1, y0, z0, x1, y1, z0, r, g, b, a);
+        vc = putLine(vc, x1, y0, z1, x1, y1, z1, r, g, b, a); vc = putLine(vc, x0, y0, z1, x0, y1, z1, r, g, b, a);
 
-        int vc = 0;
-        float r = 0f, g = 0.95f, b = 1f, a = 1f;
-        // Bottom loop
-        vc = putLine(vc, x0, y0, z0, x1, y0, z0, r, g, b, a);
-        vc = putLine(vc, x1, y0, z0, x1, y0, z1, r, g, b, a);
-        vc = putLine(vc, x1, y0, z1, x0, y0, z1, r, g, b, a);
-        vc = putLine(vc, x0, y0, z1, x0, y0, z0, r, g, b, a);
-        // Top loop
-        vc = putLine(vc, x0, y1, z0, x1, y1, z0, r, g, b, a);
-        vc = putLine(vc, x1, y1, z0, x1, y1, z1, r, g, b, a);
-        vc = putLine(vc, x1, y1, z1, x0, y1, z1, r, g, b, a);
-        vc = putLine(vc, x0, y1, z1, x0, y1, z0, r, g, b, a);
-        // Verticals
-        vc = putLine(vc, x0, y0, z0, x0, y1, z0, r, g, b, a);
-        vc = putLine(vc, x1, y0, z0, x1, y1, z0, r, g, b, a);
-        vc = putLine(vc, x1, y0, z1, x1, y1, z1, r, g, b, a);
-        vc = putLine(vc, x0, y0, z1, x0, y1, z1, r, g, b, a);
-
-        // X/Y/Z Axis Gizmo arrows
         float gl = Math.max(1.5f, Math.max(hx, hz) + 1.1f);
-        vc = putLine(vc, e.x, e.y, e.z, e.x + gl, e.y, e.z, 1f, 0.25f, 0.35f, 1f); // +X Red
-        vc = putLine(vc, e.x, e.y, e.z, e.x, e.y + gl, e.z, 0.2f, 1f, 0.45f, 1f);  // +Y Green
-        vc = putLine(vc, e.x, e.y, e.z, e.x, e.y, e.z + gl, 0.25f, 0.6f, 1f, 1f);  // +Z Blue
-
+        vc = putLine(vc, e.x, e.y, e.z, e.x + gl, e.y, e.z, 1f, 0.25f, 0.35f, 1f);
+        vc = putLine(vc, e.x, e.y, e.z, e.x, e.y + gl, e.z, 0.2f, 1f, 0.45f, 1f);
+        vc = putLine(vc, e.x, e.y, e.z, e.x, e.y, e.z + gl, 0.25f, 0.6f, 1f, 1f);
         GLES20.glLineWidth(3.0f);
         flushScratch(vpMatrix, vc, GLES20.GL_LINES, 1f);
         GLES20.glLineWidth(1.0f);
     }
 
     private void draw2DSelectionOutline(Entity e) {
-        float hx = Math.abs(e.scaleX) * 0.55f;
-        float hy = Math.abs(e.scaleY) * 0.55f;
+        float hx = Math.abs(e.scaleX) * 0.55f, hy = Math.abs(e.scaleY) * 0.55f;
         int vc = 0;
         vc = putLine(vc, e.x - hx, e.y - hy, 0f, e.x + hx, e.y - hy, 0f, 0f, 0.95f, 1f, 1f);
         vc = putLine(vc, e.x + hx, e.y - hy, 0f, e.x + hx, e.y + hy, 0f, 0f, 0.95f, 1f, 1f);
@@ -595,23 +584,16 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         GLES20.glLineWidth(1.0f);
     }
 
-    private int putLine(int vc, float x0, float y0, float z0, float x1, float y1, float z1,
-                        float r, float g, float b, float a) {
+    private int putLine(int vc, float x0, float y0, float z0, float x1, float y1, float z1, float r, float g, float b, float a) {
         vc = putScratchVert(vc, x0, y0, z0, r, g, b, a);
-        vc = putScratchVert(vc, x1, y1, z1, r, g, b, a);
-        return vc;
+        return putScratchVert(vc, x1, y1, z1, r, g, b, a);
     }
 
     private int putScratchVert(int vc, float x, float y, float z, float r, float g, float b, float a) {
         if (vc >= SCRATCH_MAX_VERTS) return vc;
         int base = vc * 7;
-        scratchVerts[base] = x;
-        scratchVerts[base + 1] = y;
-        scratchVerts[base + 2] = z;
-        scratchVerts[base + 3] = r;
-        scratchVerts[base + 4] = g;
-        scratchVerts[base + 5] = b;
-        scratchVerts[base + 6] = a;
+        scratchVerts[base] = x; scratchVerts[base + 1] = y; scratchVerts[base + 2] = z;
+        scratchVerts[base + 3] = r; scratchVerts[base + 4] = g; scratchVerts[base + 5] = b; scratchVerts[base + 6] = a;
         return vc + 1;
     }
 
@@ -637,31 +619,23 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         GLES20.glVertexAttribPointer(aCol, 4, GLES20.GL_FLOAT, false, stride, scratchBuffer);
 
         GLES20.glDrawArrays(mode, 0, vertCount);
-
         GLES20.glDisableVertexAttribArray(aPos);
         GLES20.glDisableVertexAttribArray(aCol);
     }
 
-    // ===================== EDITOR RAYCAST PICKING & DRAGGING =====================
-
     public synchronized Entity pickEntityAtScreen(float touchX, float touchY) {
         GameProject p = activeProject;
         if (p == null) return null;
-
         if ("3D".equalsIgnoreCase(p.dimensionMode)) {
             Ray3D ray = Mat4.unprojectTouchToRay(touchX, touchY, viewportW, viewportH, lastFrameVP);
-            Entity best = null;
-            float bestDist = Float.MAX_VALUE;
+            Entity best = null; float bestDist = Float.MAX_VALUE;
             for (Entity e : p.entities) {
-                if (!e.alive || !e.visible) continue;
+                if (!e.alive || !e.visible || "TERRAIN".equalsIgnoreCase(e.primitive)) continue;
                 float hx = Math.max(0.25f, Math.abs(e.scaleX) * 0.5f);
                 float hy = Math.max(0.25f, Math.abs(e.scaleY) * 0.5f);
                 float hz = Math.max(0.25f, Math.abs(e.scaleZ) * 0.5f);
                 float t = ray.intersectAABB(e.x - hx, e.y - hy, e.z - hz, e.x + hx, e.y + hy, e.z + hz);
-                if (t >= 0f && t < bestDist) {
-                    bestDist = t;
-                    best = e;
-                }
+                if (t >= 0f && t < bestDist) { bestDist = t; best = e; }
             }
             return best;
         } else {
@@ -669,11 +643,8 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
             for (int i = p.entities.size() - 1; i >= 0; i--) {
                 Entity e = p.entities.get(i);
                 if (!e.alive || !e.visible) continue;
-                float hx = Math.max(0.3f, Math.abs(e.scaleX) * 0.5f);
-                float hy = Math.max(0.3f, Math.abs(e.scaleY) * 0.5f);
-                if (w.x >= e.x - hx && w.x <= e.x + hx && w.y >= e.y - hy && w.y <= e.y + hy) {
-                    return e;
-                }
+                float hx = Math.max(0.3f, Math.abs(e.scaleX) * 0.5f), hy = Math.max(0.3f, Math.abs(e.scaleY) * 0.5f);
+                if (w.x >= e.x - hx && w.x <= e.x + hx && w.y >= e.y - hy && w.y <= e.y + hy) return e;
             }
             return null;
         }
@@ -684,7 +655,6 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         if (p == null || selectedEntityId == null) return;
         Entity e = p.findById(selectedEntityId);
         if (e == null) return;
-
         if ("3D".equalsIgnoreCase(p.dimensionMode)) {
             Ray3D ray = Mat4.unprojectTouchToRay(touchX, touchY, viewportW, viewportH, lastFrameVP);
             Vec3 hit = ray.intersectPlaneY(e.y);
@@ -710,7 +680,5 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         return new Vec2(cx + nx * halfW, cy + ny * halfH);
     }
 
-    public void shutdown() {
-        audioEngine.shutdown();
-    }
+    public void shutdown() { audioEngine.shutdown(); }
 }

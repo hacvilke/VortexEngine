@@ -1,6 +1,10 @@
 .gradle/
 build/
 app/build/
+build_studio/
+build_desktop/
+build_termux_test/
+dist/
 local.properties
 *.idsig
 *.keystore

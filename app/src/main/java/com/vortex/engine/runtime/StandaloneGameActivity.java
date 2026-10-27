@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Standalone Game Launcher Activity packaged into every APK built via Termux
- * (and also callable directly from Vortex Studio for full-screen standalone testing).
+ * (supports both Lua 5.2 via LuaJ and VortexScript .vxs games!).
  */
 public class StandaloneGameActivity extends Activity {
 
@@ -53,9 +53,7 @@ public class StandaloneGameActivity extends Activity {
             }
 
             @Override
-            public void onScriptLog(String line) {
-                // Standalone runtime silent log
-            }
+            public void onScriptLog(String line) {}
         });
 
         root.addView(gameSurface, new FrameLayout.LayoutParams(
@@ -63,7 +61,6 @@ public class StandaloneGameActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT
         ));
 
-        // Discreet top-right Restart button
         TextView restartBtn = new TextView(this);
         restartBtn.setText("↻ RESTART");
         restartBtn.setTextColor(Color.WHITE);
@@ -103,10 +100,15 @@ public class StandaloneGameActivity extends Activity {
             String assetJson = readAssetText("project.vortex.json");
             GameProject p = GameProject.fromJsonString(assetJson);
 
-            // Allow external assets/scripts/main.vxs override if edited directly in Termux!
-            String overrideScript = readAssetTextOptional("scripts/main.vxs");
-            if (overrideScript != null && !overrideScript.trim().isEmpty()) {
-                p.scriptCode = overrideScript;
+            String overrideLua = readAssetTextOptional("scripts/main.lua");
+            if (overrideLua != null && !overrideLua.trim().isEmpty()) {
+                p.scriptLanguage = "LUA";
+                p.scriptCode = overrideLua;
+            } else {
+                String overrideVxs = readAssetTextOptional("scripts/main.vxs");
+                if (overrideVxs != null && !overrideVxs.trim().isEmpty()) {
+                    p.scriptCode = overrideVxs;
+                }
             }
             return p;
         } catch (Exception ex) {
@@ -121,19 +123,13 @@ public class StandaloneGameActivity extends Activity {
              BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             StringBuilder sb = new StringBuilder();
             String line;
-            while ((line = br.readLine()) != null) {
-                sb.append(line).append('\n');
-            }
+            while ((line = br.readLine()) != null) sb.append(line).append('\n');
             return sb.toString();
         }
     }
 
     private String readAssetTextOptional(String assetPath) {
-        try {
-            return readAssetText(assetPath);
-        } catch (Exception e) {
-            return null;
-        }
+        try { return readAssetText(assetPath); } catch (Exception e) { return null; }
     }
 
     private void applyOrientation(String orientation) {

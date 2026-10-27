@@ -1,0 +1,61 @@
+name: Vortex Engine v2.0 Multi-Platform Build (Android APK + Windows EXE + Linux)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-all-platforms:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Vortex Engine
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK 34
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android Build-Tools 34.0.0 & MinGW-w64 Windows Cross-Compiler
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 zip unzip file
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Build Android Studio v2.0.0 APK
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          chmod +x scripts/*.sh scripts/termux/*.sh
+          ./scripts/build_studio_apk.sh
+
+      - name: Build Windows x64 .EXE, Linux x86_64 Binary & Desktop .JAR
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          ./scripts/build_desktop.sh
+
+      - name: Verify Termux APK Pipeline (--fast & --from-source) & Headless Tests
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          ./scripts/test_termux_pipeline.sh
+
+      - name: Upload Multi-Platform Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VortexEngine-v2.0.0-All-Platforms
+          path: |
+            dist/VortexEngine-Studio-v2.0.0.apk
+            dist/VortexEngine-Studio-Windows-x64.exe
+            dist/VortexEngine-Studio-Linux-x86_64
+            dist/VortexEngine-Studio-Desktop-v2.0.0.jar
+            dist/AngryCratesBox2D-Android-Sample.apk
+            dist/AngryCratesBox2D-Windows-Sample.exe
