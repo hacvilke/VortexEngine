@@ -1,7 +1,9 @@
 package com.vortex.engine.desktop;
 
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
@@ -19,16 +21,23 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Path2D;
 import java.awt.geom.RoundRectangle2D;
+import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.IntConsumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -60,17 +69,17 @@ import javax.swing.plaf.basic.BasicSplitPaneUI;
  */
 public final class DesktopUiKit {
 
-    // Unified Vortex Obsidian + Electric Cyan Theme (matches Android Mobile 1:1!)
-    public static final Color C_VOID         = new Color(9, 13, 22);     // #090D16
-    public static final Color C_HEADER       = new Color(13, 19, 32);    // #0D1320
-    public static final Color C_PANEL        = new Color(15, 23, 38);    // #0F1726
-    public static final Color C_SURFACE      = new Color(20, 30, 48);    // #141E30
-    public static final Color C_SURFACE_HOV  = new Color(28, 42, 66);    // #1C2A42
-    public static final Color C_INPUT_BG     = new Color(11, 16, 28);    // #0B101C
-    public static final Color C_BORDER       = new Color(36, 51, 77);    // #24334D
+    // Unified Vortex Obsidian + Electric Cyan Theme (Crisp Neutral Dark Obsidian — Zero Navy Blue Cast!)
+    public static final Color C_VOID         = new Color(10, 14, 20);    // #0A0E14
+    public static final Color C_HEADER       = new Color(15, 20, 29);    // #0F141D
+    public static final Color C_PANEL        = new Color(18, 24, 34);    // #121822
+    public static final Color C_SURFACE      = new Color(23, 30, 42);    // #171E2A
+    public static final Color C_SURFACE_HOV  = new Color(31, 41, 56);    // #1F2938
+    public static final Color C_INPUT_BG     = new Color(12, 16, 24);    // #0C1018
+    public static final Color C_BORDER       = new Color(39, 51, 69);    // #273345
     public static final Color C_CYAN         = new Color(0, 229, 255);   // #00E5FF
     public static final Color C_CYAN_HOV     = new Color(72, 238, 255);  // #48EEFF
-    public static final Color C_CYAN_TINT    = new Color(13, 40, 56);    // #0D2838
+    public static final Color C_CYAN_TINT    = new Color(13, 39, 52);    // #0D2734
     public static final Color C_CYAN_DARK_TX = new Color(4, 19, 26);     // #04131A
     public static final Color C_TEXT         = new Color(241, 245, 249); // #F1F5F9
     public static final Color C_TEXT_MUTED   = new Color(148, 163, 184); // #94A3B8
@@ -947,5 +956,313 @@ public final class DesktopUiKit {
                 return l;
             }
         };
+    }
+
+    // =========================================================================
+    // 8. VortexSlider — Custom Animated Cyan Track & Glowing Thumb Slider
+    // =========================================================================
+    public static final class VortexSlider extends JComponent {
+        private final int min;
+        private final int max;
+        private int value;
+        private final String prefix;
+        private final String suffix;
+        private float hoverT = 0f;
+        private boolean hover = false;
+        private boolean dragging = false;
+        private IntConsumer onChange;
+        private final Timer animTimer;
+
+        public VortexSlider(String prefix, int min, int max, int initial, String suffix) {
+            this.prefix = prefix;
+            this.min = min;
+            this.max = Math.max(min + 1, max);
+            this.value = Math.max(min, Math.min(max, initial));
+            this.suffix = suffix;
+            setOpaque(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setPreferredSize(new Dimension(240, 30));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+
+            animTimer = new Timer(16, e -> {
+                float target = (hover || dragging) ? 1f : 0f;
+                if (Math.abs(hoverT - target) < 0.05f) {
+                    hoverT = target;
+                    ((Timer) e.getSource()).stop();
+                } else {
+                    hoverT += (target - hoverT) * 0.30f;
+                }
+                repaint();
+            });
+
+            MouseAdapter ma = new MouseAdapter() {
+                @Override public void mouseEntered(MouseEvent e) { hover = true; if (!animTimer.isRunning()) animTimer.start(); }
+                @Override public void mouseExited(MouseEvent e) { hover = false; if (!animTimer.isRunning()) animTimer.start(); }
+                @Override public void mousePressed(MouseEvent e) { dragging = true; updateFromX(e.getX()); if (!animTimer.isRunning()) animTimer.start(); }
+                @Override public void mouseReleased(MouseEvent e) { dragging = false; if (!animTimer.isRunning()) animTimer.start(); }
+            };
+            addMouseListener(ma);
+            addMouseMotionListener(new MouseMotionAdapter() {
+                @Override public void mouseDragged(MouseEvent e) { updateFromX(e.getX()); }
+            });
+        }
+
+        public void setOnChange(IntConsumer c) { this.onChange = c; }
+        public int getValue() { return value; }
+        public void setValue(int v) {
+            this.value = Math.max(min, Math.min(max, v));
+            repaint();
+        }
+
+        private void updateFromX(int mx) {
+            int trackX = 115;
+            int trackW = Math.max(40, getWidth() - trackX - 12);
+            float t = Math.max(0f, Math.min(1f, (mx - trackX) / (float) trackW));
+            int next = Math.round(min + t * (max - min));
+            if (next != value) {
+                value = next;
+                repaint();
+                if (onChange != null) onChange.accept(value);
+            }
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            enableAA(g2);
+            int w = getWidth();
+            int h = getHeight();
+
+            String txt = prefix + ": " + value + suffix;
+            g2.setFont(FONT_UI_BOLD);
+            g2.setColor(hoverT > 0.2f ? C_CYAN : C_TEXT);
+            FontMetrics fm = g2.getFontMetrics();
+            g2.drawString(txt, 2, (h + fm.getAscent() - fm.getDescent()) / 2);
+
+            int trackX = 115;
+            int trackW = Math.max(40, w - trackX - 12);
+            int trackY = h / 2 - 3;
+            g2.setColor(C_SURFACE);
+            g2.fill(new RoundRectangle2D.Float(trackX, trackY, trackW, 6, 6, 6));
+            g2.setColor(C_BORDER);
+            g2.draw(new RoundRectangle2D.Float(trackX, trackY, trackW, 6, 6, 6));
+
+            float frac = (value - min) / (float) (max - min);
+            float fillW = Math.max(6f, frac * trackW);
+            g2.setColor(C_CYAN);
+            g2.fill(new RoundRectangle2D.Float(trackX, trackY, fillW, 6, 6, 6));
+
+            float cx = trackX + frac * trackW;
+            float cy = h / 2f;
+            if (hoverT > 0.02f) {
+                g2.setColor(new Color(0, 229, 255, Math.round(55 * hoverT)));
+                float gr = 8f + 3f * hoverT;
+                g2.fill(new RoundRectangle2D.Float(cx - gr, cy - gr, gr * 2, gr * 2, gr * 2, gr * 2));
+            }
+            float r = 6.0f + 1.2f * hoverT;
+            g2.setColor(C_TEXT);
+            g2.fill(new RoundRectangle2D.Float(cx - r, cy - r, r * 2, r * 2, r * 2, r * 2));
+            g2.setColor(C_CYAN);
+            g2.setStroke(new BasicStroke(1.6f));
+            g2.draw(new RoundRectangle2D.Float(cx - r, cy - r, r * 2, r * 2, r * 2, r * 2));
+            g2.dispose();
+        }
+    }
+
+    // =========================================================================
+    // 9. AnimatedDeck — 60 FPS Smooth Slide + Alpha Fade Workspace Switcher
+    // =========================================================================
+    public static final class AnimatedDeck extends JPanel {
+        private final CardLayout cards = new CardLayout();
+        private final Map<String, Integer> orderMap = new HashMap<>();
+        private String currentKey = null;
+        private float animProgress = 1f;
+        private int slideDir = 1;
+        private final Timer animTimer;
+
+        public AnimatedDeck() {
+            setLayout(cards);
+            setBackground(C_VOID);
+            animTimer = new Timer(16, e -> {
+                animProgress += (1f - animProgress) * 0.34f;
+                if (1f - animProgress < 0.02f) {
+                    animProgress = 1f;
+                    ((Timer) e.getSource()).stop();
+                }
+                repaint();
+            });
+        }
+
+        public void addCard(String key, JComponent comp, int order) {
+            orderMap.put(key, order);
+            add(comp, key);
+            if (currentKey == null) currentKey = key;
+        }
+
+        public void showCard(String key, boolean animate) {
+            if (key == null || key.equals(currentKey)) return;
+            int prevIdx = orderMap.getOrDefault(currentKey, 0);
+            int nextIdx = orderMap.getOrDefault(key, 0);
+            slideDir = nextIdx >= prevIdx ? 1 : -1;
+            currentKey = key;
+            cards.show(this, key);
+            if (animate) {
+                animProgress = 0f;
+                if (!animTimer.isRunning()) animTimer.start();
+            } else {
+                animProgress = 1f;
+                repaint();
+            }
+        }
+
+        @Override
+        public void paint(Graphics g) {
+            if (animProgress >= 0.99f) {
+                super.paint(g);
+                return;
+            }
+            Graphics2D g2 = (Graphics2D) g.create();
+            float alpha = 0.45f + 0.55f * animProgress;
+            int dx = Math.round((1f - animProgress) * 14f * slideDir);
+            g2.translate(dx, 0);
+            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.min(1f, alpha)));
+            super.paint(g2);
+            g2.dispose();
+        }
+    }
+
+    // =========================================================================
+    // 10. Custom Dark Obsidian File Browser Modal (Replaces Swing JFileChooser!)
+    // =========================================================================
+    public static File showFileModal(JFrame owner, String title, boolean saveMode, String defaultFileName) {
+        final File[] chosen = {null};
+        final File[] curDir = {new File(System.getProperty("user.home", ".")).getAbsoluteFile()};
+        if (!curDir[0].exists()) curDir[0] = new File(".").getAbsoluteFile();
+
+        JDialog dlg = new JDialog(owner, title, true);
+        JPanel root = new JPanel(new BorderLayout(0, 8));
+        root.setBackground(C_HEADER);
+        root.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(C_CYAN, 1),
+                BorderFactory.createEmptyBorder(14, 16, 14, 16)));
+        root.setPreferredSize(new Dimension(540, 390));
+
+        // Header + Path Navigation Row
+        JPanel top = new JPanel(new BorderLayout(6, 6));
+        top.setOpaque(false);
+        JLabel head = new JLabel(title.toUpperCase());
+        head.setFont(FONT_TITLE);
+        head.setForeground(C_CYAN);
+        top.add(head, BorderLayout.NORTH);
+
+        JPanel navRow = new JPanel(new BorderLayout(6, 0));
+        navRow.setOpaque(false);
+        JTextField dirField = createField(curDir[0].getAbsolutePath());
+        JPanel navBtns = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        navBtns.setOpaque(false);
+        VortexButton upBtn = new VortexButton("↑ Up", Variant.SECONDARY);
+        VortexButton homeBtn = new VortexButton("⌂ Home", Variant.SECONDARY);
+        navBtns.add(upBtn);
+        navBtns.add(homeBtn);
+        navRow.add(navBtns, BorderLayout.WEST);
+        navRow.add(dirField, BorderLayout.CENTER);
+        top.add(navRow, BorderLayout.SOUTH);
+        root.add(top, BorderLayout.NORTH);
+
+        // Center Dark File List
+        DefaultListModel<String> listModel = new DefaultListModel<>();
+        final List<File> currentEntries = new ArrayList<>();
+        JList<String> fileList = new JList<>(listModel);
+        fileList.setBackground(C_VOID);
+        fileList.setCellRenderer(createDarkListRenderer());
+        JScrollPane sp = createScrollPane(fileList);
+        sp.setBorder(BorderFactory.createLineBorder(C_BORDER, 1));
+        root.add(sp, BorderLayout.CENTER);
+
+        // Bottom File Name + Confirm/Cancel
+        JPanel bot = new JPanel(new BorderLayout(0, 8));
+        bot.setOpaque(false);
+        JPanel nameRow = new JPanel(new BorderLayout(8, 0));
+        nameRow.setOpaque(false);
+        JLabel fnLbl = new JLabel("File Name:");
+        fnLbl.setFont(FONT_UI);
+        fnLbl.setForeground(C_TEXT_MUTED);
+        JTextField nameField = createField(defaultFileName != null ? defaultFileName : "project.vortex.json");
+        nameRow.add(fnLbl, BorderLayout.WEST);
+        nameRow.add(nameField, BorderLayout.CENTER);
+        bot.add(nameRow, BorderLayout.NORTH);
+
+        JPanel foot = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        foot.setOpaque(false);
+        VortexButton cancelBtn = new VortexButton("Cancel", Variant.SECONDARY);
+        cancelBtn.addActionListener(e -> dlg.dispose());
+        VortexButton okBtn = new VortexButton(saveMode ? "✓ Save File" : "📂 Open File", Variant.PRIMARY);
+        foot.add(cancelBtn);
+        foot.add(okBtn);
+        bot.add(foot, BorderLayout.SOUTH);
+        root.add(bot, BorderLayout.SOUTH);
+
+        Runnable reloadDir = () -> {
+            dirField.setText(curDir[0].getAbsolutePath());
+            listModel.clear();
+            currentEntries.clear();
+            File[] children = curDir[0].listFiles();
+            if (children != null) {
+                Arrays.sort(children, (a, b) -> {
+                    if (a.isDirectory() != b.isDirectory()) return a.isDirectory() ? -1 : 1;
+                    return a.getName().compareToIgnoreCase(b.getName());
+                });
+                for (File f : children) {
+                    if (f.getName().startsWith(".")) continue;
+                    currentEntries.add(f);
+                    listModel.addElement((f.isDirectory() ? "📁  " : "📄  ") + f.getName());
+                }
+            }
+        };
+
+        upBtn.addActionListener(e -> {
+            File p = curDir[0].getParentFile();
+            if (p != null && p.exists()) { curDir[0] = p; reloadDir.run(); }
+        });
+        homeBtn.addActionListener(e -> {
+            curDir[0] = new File(System.getProperty("user.home", ".")).getAbsoluteFile();
+            reloadDir.run();
+        });
+        dirField.addActionListener(e -> {
+            File typed = new File(dirField.getText().trim());
+            if (typed.isDirectory()) { curDir[0] = typed; reloadDir.run(); }
+        });
+        fileList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int idx = fileList.getSelectedIndex();
+                if (idx < 0 || idx >= currentEntries.size()) return;
+                File sel = currentEntries.get(idx);
+                if (e.getClickCount() >= 2 && sel.isDirectory()) {
+                    curDir[0] = sel;
+                    reloadDir.run();
+                } else if (sel.isFile()) {
+                    nameField.setText(sel.getName());
+                    if (e.getClickCount() >= 2 && !saveMode) {
+                        chosen[0] = sel;
+                        dlg.dispose();
+                    }
+                }
+            }
+        });
+        okBtn.addActionListener(e -> {
+            String nm = nameField.getText().trim();
+            if (nm.isEmpty()) return;
+            File f = new File(nm);
+            chosen[0] = f.isAbsolute() ? f : new File(curDir[0], nm);
+            dlg.dispose();
+        });
+
+        reloadDir.run();
+        dlg.setContentPane(root);
+        dlg.pack();
+        dlg.setLocationRelativeTo(owner);
+        dlg.setVisible(true);
+        return chosen[0];
     }
 }

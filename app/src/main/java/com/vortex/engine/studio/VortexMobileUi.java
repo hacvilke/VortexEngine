@@ -408,6 +408,7 @@ public final class VortexMobileUi {
     public static final class VortexToggle extends LinearLayout {
         private boolean checked;
         private final SwitchTrackView trackView;
+        private Runnable toggleListener;
 
         public VortexToggle(Context ctx, String labelText, boolean initialChecked) {
             super(ctx);
@@ -425,7 +426,14 @@ public final class VortexMobileUi {
             trackView = new SwitchTrackView(ctx, initialChecked);
             addView(trackView, new LayoutParams(dp(ctx, 44), dp(ctx, 24)));
 
-            setOnClickListener(v -> setChecked(!checked));
+            setOnClickListener(v -> {
+                setChecked(!checked);
+                if (toggleListener != null) toggleListener.run();
+            });
+        }
+
+        public void setOnToggleListener(Runnable listener) {
+            this.toggleListener = listener;
         }
 
         public boolean isChecked() {

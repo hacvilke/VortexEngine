@@ -47,9 +47,9 @@ EOF
 "$JAVA_HOME/bin/java" -cp "$TEST_DIR:$ROOT_DIR/dist/VortexEngine-Studio-Desktop-v4.1.0.jar" \
     ExportTestBundle \
     "$TEST_DIR/NeonSurvivors-Termux.zip" \
-    "$ROOT_DIR/dist/NeonSurvivorsSwarm-Windows-Sample.exe" \
-    "$ROOT_DIR/dist/NeonSurvivorsSwarm-Web.html" \
-    "$ROOT_DIR/dist/StarhullMecha3D-Web.html"
+    "$TEST_DIR/NeonSurvivorsSwarm-Windows-Sample.exe" \
+    "$TEST_DIR/NeonSurvivorsSwarm-Web.html" \
+    "$TEST_DIR/StarhullMecha3D-Web.html"
 
 unzip -qo "$TEST_DIR/NeonSurvivors-Termux.zip" -d "$TEST_DIR/export_dir"
 unzip -qo "$ROOT_DIR/build_studio/assets/toolchain/vortex-runtime-src.zip" -d "$TEST_DIR/export_dir"
@@ -64,12 +64,11 @@ echo "=== [3/5] Testing Termux --from-source Build Mode (javac + d8 + Rhino + Lu
 VORTEX_WORK_DIR="$TEST_DIR/work_src" \
     bash "$TEST_DIR/export_dir/build_termux.sh" --from-source --out-dir "$TEST_DIR/out_src"
 "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" verify "$TEST_DIR/out_src/export_dir-release.apk"
-cp "$TEST_DIR/out_src/export_dir-release.apk" "$ROOT_DIR/dist/NeonSurvivorsSwarm-Android-Sample.apk"
 echo "[PASS] Termux --from-source ES6 JS APK verified!"
 
 echo "=== [4/5] Validating Native Browser ES6 JavaScript in Exported HTML5 Bundles ==="
 if command -v node >/dev/null 2>&1; then
-    for html_file in "$ROOT_DIR/dist/NeonSurvivorsSwarm-Web.html" "$ROOT_DIR/dist/StarhullMecha3D-Web.html"; do
+    for html_file in "$TEST_DIR/NeonSurvivorsSwarm-Web.html" "$TEST_DIR/StarhullMecha3D-Web.html"; do
         python3 -c '
 import re, sys
 s = open(sys.argv[1], encoding="utf-8").read()
@@ -85,5 +84,6 @@ fi
 echo "=== [5/5] Testing Linux Self-Contained Binary + Live LRM Headless Suite ==="
 "$ROOT_DIR/dist/VortexEngine-Studio-Linux-x86_64" --headless-test | tail -n 14
 
+rm -rf "$TEST_DIR"
 ls -lh "$ROOT_DIR/dist/"
 echo "[ALL V4.1.0 HYPERION UI PIPELINE TESTS PASSED!]"

@@ -36,7 +36,6 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JDialog;
-import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -76,8 +75,7 @@ public class VortexDesktopStudio extends JFrame {
     private DesktopUiKit.VortexDropdown vmDropdown;
     private DesktopUiKit.VortexDropdown snippetDropdown;
     private DesktopUiKit.VortexTabStrip rightTabs;
-    private final CardLayout rightCardsLayout = new CardLayout();
-    private final JPanel rightCardsPanel = new JPanel(rightCardsLayout);
+    private final DesktopUiKit.AnimatedDeck rightCardsPanel = new DesktopUiKit.AnimatedDeck();
     private final DefaultListModel<String> flowListModel = new DefaultListModel<>();
 
     private final Deque<String> undoStack = new ArrayDeque<>();
@@ -384,17 +382,17 @@ public class VortexDesktopStudio extends JFrame {
         rightTabs = new DesktopUiKit.VortexTabStrip(keys, labels);
 
         rightCardsPanel.setBackground(DesktopUiKit.C_VOID);
-        rightCardsPanel.add(buildScriptEditorTab(), "CODE");
-        rightCardsPanel.add(buildFlowTab(), "FLOW");
-        rightCardsPanel.add(buildForgeAiTab(), "FORGE");
-        rightCardsPanel.add(buildLrmSyncTab(), "LRM");
-        rightCardsPanel.add(buildPixelArtTab(), "PIXEL");
-        rightCardsPanel.add(buildAudioTab(), "AUDIO");
-        rightCardsPanel.add(buildExportTab(), "EXPORT");
+        rightCardsPanel.addCard("CODE", buildScriptEditorTab(), 0);
+        rightCardsPanel.addCard("FLOW", buildFlowTab(), 1);
+        rightCardsPanel.addCard("FORGE", buildForgeAiTab(), 2);
+        rightCardsPanel.addCard("LRM", buildLrmSyncTab(), 3);
+        rightCardsPanel.addCard("PIXEL", buildPixelArtTab(), 4);
+        rightCardsPanel.addCard("AUDIO", buildAudioTab(), 5);
+        rightCardsPanel.addCard("EXPORT", buildExportTab(), 6);
 
         rightTabs.setOnTabSelected((idx, key) -> {
             if ("FLOW".equals(key)) refreshFlowListModel();
-            rightCardsLayout.show(rightCardsPanel, key);
+            rightCardsPanel.showCard(key, true);
         });
 
         wrapper.add(rightTabs, BorderLayout.NORTH);
@@ -449,6 +447,22 @@ public class VortexDesktopStudio extends JFrame {
             }
         });
         btnBar.add(snippetDropdown);
+
+        DesktopUiKit.VortexButton objQuickBtn = new DesktopUiKit.VortexButton("🧊 .OBJ", DesktopUiKit.Variant.SECONDARY);
+        objQuickBtn.setToolTipText("Import Custom Wavefront .OBJ 3D Mesh");
+        objQuickBtn.addActionListener(e -> showCustomObjModal());
+        btnBar.add(objQuickBtn);
+
+        DesktopUiKit.VortexButton docsBtn = new DesktopUiKit.VortexButton("📖 API", DesktopUiKit.Variant.SECONDARY);
+        docsBtn.setToolTipText("Vortex Scripting API Reference");
+        docsBtn.addActionListener(e -> DesktopUiKit.showInfoModal(this, "Vortex Scripting API (ES6 JS • Lua 5.2 • VXS)",
+                "• Hooks: onStart(), onUpdate(dt), onButton(btn), onCollide(a, b, tagA, tagB)\n"
+                + "• Input: vortex.joyX(), vortex.joyY(), vortex.isDown('A'), vortex.isDown('B')\n"
+                + "• Transform & Physics: vortex.setPos(n,x,y,z), vortex.setVel(n,vx,vy,vz), vortex.jump(n,vy), vortex.applyImpulse(n,ix,iy)\n"
+                + "• AI & Queries: vortex.chaseTagAI(fromTag,target,spd), vortex.findNearestTag(from,tag,range), vortex.raycast(x,y,z,dx,dy,dz,max)\n"
+                + "• Animation & FX: vortex.setSpriteAnim(n,'f1,f2',fps), vortex.tweenTagYoyo(tag,dy,dur,'SINE'), vortex.particles(x,y,z,cnt,'#00E5FF')\n"
+                + "• Save & Audio: vortex.saveData(k,v), vortex.loadNum(k,0), vortex.playSound('laser'), vortex.playMusic('CYBERPUNK',134)"));
+        btnBar.add(docsBtn);
 
         header.add(btnBar, BorderLayout.NORTH);
 
@@ -762,8 +776,31 @@ public class VortexDesktopStudio extends JFrame {
             }
         });
 
+        DesktopUiKit.VortexButton peersBtn = new DesktopUiKit.VortexButton("📡 Discover LAN Peers", DesktopUiKit.Variant.SECONDARY);
+        peersBtn.addActionListener(e -> {
+            File repoDir = new File(System.getProperty("user.home", "."), "VortexEngine-LRM/" + project.getSlug());
+            repoDir.mkdirs();
+            LrmWorkspaceBridge.CmdResult r = LrmWorkspaceBridge.runLrm(repoDir, 6, "peers", "--timeout", "3");
+            outArea.append("\n$ lrm peers --timeout 3\n" + r.output + "\n");
+        });
+
+        DesktopUiKit.VortexButton statusBtn = new DesktopUiKit.VortexButton("📊 Status & Diff", DesktopUiKit.Variant.SECONDARY);
+        statusBtn.addActionListener(e -> {
+            syncCode();
+            File repoDir = new File(System.getProperty("user.home", "."), "VortexEngine-LRM/" + project.getSlug());
+            try {
+                LrmWorkspaceBridge.exportToLrmRepo(project, repoDir);
+                LrmWorkspaceBridge.CmdResult st = LrmWorkspaceBridge.runLrm(repoDir, 6, "status");
+                LrmWorkspaceBridge.CmdResult df = LrmWorkspaceBridge.runLrm(repoDir, 6, "diff", "--stat");
+                outArea.append("\n$ lrm status\n" + st.output + "\n$ lrm diff --stat\n" + df.output + "\n");
+            } catch (Exception ex) {
+                outArea.append("\n[Status Error] " + ex.getMessage() + "\n");
+            }
+        });
+
         controls.add(commitBtn); controls.add(shareBtn);
         controls.add(joinBtn);   controls.add(importBtn);
+        controls.add(peersBtn);  controls.add(statusBtn);
         panel.add(controls, BorderLayout.NORTH);
 
         JScrollPane sp = DesktopUiKit.createScrollPane(outArea);
@@ -829,7 +866,13 @@ public class VortexDesktopStudio extends JFrame {
         musicCard.add(genreDrop);
         musicCard.add(Box.createVerticalStrut(8));
 
-        JLabel seqLbl = mutedLabel("16-Step Lead Melody (click any step to cycle note):");
+        DesktopUiKit.VortexSlider bpmSlider = new DesktopUiKit.VortexSlider("Tempo", 70, 180, project.musicBpm > 0 ? project.musicBpm : 134, " BPM");
+        bpmSlider.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bpmSlider.setOnChange(val -> project.musicBpm = val);
+        musicCard.add(bpmSlider);
+        musicCard.add(Box.createVerticalStrut(8));
+
+        JLabel seqLbl = mutedLabel("16-Step Lead Melody (click any step to cycle scale note):");
         seqLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
         musicCard.add(seqLbl);
         musicCard.add(Box.createVerticalStrut(4));
@@ -838,16 +881,14 @@ public class VortexDesktopStudio extends JFrame {
         stepGrid.setOpaque(false);
         stepGrid.setAlignmentX(Component.LEFT_ALIGNMENT);
         stepGrid.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
-        final String[] cycle = {"-", "C5", "D#5", "F5", "G5", "A#5", "C6", "D#6"};
         final DesktopUiKit.VortexButton[] stepBtns = new DesktopUiKit.VortexButton[16];
         Runnable syncSteps = () -> {
-            String pat = (project.musicPattern == null || project.musicPattern.isEmpty())
-                    ? ChiptuneGenerator.PRESET_CYBERPUNK : project.musicPattern;
-            String[] lead = pat.split(";")[0].trim().split("\\s+");
+            int[] steps = ChiptuneGenerator.parseSteps(project.musicPattern);
             for (int i = 0; i < 16; i++) {
-                String n = i < lead.length ? lead[i] : "-";
+                int idx = Math.max(0, Math.min(ChiptuneGenerator.NOTE_LABELS.length - 1, steps[i]));
+                String n = idx == 0 ? "-" : ChiptuneGenerator.NOTE_LABELS[idx];
                 stepBtns[i].setText(n);
-                stepBtns[i].setVariant("-".equals(n) ? DesktopUiKit.Variant.SECONDARY : DesktopUiKit.Variant.ACCENT);
+                stepBtns[i].setVariant(idx == 0 ? DesktopUiKit.Variant.SECONDARY : DesktopUiKit.Variant.ACCENT);
             }
         };
         for (int i = 0; i < 16; i++) {
@@ -855,25 +896,16 @@ public class VortexDesktopStudio extends JFrame {
             DesktopUiKit.VortexButton sb = new DesktopUiKit.VortexButton("-", DesktopUiKit.Variant.SECONDARY);
             stepBtns[i] = sb;
             sb.addActionListener(e -> {
-                String pat = (project.musicPattern == null || project.musicPattern.isEmpty())
-                        ? ChiptuneGenerator.PRESET_CYBERPUNK : project.musicPattern;
-                String[] ch = pat.split(";");
-                String[] lead = ch[0].trim().split("\\s+");
-                String cur = sIdx < lead.length ? lead[sIdx] : "-";
-                int nextIdx = 0;
-                for (int k = 0; k < cycle.length; k++) {
-                    if (cycle[k].equalsIgnoreCase(cur)) { nextIdx = (k + 1) % cycle.length; break; }
-                }
-                StringBuilder newLead = new StringBuilder();
+                int[] steps = ChiptuneGenerator.parseSteps(project.musicPattern);
+                steps[sIdx] = (steps[sIdx] + 1) % ChiptuneGenerator.NOTE_LABELS.length;
+                StringBuilder joined = new StringBuilder();
                 for (int k = 0; k < 16; k++) {
-                    if (k > 0) newLead.append(' ');
-                    newLead.append(k == sIdx ? cycle[nextIdx] : (k < lead.length ? lead[k] : "-"));
+                    if (k > 0) joined.append(',');
+                    joined.append(steps[k]);
                 }
-                StringBuilder full = new StringBuilder(newLead);
-                for (int c = 1; c < ch.length; c++) full.append(';').append(ch[c]);
-                project.musicPattern = full.toString();
+                project.musicPattern = joined.toString();
                 syncSteps.run();
-                if (!"-".equals(cycle[nextIdx])) viewport.audioEngine.play("coin");
+                if (steps[sIdx] > 0) viewport.audioEngine.play("coin");
             });
             stepGrid.add(sb);
         }
@@ -883,6 +915,7 @@ public class VortexDesktopStudio extends JFrame {
             else if (idx == 1) { project.musicPattern = ChiptuneGenerator.PRESET_DUNGEON; project.musicBpm = 112; }
             else if (idx == 2) { project.musicPattern = ChiptuneGenerator.PRESET_BOSS; project.musicBpm = 148; }
             else { project.musicPattern = ChiptuneGenerator.PRESET_SKYCHILL; project.musicBpm = 118; }
+            bpmSlider.setValue(project.musicBpm);
             project.musicEnabled = true;
             autoPlayToggle.setSelected(true);
             syncSteps.run();
@@ -1274,16 +1307,14 @@ public class VortexDesktopStudio extends JFrame {
 
     private void exportWithDialog(String kind) {
         syncCode();
-        JFileChooser fc = new JFileChooser();
         String slug = project.getSlug();
         String defaultName = slug + ("html".equals(kind) ? "-Web.html"
                 : "exe".equals(kind) ? "-Windows-x64.exe"
                 : "linux".equals(kind) ? "-Linux-x86_64"
                 : "jar".equals(kind) ? "-Desktop.jar"
                 : "-Android-Termux.zip");
-        fc.setSelectedFile(new File(defaultName));
-        if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File out = fc.getSelectedFile();
+        File out = DesktopUiKit.showFileModal(this, "Export Standalone Build", true, defaultName);
+        if (out != null) {
             try {
                 if ("html".equals(kind)) Html5WebExporter.exportToFile(project, out);
                 else if ("exe".equals(kind)) DesktopExporter.exportStandaloneWindowsExe(project, out);
@@ -1361,10 +1392,9 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     private void openProjectJson() {
-        JFileChooser fc = new JFileChooser();
-        if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+        File f = DesktopUiKit.showFileModal(this, "Open Vortex Project (.vortex.json)", false, "project.vortex.json");
+        if (f != null) {
             try {
-                File f = fc.getSelectedFile();
                 String txt = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
                 currentProjectFile = f;
                 loadProjectIntoStudio(GameProject.fromJsonString(txt));
@@ -1378,10 +1408,9 @@ public class VortexDesktopStudio extends JFrame {
     private void saveProjectJson() {
         syncCode();
         if (currentProjectFile == null) {
-            JFileChooser fc = new JFileChooser();
-            fc.setSelectedFile(new File(project.getSlug() + ".vortex.json"));
-            if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
-            currentProjectFile = fc.getSelectedFile();
+            File chosen = DesktopUiKit.showFileModal(this, "Save Vortex Project (.vortex.json)", true, project.getSlug() + ".vortex.json");
+            if (chosen == null) return;
+            currentProjectFile = chosen;
         }
         try (FileOutputStream fos = new FileOutputStream(currentProjectFile)) {
             fos.write(project.toJsonString().getBytes(StandardCharsets.UTF_8));

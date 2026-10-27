@@ -60,7 +60,3 @@ jobs:
             dist/VortexEngine-Studio-Windows-x64.exe
             dist/VortexEngine-Studio-Linux-x86_64
             dist/VortexEngine-Studio-Desktop-v4.1.0.jar
-            dist/NeonSurvivorsSwarm-Android-Sample.apk
-            dist/NeonSurvivorsSwarm-Windows-Sample.exe
-            dist/NeonSurvivorsSwarm-Web.html
-            dist/StarhullMecha3D-Web.html

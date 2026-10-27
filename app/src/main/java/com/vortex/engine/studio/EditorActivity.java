@@ -230,6 +230,12 @@ public class EditorActivity extends Activity {
         switchMode(initTab != null ? initTab : "SCENE");
     }
 
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyInspectorLayoutParams();
+    }
+
     private void applyInspectorLayoutParams() {
         if (inspectorDrawer == null) return;
         int screenWidthDp = getResources().getConfiguration().screenWidthDp;
@@ -846,21 +852,26 @@ public class EditorActivity extends Activity {
         panel.addView(pixelArtCanvas, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        // Bottom Actions: Presets + Save & Spawn
+        // Bottom Actions: Custom Sprite Preset Dropdown + Save & Spawn
         LinearLayout bot = new LinearLayout(this);
         bot.setOrientation(LinearLayout.HORIZONTAL);
+        bot.setGravity(Gravity.CENTER_VERTICAL);
         bot.setPadding(0, dp(8), 0, 0);
 
-        TextView knightBtn = VortexMobileUi.makeButton(this, "KNIGHT PRESET", VortexMobileUi.ButtonVariant.SECONDARY, false);
-        knightBtn.setOnClickListener(v -> {
-            spriteNameEdit.setText("knight");
-            pixelArtCanvas.loadEncoded(PixelSpriteCodec.createDefaultKnightSprite());
+        String[] spPresets = {"Preset: Knight 1", "Preset: Knight 2", "Preset: Drone", "Preset: Crate", "Preset: Gem"};
+        VortexMobileUi.VortexDropdown spDrop = new VortexMobileUi.VortexDropdown(this, spPresets, spPresets[0]);
+        spDrop.setOnSelectionListener((idx, val) -> {
+            if (idx == 0) { spriteNameEdit.setText("knight_1"); pixelArtCanvas.loadEncoded(PixelSpriteCodec.createDefaultKnightSprite()); }
+            else if (idx == 1) { spriteNameEdit.setText("knight_2"); pixelArtCanvas.loadEncoded(PixelSpriteCodec.createKnightRunFrame2Sprite()); }
+            else if (idx == 2) { spriteNameEdit.setText("drone_1"); pixelArtCanvas.loadEncoded(PixelSpriteCodec.createDroneFrame1Sprite()); }
+            else if (idx == 3) { spriteNameEdit.setText("crate"); pixelArtCanvas.loadEncoded(PixelSpriteCodec.createCrateSprite()); }
+            else { spriteNameEdit.setText("gem"); pixelArtCanvas.loadEncoded(PixelSpriteCodec.createGemSprite()); }
         });
-        LinearLayout.LayoutParams b1 = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams b1 = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.05f);
         b1.rightMargin = dp(6);
-        bot.addView(knightBtn, b1);
+        bot.addView(spDrop, b1);
 
-        TextView saveSpawnBtn = VortexMobileUi.makeButton(this, "✓ SAVE & SPAWN IN 2D", VortexMobileUi.ButtonVariant.PRIMARY, false);
+        TextView saveSpawnBtn = VortexMobileUi.makeButton(this, "✓ SAVE & SPAWN", VortexMobileUi.ButtonVariant.PRIMARY, false);
         saveSpawnBtn.setOnClickListener(v -> {
             String sName = spriteNameEdit.getText().toString().trim();
             if (sName.isEmpty()) sName = "sprite_1";
@@ -1017,8 +1028,8 @@ public class EditorActivity extends Activity {
                         "particles(0, 1, 0, 20, '#00E5FF');", "playSound('coin');",
                         "addScore(100);", "fn onCollide(a, b, tagA, tagB) {\n}"};
         for (String s : snippets) {
-            TextView sb = makeChip(s.replace("\n", " "), "#1E293B", "#475569");
-            sb.setTextSize(11f);
+            TextView sb = VortexMobileUi.makeButton(this, s.replace("\n", " "), VortexMobileUi.ButtonVariant.SECONDARY, true);
+            sb.setTextSize(10.8f);
             sb.setOnClickListener(v -> {
                 int start = scriptEditor.getSelectionStart();
                 if (!scriptEditor.hasFocus() || start <= 0) {
@@ -1334,7 +1345,7 @@ public class EditorActivity extends Activity {
             tv.setTextSize(12f);
             card.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-            TextView del = makeChip("✕", "#2D161E", "#FF5252");
+            TextView del = VortexMobileUi.makeButton(this, "✕", VortexMobileUi.ButtonVariant.DANGER, true);
             del.setPadding(dp(8), dp(4), dp(8), dp(4));
             del.setOnClickListener(v -> {
                 pushUndoSnapshot();
@@ -1542,17 +1553,11 @@ public class EditorActivity extends Activity {
 
         VortexMobileUi.VortexToggle musicEnableCb = new VortexMobileUi.VortexToggle(
                 this, "Auto-play Chiptune Soundtrack when game starts (" + project.musicBpm + " BPM)", project.musicEnabled);
-        musicEnableCb.setOnClickListener(v -> {
-            musicEnableCb.setChecked(!musicEnableCb.isChecked());
+        musicEnableCb.setOnToggleListener(() -> {
             project.musicEnabled = musicEnableCb.isChecked();
             saveProjectQuiet();
         });
         box.addView(musicEnableCb);
-
-        // Genre Preset Row
-        LinearLayout presetRow = new LinearLayout(this);
-        presetRow.setOrientation(LinearLayout.HORIZONTAL);
-        presetRow.setPadding(0, dp(6), 0, dp(6));
 
         final TextView[] stepBtns = new TextView[16];
         final Runnable refreshStepUi = () -> {
@@ -1569,31 +1574,35 @@ public class EditorActivity extends Activity {
             }
         };
 
-        String[][] genrePresets = {
-                {"⚡ CYBER", ChiptuneGenerator.PRESET_CYBERPUNK, "134"},
-                {"🏰 DUNG", ChiptuneGenerator.PRESET_DUNGEON, "112"},
-                {"🔥 BOSS", ChiptuneGenerator.PRESET_BOSS, "148"},
-                {"☁️ CHILL", ChiptuneGenerator.PRESET_SKYCHILL, "118"}
+        String[] genreLabels = {
+                "Soundtrack Preset: ⚡ Cyberpunk Synth (134 BPM)",
+                "Soundtrack Preset: 🏰 Dungeon Crawl (112 BPM)",
+                "Soundtrack Preset: 🔥 Boss Overdrive (148 BPM)",
+                "Soundtrack Preset: ☁️ Sky Islands Chill (118 BPM)"
         };
-        for (int g = 0; g < genrePresets.length; g++) {
-            final String[] gp = genrePresets[g];
-            TextView pb = makeChip(gp[0], "#16263D", "#00E5FF");
-            pb.setGravity(Gravity.CENTER);
-            pb.setOnClickListener(v -> {
-                pushUndoSnapshot();
-                project.musicPattern = gp[1];
-                project.musicBpm = Integer.parseInt(gp[2]);
-                project.musicEnabled = true;
-                musicEnableCb.setChecked(true);
-                refreshStepUi.run();
-                sfxPreview.startMusicLoop(project.musicPattern, project.musicBpm);
-                saveProjectQuiet();
-            });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            if (g < 3) lp.rightMargin = dp(5);
-            presetRow.addView(pb, lp);
-        }
-        box.addView(presetRow);
+        String[] genrePatterns = {
+                ChiptuneGenerator.PRESET_CYBERPUNK,
+                ChiptuneGenerator.PRESET_DUNGEON,
+                ChiptuneGenerator.PRESET_BOSS,
+                ChiptuneGenerator.PRESET_SKYCHILL
+        };
+        int[] genreBpms = {134, 112, 148, 118};
+        VortexMobileUi.VortexDropdown genreDrop = new VortexMobileUi.VortexDropdown(this, genreLabels, genreLabels[0]);
+        genreDrop.setOnSelectionListener((idx, val) -> {
+            pushUndoSnapshot();
+            project.musicPattern = genrePatterns[idx];
+            project.musicBpm = genreBpms[idx];
+            project.musicEnabled = true;
+            musicEnableCb.setChecked(true);
+            refreshStepUi.run();
+            sfxPreview.startMusicLoop(project.musicPattern, project.musicBpm);
+            saveProjectQuiet();
+        });
+        LinearLayout.LayoutParams gdLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        gdLp.topMargin = dp(6);
+        gdLp.bottomMargin = dp(8);
+        box.addView(genreDrop, gdLp);
 
         // 16-Step Interactive Lead Note Grid (4 rows x 4 steps — super clean on 360dp portrait!)
         for (int r = 0; r < 4; r++) {
@@ -1602,7 +1611,7 @@ public class EditorActivity extends Activity {
             sRow.setPadding(0, dp(3), 0, dp(3));
             for (int c = 0; c < 4; c++) {
                 final int stepIdx = r * 4 + c;
-                TextView sb = makeChip((stepIdx + 1) + ":-", "#162032", "#334155");
+                TextView sb = VortexMobileUi.makeButton(this, (stepIdx + 1) + ":-", VortexMobileUi.ButtonVariant.SECONDARY, true);
                 sb.setGravity(Gravity.CENTER);
                 sb.setPadding(dp(4), dp(7), dp(4), dp(7));
                 sb.setOnClickListener(v -> {
