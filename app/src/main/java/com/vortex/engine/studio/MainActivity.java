@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#090D16"));
+        root.setFitsSystemWindows(true);
 
         // ============================================================
         // Responsive Stacked Header (Zero awkward line-wrapping on 360dp phones!)
@@ -65,7 +66,7 @@ public class MainActivity extends Activity {
         brandRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         TextView verChip = new TextView(this);
-        verChip.setText("v2.0 • LUA + BOX2D + 3D");
+        verChip.setText("v2.0");
         verChip.setTextColor(Color.parseColor("#00E676"));
         verChip.setTextSize(10.5f);
         verChip.setTypeface(Typeface.DEFAULT_BOLD);
@@ -88,7 +89,7 @@ public class MainActivity extends Activity {
         LinearLayout actionRow = new LinearLayout(this);
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
 
-        TextView setupBtn = makePillButton("🔧 TERMUX & PERMS", "#1E293B", "#38BDF8");
+        TextView setupBtn = makePillButton("🔧 TERMUX SETUP", "#1E293B", "#38BDF8");
         setupBtn.setGravity(Gravity.CENTER);
         setupBtn.setOnClickListener(v -> showTermuxSetupDialog());
         LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -126,7 +127,7 @@ public class MainActivity extends Activity {
         termuxPermStatus.setTextSize(11.5f);
         permRow.addView(termuxPermStatus, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        permActionBtn = makePillButton("ENABLE 1-TAP PERM", "#1E293B", "#FFB300");
+        permActionBtn = makePillButton("🔓 PERMS", "#1E293B", "#FFB300");
         permActionBtn.setTextSize(10.5f);
         permActionBtn.setPadding(dp(10), dp(5), dp(10), dp(5));
         permActionBtn.setOnClickListener(v -> showRunCommandPermissionHelper());
@@ -319,10 +320,10 @@ public class MainActivity extends Activity {
             b2.rightMargin = dp(6);
             btnRow.addView(editBtn, b2);
 
-            TextView apkBtn = makePillButton("📦 BUILD APK", "#261B38", "#B388FF");
+            TextView apkBtn = makePillButton("📦 APK", "#261B38", "#B388FF");
             apkBtn.setGravity(Gravity.CENTER);
             apkBtn.setOnClickListener(v -> openEditor(p.id, "BUILD"));
-            btnRow.addView(apkBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.15f));
+            btnRow.addView(apkBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f));
 
             card.addView(btnRow);
             card.setOnClickListener(v -> openEditor(p.id, null));

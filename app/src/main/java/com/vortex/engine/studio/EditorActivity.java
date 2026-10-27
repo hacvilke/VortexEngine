@@ -110,6 +110,7 @@ public class EditorActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.parseColor("#0B0F17"));
+        root.setFitsSystemWindows(true);
 
         // 2-Row Compact Top Bar (Zero Portrait Cramping!)
         root.addView(buildTopBar());
@@ -177,8 +178,12 @@ public class EditorActivity extends Activity {
         workspace.addView(sceneBottomToolbar, bottomLp);
 
         inspectorDrawer = buildInspectorDrawer();
+        int screenWidthDp = getResources().getConfiguration().screenWidthDp;
+        int drawerWidth = screenWidthDp < 540
+                ? FrameLayout.LayoutParams.MATCH_PARENT
+                : dp(330);
         FrameLayout.LayoutParams inspLp = new FrameLayout.LayoutParams(
-                dp(310), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END);
+                drawerWidth, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END);
         workspace.addView(inspectorDrawer, inspLp);
 
         pixelArtPanel = buildPixelArtPanel();
@@ -328,6 +333,16 @@ public class EditorActivity extends Activity {
             addToolBtn(row, "+ COIN", () -> spawnPrimitive("SPRITE_COIN", "#FFD740"));
             addToolBtn(row, "+ SLIME", () -> spawnPrimitive("SPRITE_SLIME", "#FF5252"));
         }
+
+        TextView snapBtn = makeChip(
+                viewportSurface != null && viewportSurface.isGridSnap() ? "🧲 SNAP: ON" : "🧲 SNAP: OFF",
+                "#1E293B", "#38BDF8");
+        snapBtn.setOnClickListener(v -> {
+            boolean next = !viewportSurface.isGridSnap();
+            viewportSurface.setGridSnap(next);
+            snapBtn.setText(next ? "🧲 SNAP: ON" : "🧲 SNAP: OFF");
+        });
+        row.addView(snapBtn, rightMarginLp(6));
 
         addToolBtn(row, "⎘ CLONE", this::duplicateSelected);
         addToolBtn(row, "🗑 DEL", this::deleteSelected);
@@ -482,6 +497,34 @@ public class EditorActivity extends Activity {
         head.setTypeface(Typeface.DEFAULT_BOLD);
         head.setTextSize(13f);
         inspectorContent.addView(head);
+
+        if (!project.entities.isEmpty()) {
+            String[] entityNames = new String[project.entities.size()];
+            int selIndex = 0;
+            String curId = viewportSurface.renderer.getSelectedEntityId();
+            for (int i = 0; i < project.entities.size(); i++) {
+                Entity item = project.entities.get(i);
+                entityNames[i] = item.name + " [" + item.primitive + "]";
+                if (item.id.equals(curId)) selIndex = i;
+            }
+            Spinner pickSpin = new Spinner(this);
+            ArrayAdapter<String> pickAd = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, entityNames);
+            pickSpin.setAdapter(pickAd);
+            pickSpin.setSelection(selIndex, false);
+            final int initialIdx = selIndex;
+            pickSpin.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                    if (pos != initialIdx && pos >= 0 && pos < project.entities.size()) {
+                        viewportSurface.renderer.setSelectedEntityId(project.entities.get(pos).id);
+                        populateInspector();
+                    }
+                }
+                @Override
+                public void onNothingSelected(AdapterView<?> parent) {}
+            });
+            inspectorContent.addView(pickSpin);
+        }
 
         Entity e = project.findById(viewportSurface.renderer.getSelectedEntityId());
         if (e == null) {
@@ -835,8 +878,12 @@ public class EditorActivity extends Activity {
             TextView sb = makeChip(s.replace("\n", " "), "#1E293B", "#475569");
             sb.setTextSize(11f);
             sb.setOnClickListener(v -> {
-                int start = Math.max(0, scriptEditor.getSelectionStart());
-                scriptEditor.getText().insert(start, s);
+                int start = scriptEditor.getSelectionStart();
+                if (!scriptEditor.hasFocus() || start <= 0) {
+                    scriptEditor.append("\n" + s);
+                } else {
+                    scriptEditor.getText().insert(start, s);
+                }
             });
             snippetBar.addView(sb, rightMarginLp(6));
         }
@@ -1055,11 +1102,11 @@ public class EditorActivity extends Activity {
         fromSourceCb.setChecked(false);
         box.addView(fromSourceCb);
 
-        // Primary Universal Build Button (Always works right away via MediaStore + Clipboard!)
-        TextView copyExportBtn = makeChip("🚀 EXPORT PROJECT + COPY BUILD CMD & OPEN TERMUX", "#00C853", "#69F0AE");
+        // Primary Universal Build Button (Fits cleanly on 360dp portrait screens!)
+        TextView copyExportBtn = makeChip("🚀 EXPORT + COPY CMD (OPEN TERMUX)", "#00C853", "#69F0AE");
         copyExportBtn.setTextColor(Color.parseColor("#041A0B"));
         copyExportBtn.setGravity(Gravity.CENTER);
-        copyExportBtn.setPadding(dp(12), dp(12), dp(12), dp(12));
+        copyExportBtn.setPadding(dp(10), dp(12), dp(10), dp(12));
         copyExportBtn.setOnClickListener(v -> {
             applyExportFields(titleEt, pkgEt, verEt, orients[orientSpin.getSelectedItemPosition()], glyphs[glyphSpin.getSelectedItemPosition()]);
             runExportAndBuild(false, false);
@@ -1074,7 +1121,7 @@ public class EditorActivity extends Activity {
         row2.setOrientation(LinearLayout.HORIZONTAL);
         row2.setPadding(0, dp(8), 0, 0);
 
-        TextView oneTapBtn = makeChip("⚡ 1-TAP AUTO BUILD", "#16263D", "#00E5FF");
+        TextView oneTapBtn = makeChip("⚡ 1-TAP BUILD", "#16263D", "#00E5FF");
         oneTapBtn.setGravity(Gravity.CENTER);
         oneTapBtn.setOnClickListener(v -> {
             applyExportFields(titleEt, pkgEt, verEt, orients[orientSpin.getSelectedItemPosition()], glyphs[glyphSpin.getSelectedItemPosition()]);
@@ -1084,7 +1131,7 @@ public class EditorActivity extends Activity {
         otLp.rightMargin = dp(6);
         row2.addView(oneTapBtn, otLp);
 
-        TextView permSettingsBtn = makeChip("🔓 APP PERMISSIONS", "#1E293B", "#FFB300");
+        TextView permSettingsBtn = makeChip("🔓 PERMISSIONS", "#1E293B", "#FFB300");
         permSettingsBtn.setGravity(Gravity.CENTER);
         permSettingsBtn.setOnClickListener(v -> TermuxBridge.openAppPermissionSettings(this));
         row2.addView(permSettingsBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -1095,14 +1142,14 @@ public class EditorActivity extends Activity {
         row3.setOrientation(LinearLayout.HORIZONTAL);
         row3.setPadding(0, dp(8), 0, 0);
 
-        TextView storageBtn = makeChip("📂 SHARED STORAGE ACCESS", "#1E293B", "#64748B");
+        TextView storageBtn = makeChip("📂 STORAGE", "#1E293B", "#64748B");
         storageBtn.setGravity(Gravity.CENTER);
         storageBtn.setOnClickListener(v -> TermuxBridge.requestAllFilesAccess(this, 402));
         LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         stLp.rightMargin = dp(6);
         row3.addView(storageBtn, stLp);
 
-        TextView installBtn = makeChip("📲 INSTALL BUILT APK", "#311B92", "#B388FF");
+        TextView installBtn = makeChip("📲 INSTALL APK", "#311B92", "#B388FF");
         installBtn.setGravity(Gravity.CENTER);
         installBtn.setOnClickListener(v -> {
             String path = lastExport != null
