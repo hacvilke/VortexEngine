@@ -42,9 +42,9 @@ public class ExportTestBundle {
 }
 EOF
 
-"$JAVA_HOME/bin/javac" -cp "$ROOT_DIR/dist/VortexEngine-Studio-Desktop-v4.0.0.jar" \
+"$JAVA_HOME/bin/javac" -cp "$ROOT_DIR/dist/VortexEngine-Studio-Desktop-v4.1.0.jar" \
     -d "$TEST_DIR" "$TEST_DIR/ExportTestBundle.java"
-"$JAVA_HOME/bin/java" -cp "$TEST_DIR:$ROOT_DIR/dist/VortexEngine-Studio-Desktop-v4.0.0.jar" \
+"$JAVA_HOME/bin/java" -cp "$TEST_DIR:$ROOT_DIR/dist/VortexEngine-Studio-Desktop-v4.1.0.jar" \
     ExportTestBundle \
     "$TEST_DIR/NeonSurvivors-Termux.zip" \
     "$ROOT_DIR/dist/NeonSurvivorsSwarm-Windows-Sample.exe" \
@@ -86,4 +86,4 @@ echo "=== [5/5] Testing Linux Self-Contained Binary + Live LRM Headless Suite ==
 "$ROOT_DIR/dist/VortexEngine-Studio-Linux-x86_64" --headless-test | tail -n 14
 
 ls -lh "$ROOT_DIR/dist/"
-echo "[ALL V4.0.0 HYPERION PIPELINE TESTS PASSED!]"
+echo "[ALL V4.1.0 HYPERION UI PIPELINE TESTS PASSED!]"

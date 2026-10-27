@@ -31,7 +31,7 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
           curl -fsSL https://raw.githubusercontent.com/hacvilke/lrm/main/scripts/install.sh | sh || true
 
-      - name: Build Android Studio v4.0.0 APK
+      - name: Build Android Studio v4.1.0 APK
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
@@ -54,12 +54,12 @@ jobs:
       - name: Upload Multi-Platform Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: VortexEngine-v4.0.0-All-Platforms
+          name: VortexEngine-v4.1.0-All-Platforms
           path: |
-            dist/VortexEngine-Studio-v4.0.0.apk
+            dist/VortexEngine-Studio-v4.1.0.apk
             dist/VortexEngine-Studio-Windows-x64.exe
             dist/VortexEngine-Studio-Linux-x86_64
-            dist/VortexEngine-Studio-Desktop-v4.0.0.jar
+            dist/VortexEngine-Studio-Desktop-v4.1.0.jar
             dist/NeonSurvivorsSwarm-Android-Sample.apk
             dist/NeonSurvivorsSwarm-Windows-Sample.exe
             dist/NeonSurvivorsSwarm-Web.html

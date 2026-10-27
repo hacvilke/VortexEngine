@@ -1,10 +1,30 @@
-# Vortex Engine Studio — v4.0.0 ("Hyperion Edition")
+# Vortex Engine Studio — v4.1.0 ("Hyperion UI Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
 
-## What's New in v4.0.0 ("Hyperion Edition")
+## What's New in v4.1.0 ("Hyperion UI Edition")
+
+### 1. Unified Dark Obsidian + Electric Cyan Design System (Zero Rainbow Buttons, Zero Default OS Widgets)
+- **Single Cohesive Visual Language Across Android & Desktop**: Unified the entire Studio under a clean **Dark Obsidian (`#090D16` / `#0D1320` / `#141E30`) + Electric Cyan (`#00E5FF`)** theme with 4 semantic button variants (`PRIMARY` solid cyan, `ACCENT` cyan-outlined obsidian, `SECONDARY` slate-bordered obsidian, and `DANGER` muted rose).
+
+### 2. Android Mobile Layout & Custom UI Overhaul (`VortexMobileUi`)
+- **Responsive Portrait & Landscape Ergonomics**:
+  - `fitsSystemWindows` + dark status/navigation bar integration (`#0D1320` / `#090D16`) so system bars and gesture insets never clip headers or bottom toolbars on Android 14/15/16.
+  - **Split-Preview Portrait Inspector**: In portrait mode, the Inspector opens as a **56% height bottom drawer** (`⤢ FULL HEIGHT` / `⤡ SPLIT VIEW` toggle) so you can see live 2D/3D viewport changes while editing transforms, physics, and flipbook animations!
+  - **Density-Scaled HUD & Arcade Touch Controls**: Converted raw-pixel HUD text/pills to `dp`/`sp` scaling so 1080p/1440p screens stay crisp and readable, and unified the `A` / `B` touch pads with spring-animated cyan pulse rings.
+- **Custom Dark Mobile Controls & Animations**:
+  - Replaced 100% of default white/gray Android `Spinner`s, `CheckBox`es, and `AlertDialog`s with custom **`VortexDropdown`** dark `PopupWindow` selectors (with `180°` animated chevrons), **`VortexToggle`** animated pill switches, glowing focus inputs, custom dark modals, tactile spring press feedback, and smooth tab auto-centering + entrance transitions.
+
+### 3. Modern Custom-Painted Desktop Studio UI (`DesktopUiKit`)
+- **Zero Swing Metal Blue Gradients**: Replaced default Swing `JButton`, `JComboBox`, `JCheckBox`, `JOptionPane`, `JScrollBar`, and `JSplitPane` widgets with custom `Graphics2D` anti-aliased components:
+  - **60 FPS Sliding-Pill Workspace Dock (`VortexTabStrip`)**: All 7 Studio workspaces (**Code**, **Flow**, **Forge AI**, **LRM P2P**, **Pixel**, **Audio**, **Export**) live cleanly in the right dock with smooth animated tab indicators.
+  - **Custom `VortexDropdown` & `VortexToggle`**: 60 FPS rotating vector chevrons, custom dark popup lists, dynamic-width animated pill switches, sleek 7px dark scrollbars, and 1px hairline splitters.
+
+---
+
+## Core Highlights from v4.0.0 ("Hyperion Edition")
 
 ### 1. ES6+ JavaScript Scripting Runtime (**Mozilla Rhino 1.7.15.1** + Native Browser V8)
 - **Quad-Runtime Scripting Architecture**: Choose per-project between **ES6+ JavaScript (`JS`)**, **Lua 5.2 (`LUA` via LuaJ)**, **Vortex Flow Visual Event-Sheet (`FLOW`)**, or **VortexScript (`VXS`)**:

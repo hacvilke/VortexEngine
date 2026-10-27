@@ -1,32 +1,26 @@
 package com.vortex.engine.studio;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.vortex.engine.core.audio.ChiptuneGenerator;
@@ -42,7 +36,6 @@ import com.vortex.engine.core.render.VortexGLRenderer;
 import com.vortex.engine.core.script.VortexScriptEngine;
 import com.vortex.engine.core.storage.VortexSaveStore;
 import com.vortex.engine.core.ui.VortexGameSurfaceView;
-import android.os.Environment;
 import java.io.File;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -78,8 +71,10 @@ public class EditorActivity extends Activity {
     private LinearLayout scriptPanel;
     private EditText scriptEditor;
     private TextView scriptStatusTv;
-    private TextView langToggleBtn;
+    private VortexMobileUi.VortexDropdown langDropdown;
     private LinearLayout snippetBar;
+    private HorizontalScrollView topTabScroll;
+    private boolean inspectorExpandedMobile = false;
     private ScrollView flowPanel;
     private LinearLayout flowRuleListContainer;
     private ScrollView lrmPanel;
@@ -115,6 +110,7 @@ public class EditorActivity extends Activity {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        VortexMobileUi.applyDarkSystemBars(this);
         VortexSaveStore.setSaveRootDir(new File(getFilesDir(), "vortex_saves"));
 
         String id = getIntent().getStringExtra(EXTRA_PROJECT_ID);
@@ -125,7 +121,7 @@ public class EditorActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.parseColor("#0B0F17"));
+        root.setBackgroundColor(VortexMobileUi.C_VOID);
         root.setFitsSystemWindows(true);
 
         // 2-Row Compact Top Bar (Zero Portrait Cramping!)
@@ -194,13 +190,8 @@ public class EditorActivity extends Activity {
         workspace.addView(sceneBottomToolbar, bottomLp);
 
         inspectorDrawer = buildInspectorDrawer();
-        int screenWidthDp = getResources().getConfiguration().screenWidthDp;
-        int drawerWidth = screenWidthDp < 540
-                ? FrameLayout.LayoutParams.MATCH_PARENT
-                : dp(330);
-        FrameLayout.LayoutParams inspLp = new FrameLayout.LayoutParams(
-                drawerWidth, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END);
-        workspace.addView(inspectorDrawer, inspLp);
+        applyInspectorLayoutParams();
+        workspace.addView(inspectorDrawer);
 
         pixelArtPanel = buildPixelArtPanel();
         workspace.addView(pixelArtPanel, new FrameLayout.LayoutParams(
@@ -239,32 +230,51 @@ public class EditorActivity extends Activity {
         switchMode(initTab != null ? initTab : "SCENE");
     }
 
+    private void applyInspectorLayoutParams() {
+        if (inspectorDrawer == null) return;
+        int screenWidthDp = getResources().getConfiguration().screenWidthDp;
+        int screenHeightPx = getResources().getDisplayMetrics().heightPixels;
+        FrameLayout.LayoutParams inspLp;
+        if (screenWidthDp < 540) {
+            // Mobile Portrait Split-Preview: keep 2D/3D Viewport visible above Inspector!
+            int h = inspectorExpandedMobile
+                    ? FrameLayout.LayoutParams.MATCH_PARENT
+                    : Math.round(screenHeightPx * 0.56f);
+            inspLp = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, h, Gravity.BOTTOM);
+        } else {
+            inspLp = new FrameLayout.LayoutParams(
+                    dp(336), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END);
+        }
+        inspectorDrawer.setLayoutParams(inspLp);
+    }
+
     private View buildTopBar() {
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
-        container.setBackgroundColor(Color.parseColor("#111827"));
+        container.setBackgroundColor(VortexMobileUi.C_HEADER);
 
-        // Row 1: Back, Single-line Title, 2D/3D Toggle, Save
+        // Row 1: Back, Single-line Title, Unified 2D/3D Toggle, Undo/Redo, Save
         LinearLayout row1 = new LinearLayout(this);
         row1.setOrientation(LinearLayout.HORIZONTAL);
         row1.setGravity(Gravity.CENTER_VERTICAL);
         row1.setPadding(dp(8), dp(7), dp(8), dp(5));
 
-        TextView backBtn = makeChip("← HUB", "#1E293B", "#475569");
+        TextView backBtn = VortexMobileUi.makeButton(this, "← HUB", VortexMobileUi.ButtonVariant.SECONDARY, true);
         backBtn.setOnClickListener(v -> { saveProjectQuiet(); finish(); });
         row1.addView(backBtn);
 
         TextView titleTv = new TextView(this);
         titleTv.setText(project.title);
-        titleTv.setTextColor(Color.WHITE);
-        titleTv.setTextSize(14.5f);
+        titleTv.setTextColor(VortexMobileUi.C_TEXT);
+        titleTv.setTextSize(14f);
         titleTv.setTypeface(Typeface.DEFAULT_BOLD);
         titleTv.setSingleLine(true);
         titleTv.setEllipsize(TextUtils.TruncateAt.END);
-        titleTv.setPadding(dp(10), 0, dp(8), 0);
+        titleTv.setPadding(dp(9), 0, dp(6), 0);
         row1.addView(titleTv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        dimToggleBtn = makeChip(project.dimensionMode, "#1E1B4B", "#818CF8");
+        dimToggleBtn = VortexMobileUi.makeButton(this, project.dimensionMode, VortexMobileUi.ButtonVariant.ACCENT, true);
         dimToggleBtn.setOnClickListener(v -> {
             pushUndoSnapshot();
             project.dimensionMode = "3D".equalsIgnoreCase(project.dimensionMode) ? "2D" : "3D";
@@ -275,27 +285,27 @@ public class EditorActivity extends Activity {
         });
         row1.addView(dimToggleBtn, rightMarginLp(4));
 
-        TextView undoBtn = makeChip("↶", "#1E293B", "#475569");
+        TextView undoBtn = VortexMobileUi.makeButton(this, "↶", VortexMobileUi.ButtonVariant.SECONDARY, true);
         undoBtn.setOnClickListener(v -> performUndo());
         row1.addView(undoBtn, rightMarginLp(4));
 
-        TextView redoBtn = makeChip("↷", "#1E293B", "#475569");
+        TextView redoBtn = VortexMobileUi.makeButton(this, "↷", VortexMobileUi.ButtonVariant.SECONDARY, true);
         redoBtn.setOnClickListener(v -> performRedo());
         row1.addView(redoBtn, rightMarginLp(4));
 
-        TextView saveBtn = makeChip("💾", "#064E3B", "#10B981");
+        TextView saveBtn = VortexMobileUi.makeButton(this, "SAVE", VortexMobileUi.ButtonVariant.PRIMARY, true);
         saveBtn.setOnClickListener(v -> {
             syncCodeFromEditor();
             ProjectRepository.saveProject(this, project);
-            Toast.makeText(this, "Saved '" + project.title + "'", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "✓ Saved '" + project.title + "'", Toast.LENGTH_SHORT).show();
         });
         row1.addView(saveBtn);
         container.addView(row1);
 
-        // Row 2: Full-width Scrollable Mode Tabs
-        HorizontalScrollView tabScroll = new HorizontalScrollView(this);
-        tabScroll.setHorizontalScrollBarEnabled(false);
-        tabScroll.setBackgroundColor(Color.parseColor("#0D1422"));
+        // Row 2: Unified Animated Mode Tabs
+        topTabScroll = new HorizontalScrollView(this);
+        topTabScroll.setHorizontalScrollBarEnabled(false);
+        topTabScroll.setBackgroundColor(VortexMobileUi.C_PANEL);
 
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
@@ -304,16 +314,16 @@ public class EditorActivity extends Activity {
         String[][] modes = {
                 {"SCENE", "🌐 SCENE"},
                 {"INSPECTOR", "🎛 INSPECT"},
+                {"SCRIPT", "📜 CODE"},
                 {"FLOW", "⚡ FLOW"},
-                {"SCRIPT", "📜 SCRIPT"},
-                {"PIXEL", "🎨 PIXEL"},
-                {"SFX", "🎵 MUSIC/SFX"},
                 {"LRM", "🔄 LRM P2P"},
+                {"PIXEL", "🎨 PIXEL"},
+                {"SFX", "🎵 AUDIO"},
                 {"PLAY", "▶ PLAY"},
                 {"BUILD", "📦 EXPORT"}
         };
         for (String[] m : modes) {
-            TextView tb = makeChip(m[1], "#162032", "#334155");
+            TextView tb = VortexMobileUi.makeButton(this, m[1], VortexMobileUi.ButtonVariant.SECONDARY, true);
             tb.setTag(m[0]);
             tb.setOnClickListener(v -> switchMode(m[0]));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -322,8 +332,13 @@ public class EditorActivity extends Activity {
             tabs.addView(tb, lp);
             tabButtons.add(tb);
         }
-        tabScroll.addView(tabs);
-        container.addView(tabScroll);
+        topTabScroll.addView(tabs);
+        container.addView(topTabScroll);
+
+        View divider = new View(this);
+        divider.setBackgroundColor(VortexMobileUi.C_BORDER);
+        container.addView(divider, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
         return container;
     }
 
@@ -366,18 +381,23 @@ public class EditorActivity extends Activity {
             addToolBtn(row, "+ SLIME", () -> spawnPrimitive("SPRITE_SLIME", "#FF5252"));
         }
 
-        TextView snapBtn = makeChip(
-                viewportSurface != null && viewportSurface.isGridSnap() ? "🧲 SNAP: ON" : "🧲 SNAP: OFF",
-                "#1E293B", "#38BDF8");
+        boolean snapOn = viewportSurface == null || viewportSurface.isGridSnap();
+        TextView snapBtn = VortexMobileUi.makeButton(
+                this, snapOn ? "🧲 SNAP: ON" : "🧲 SNAP: OFF",
+                snapOn ? VortexMobileUi.ButtonVariant.ACCENT : VortexMobileUi.ButtonVariant.SECONDARY, true);
         snapBtn.setOnClickListener(v -> {
             boolean next = !viewportSurface.isGridSnap();
             viewportSurface.setGridSnap(next);
             snapBtn.setText(next ? "🧲 SNAP: ON" : "🧲 SNAP: OFF");
+            VortexMobileUi.applyButtonVariant(this, snapBtn,
+                    next ? VortexMobileUi.ButtonVariant.ACCENT : VortexMobileUi.ButtonVariant.SECONDARY, true);
         });
         row.addView(snapBtn, rightMarginLp(6));
 
         addToolBtn(row, "⎘ CLONE", this::duplicateSelected);
-        addToolBtn(row, "🗑 DEL", this::deleteSelected);
+        TextView delBtn = VortexMobileUi.makeButton(this, "✕ DEL", VortexMobileUi.ButtonVariant.DANGER, true);
+        delBtn.setOnClickListener(v -> deleteSelected());
+        row.addView(delBtn, rightMarginLp(6));
         addToolBtn(row, "⌖ CAM", () -> viewportSurface.renderer.resetEditorCamera());
         addToolBtn(row, "📋 ENTITIES", this::showEntityPickerDialog);
 
@@ -387,7 +407,7 @@ public class EditorActivity extends Activity {
     }
 
     private void addToolBtn(LinearLayout row, String label, Runnable action) {
-        TextView btn = makeChip(label, "#1E293B", "#38BDF8");
+        TextView btn = VortexMobileUi.makeButton(this, label, VortexMobileUi.ButtonVariant.SECONDARY, true);
         btn.setOnClickListener(v -> action.run());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -434,7 +454,7 @@ public class EditorActivity extends Activity {
     private void applyRestoredProject(String msg) {
         dimToggleBtn.setText(project.dimensionMode);
         if (scriptEditor != null) scriptEditor.setText(project.scriptCode);
-        if (langToggleBtn != null) langToggleBtn.setText("LANG: " + project.scriptLanguage);
+        syncLangDropdownUi();
         viewportSurface.loadProjectForEdit(project);
         rebuildSceneToolbarButtons();
         if ("INSPECTOR".equals(currentMode)) populateInspector();
@@ -547,27 +567,30 @@ public class EditorActivity extends Activity {
 
     private void showEntityPickerDialog() {
         String[] names = new String[project.entities.size()];
+        int activeIdx = 0;
+        String selId = viewportSurface.renderer.getSelectedEntityId();
         for (int i = 0; i < project.entities.size(); i++) {
             Entity e = project.entities.get(i);
             names[i] = e.name + "  [" + e.primitive + " • " + e.bodyType + "]";
+            if (e.id.equals(selId)) activeIdx = i;
         }
-        new AlertDialog.Builder(this)
-                .setTitle("Scene Entities (" + names.length + ")")
-                .setItems(names, (d, which) -> {
+        VortexMobileUi.showPickerModal(this, "Scene Entities (" + names.length + ")", names, activeIdx,
+                (which, val) -> {
                     Entity chosen = project.entities.get(which);
                     viewportSurface.renderer.setSelectedEntityId(chosen.id);
                     if ("INSPECTOR".equals(currentMode)) populateInspector();
-                })
-                .setNegativeButton("Close", null)
-                .show();
+                });
     }
 
     private ScrollView buildInspectorDrawer() {
         ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(Color.argb(242, 15, 23, 42));
+        GradientDrawable drawerBg = new GradientDrawable();
+        drawerBg.setColor(Color.argb(246, 13, 19, 32));
+        drawerBg.setStroke(dp(1), VortexMobileUi.C_BORDER);
+        sv.setBackground(drawerBg);
         inspectorContent = new LinearLayout(this);
         inspectorContent.setOrientation(LinearLayout.VERTICAL);
-        inspectorContent.setPadding(dp(14), dp(12), dp(14), dp(24));
+        inspectorContent.setPadding(dp(14), dp(10), dp(14), dp(26));
         sv.addView(inspectorContent);
         return sv;
     }
@@ -575,46 +598,58 @@ public class EditorActivity extends Activity {
     private void populateInspector() {
         inspectorContent.removeAllViews();
 
+        // Top Header + Portrait Split/Full Toggle!
+        LinearLayout topHead = new LinearLayout(this);
+        topHead.setOrientation(LinearLayout.HORIZONTAL);
+        topHead.setGravity(Gravity.CENTER_VERTICAL);
+        topHead.setPadding(0, 0, 0, dp(6));
+
         TextView head = new TextView(this);
         head.setText("ENTITY & PHYSICS INSPECTOR");
-        head.setTextColor(Color.parseColor("#00E5FF"));
+        head.setTextColor(VortexMobileUi.C_CYAN);
         head.setTypeface(Typeface.DEFAULT_BOLD);
-        head.setTextSize(13f);
-        inspectorContent.addView(head);
+        head.setTextSize(12.5f);
+        topHead.addView(head, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        if (getResources().getConfiguration().screenWidthDp < 540) {
+            TextView sizeToggle = VortexMobileUi.makeButton(
+                    this, inspectorExpandedMobile ? "⤡ SPLIT VIEW" : "⤢ FULL HEIGHT",
+                    VortexMobileUi.ButtonVariant.SECONDARY, true);
+            sizeToggle.setPadding(dp(8), dp(4), dp(8), dp(4));
+            sizeToggle.setTextSize(10f);
+            sizeToggle.setOnClickListener(v -> {
+                inspectorExpandedMobile = !inspectorExpandedMobile;
+                applyInspectorLayoutParams();
+                populateInspector();
+            });
+            topHead.addView(sizeToggle);
+        }
+        inspectorContent.addView(topHead);
 
         if (!project.entities.isEmpty()) {
             String[] entityNames = new String[project.entities.size()];
-            int selIndex = 0;
+            String curVal = "";
             String curId = viewportSurface.renderer.getSelectedEntityId();
             for (int i = 0; i < project.entities.size(); i++) {
                 Entity item = project.entities.get(i);
                 entityNames[i] = item.name + " [" + item.primitive + "]";
-                if (item.id.equals(curId)) selIndex = i;
+                if (item.id.equals(curId)) curVal = entityNames[i];
             }
-            Spinner pickSpin = new Spinner(this);
-            ArrayAdapter<String> pickAd = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, entityNames);
-            pickSpin.setAdapter(pickAd);
-            pickSpin.setSelection(selIndex, false);
-            final int initialIdx = selIndex;
-            pickSpin.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-                @Override
-                public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
-                    if (pos != initialIdx && pos >= 0 && pos < project.entities.size()) {
-                        viewportSurface.renderer.setSelectedEntityId(project.entities.get(pos).id);
-                        populateInspector();
-                    }
+            VortexMobileUi.VortexDropdown pickDrop = new VortexMobileUi.VortexDropdown(this, entityNames, curVal);
+            pickDrop.setOnSelectionListener((pos, val) -> {
+                if (pos >= 0 && pos < project.entities.size()) {
+                    viewportSurface.renderer.setSelectedEntityId(project.entities.get(pos).id);
+                    populateInspector();
                 }
-                @Override
-                public void onNothingSelected(AdapterView<?> parent) {}
             });
-            inspectorContent.addView(pickSpin);
+            inspectorContent.addView(pickDrop);
         }
 
         Entity e = project.findById(viewportSurface.renderer.getSelectedEntityId());
         if (e == null) {
             TextView empty = new TextView(this);
             empty.setText("Tap any object in the 2D/3D viewport or use 📋 ENTITIES to inspect.");
-            empty.setTextColor(Color.LTGRAY);
+            empty.setTextColor(VortexMobileUi.C_TEXT_MUTED);
             empty.setPadding(0, dp(12), 0, dp(12));
             inspectorContent.addView(empty);
             return;
@@ -626,7 +661,7 @@ public class EditorActivity extends Activity {
         String[] prims = "3D".equalsIgnoreCase(project.dimensionMode)
                 ? new String[]{"CUBE", "SPHERE", "PYRAMID", "CYLINDER", "PLANE", "TERRAIN", "CUSTOM_OBJ"}
                 : new String[]{"RECT", "CIRCLE", "TRIANGLE", "CUSTOM_SPRITE", "SPRITE_HERO", "SPRITE_SLIME", "SPRITE_COIN", "SPRITE_SHIP"};
-        Spinner primSpin = addLabeledSpinner(inspectorContent, "Visual / Mesh", prims, e.primitive);
+        VortexMobileUi.VortexDropdown primSpin = addLabeledSpinner(inspectorContent, "Visual / Mesh", prims, e.primitive);
 
         LinearLayout posRow = new LinearLayout(this);
         posRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -651,36 +686,26 @@ public class EditorActivity extends Activity {
 
         EditText colorEt = addLabeledEdit(inspectorContent, "Color Hex (#RRGGBB)", e.colorHex, false);
 
-        String[] bodies = {"NONE", "STATIC", "DYNAMIC", "KINEMATIC"};
-        Spinner bodySpin = addLabeledSpinner(inspectorContent, "Physics Body Type", bodies, e.bodyType);
+        // Multi-Frame Flipbook Sprite Animation Row (2D)
+        EditText framesEt = addLabeledEdit(inspectorContent, "Sprite Flipbook Frames (e.g. knight_1,knight_2)", e.spriteFrames, false);
+        EditText animFpsEt = addLabeledEdit(inspectorContent, "Flipbook Animation FPS", String.valueOf(e.animFps), true);
 
-        CheckBox triggerCb = new CheckBox(this);
-        triggerCb.setText("Is Trigger Sensor");
-        triggerCb.setTextColor(Color.WHITE);
-        triggerCb.setChecked(e.isTrigger);
+        String[] bodies = {"NONE", "STATIC", "DYNAMIC", "KINEMATIC"};
+        VortexMobileUi.VortexDropdown bodySpin = addLabeledSpinner(inspectorContent, "Physics Body Type", bodies, e.bodyType);
+
+        VortexMobileUi.VortexToggle triggerCb = new VortexMobileUi.VortexToggle(this, "Trigger Sensor", e.isTrigger);
         inspectorContent.addView(triggerCb);
 
-        CheckBox fixedRotCb = new CheckBox(this);
-        fixedRotCb.setText("Lock Rotation (Platformer Hero)");
-        fixedRotCb.setTextColor(Color.WHITE);
-        fixedRotCb.setChecked(e.fixedRotation);
+        VortexMobileUi.VortexToggle fixedRotCb = new VortexMobileUi.VortexToggle(this, "Lock Rotation (Platformer Hero)", e.fixedRotation);
         inspectorContent.addView(fixedRotCb);
 
-        CheckBox checkerCb = new CheckBox(this);
-        checkerCb.setText("Procedural Checker Texture");
-        checkerCb.setTextColor(Color.WHITE);
-        checkerCb.setChecked(e.checkerTexture);
+        VortexMobileUi.VortexToggle checkerCb = new VortexMobileUi.VortexToggle(this, "Procedural Checker Texture", e.checkerTexture);
         inspectorContent.addView(checkerCb);
 
-        CheckBox glowCb = new CheckBox(this);
-        glowCb.setText("Neon Emissive Shading");
-        glowCb.setTextColor(Color.WHITE);
-        glowCb.setChecked(e.emissive);
+        VortexMobileUi.VortexToggle glowCb = new VortexMobileUi.VortexToggle(this, "Neon Emissive Shading", e.emissive);
         inspectorContent.addView(glowCb);
 
-        TextView applyBtn = makeChip("✓ APPLY CHANGES", "#00B8D4", "#00E5FF");
-        applyBtn.setTextColor(Color.parseColor("#04131A"));
-        applyBtn.setGravity(Gravity.CENTER);
+        TextView applyBtn = VortexMobileUi.makeButton(this, "✓ APPLY ENTITY CHANGES", VortexMobileUi.ButtonVariant.PRIMARY, false);
         LinearLayout.LayoutParams apLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         apLp.topMargin = dp(10);
@@ -698,6 +723,8 @@ public class EditorActivity extends Activity {
                 e.bounce = parseF(bncEt, e.bounce);
                 e.friction = parseF(frcEt, e.friction);
                 e.colorHex = colorEt.getText().toString().trim();
+                e.spriteFrames = framesEt.getText().toString().trim();
+                e.animFps = Math.max(0.5f, parseF(animFpsEt, e.animFps));
                 e.bodyType = bodies[bodySpin.getSelectedItemPosition()];
                 e.isTrigger = triggerCb.isChecked();
                 e.fixedRotation = fixedRotCb.isChecked();
@@ -705,34 +732,31 @@ public class EditorActivity extends Activity {
                 e.emissive = glowCb.isChecked();
             }
             saveProjectQuiet();
-            Toast.makeText(this, "Updated " + e.name, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "✓ Updated " + e.name, Toast.LENGTH_SHORT).show();
         });
         inspectorContent.addView(applyBtn, apLp);
 
-        // World Settings
+        // World Settings (Unified Cyan Accent — No Random Purple!)
         TextView worldHead = new TextView(this);
         worldHead.setText("WORLD & ENGINE SETTINGS");
-        worldHead.setTextColor(Color.parseColor("#B388FF"));
+        worldHead.setTextColor(VortexMobileUi.C_CYAN);
         worldHead.setTypeface(Typeface.DEFAULT_BOLD);
+        worldHead.setTextSize(12.5f);
         worldHead.setPadding(0, dp(16), 0, dp(4));
         inspectorContent.addView(worldHead);
 
         EditText skyEt = addLabeledEdit(inspectorContent, "Sky Hex", project.skyColorHex, false);
         EditText gravEt = addLabeledEdit(inspectorContent, "Gravity Y", String.valueOf(project.gravityY), true);
-        CheckBox box2dCb = new CheckBox(this);
-        box2dCb.setText("Enable JBox2D Rigid-Body Solver (2D)");
-        box2dCb.setTextColor(Color.WHITE);
-        box2dCb.setChecked(project.useBox2D);
+        VortexMobileUi.VortexToggle box2dCb = new VortexMobileUi.VortexToggle(this, "Enable JBox2D Rigid-Body Solver (2D)", project.useBox2D);
         inspectorContent.addView(box2dCb);
 
-        TextView saveWorldBtn = makeChip("✓ APPLY WORLD", "#311B92", "#B388FF");
-        saveWorldBtn.setGravity(Gravity.CENTER);
+        TextView saveWorldBtn = VortexMobileUi.makeButton(this, "✓ APPLY WORLD SETTINGS", VortexMobileUi.ButtonVariant.ACCENT, false);
         saveWorldBtn.setOnClickListener(v -> {
             project.skyColorHex = skyEt.getText().toString().trim();
             project.gravityY = parseF(gravEt, project.gravityY);
             project.useBox2D = box2dCb.isChecked();
             saveProjectQuiet();
-            Toast.makeText(this, "World settings saved!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "✓ World settings saved!", Toast.LENGTH_SHORT).show();
         });
         LinearLayout.LayoutParams swLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -754,25 +778,23 @@ public class EditorActivity extends Activity {
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
 
-        spriteNameEdit = new EditText(this);
-        spriteNameEdit.setText("hero_sprite");
-        spriteNameEdit.setTextColor(Color.WHITE);
-        spriteNameEdit.setTextSize(13f);
-        spriteNameEdit.setSingleLine(true);
+        spriteNameEdit = VortexMobileUi.createInput(this, "hero_sprite", false, false);
         top.addView(spriteNameEdit, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView mirrorBtn = makeChip("⇄ MIRROR: OFF", "#1E293B", "#38BDF8");
+        TextView mirrorBtn = VortexMobileUi.makeButton(this, "⇄ MIRROR: OFF", VortexMobileUi.ButtonVariant.SECONDARY, true);
         mirrorBtn.setOnClickListener(v -> {
             boolean next = !pixelArtCanvas.isMirrorX();
             pixelArtCanvas.setMirrorX(next);
             mirrorBtn.setText(next ? "⇄ MIRROR: ON" : "⇄ MIRROR: OFF");
+            VortexMobileUi.applyButtonVariant(this, mirrorBtn,
+                    next ? VortexMobileUi.ButtonVariant.ACCENT : VortexMobileUi.ButtonVariant.SECONDARY, true);
         });
         LinearLayout.LayoutParams mLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         mLp.leftMargin = dp(6);
         top.addView(mirrorBtn, mLp);
 
-        TextView clearBtn = makeChip("CLEAR", "#2D161E", "#FF5252");
+        TextView clearBtn = VortexMobileUi.makeButton(this, "CLEAR", VortexMobileUi.ButtonVariant.DANGER, true);
         clearBtn.setOnClickListener(v -> pixelArtCanvas.clearCanvas());
         LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -829,7 +851,7 @@ public class EditorActivity extends Activity {
         bot.setOrientation(LinearLayout.HORIZONTAL);
         bot.setPadding(0, dp(8), 0, 0);
 
-        TextView knightBtn = makeChip("KNIGHT PRESET", "#1E293B", "#64748B");
+        TextView knightBtn = VortexMobileUi.makeButton(this, "KNIGHT PRESET", VortexMobileUi.ButtonVariant.SECONDARY, false);
         knightBtn.setOnClickListener(v -> {
             spriteNameEdit.setText("knight");
             pixelArtCanvas.loadEncoded(PixelSpriteCodec.createDefaultKnightSprite());
@@ -838,9 +860,7 @@ public class EditorActivity extends Activity {
         b1.rightMargin = dp(6);
         bot.addView(knightBtn, b1);
 
-        TextView saveSpawnBtn = makeChip("✓ SAVE & SPAWN IN 2D", "#00C853", "#69F0AE");
-        saveSpawnBtn.setTextColor(Color.parseColor("#041A0B"));
-        saveSpawnBtn.setGravity(Gravity.CENTER);
+        TextView saveSpawnBtn = VortexMobileUi.makeButton(this, "✓ SAVE & SPAWN IN 2D", VortexMobileUi.ButtonVariant.PRIMARY, false);
         saveSpawnBtn.setOnClickListener(v -> {
             String sName = spriteNameEdit.getText().toString().trim();
             if (sName.isEmpty()) sName = "sprite_1";
@@ -876,32 +896,46 @@ public class EditorActivity extends Activity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setBackgroundColor(Color.parseColor("#0B0F17"));
 
-        // Row 1: Scrollable Action Toolbar
+        // Row 1: Unified Action Toolbar + Custom VM Dropdown!
         HorizontalScrollView toolsScroll = new HorizontalScrollView(this);
         toolsScroll.setHorizontalScrollBarEnabled(false);
-        toolsScroll.setBackgroundColor(Color.parseColor("#131C2E"));
+        toolsScroll.setBackgroundColor(VortexMobileUi.C_PANEL);
 
         LinearLayout toolbar = new LinearLayout(this);
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
+        toolbar.setGravity(Gravity.CENTER_VERTICAL);
         toolbar.setPadding(dp(10), dp(7), dp(10), dp(7));
 
-        TextView checkBtn = makeChip("✓ CHECK SYNTAX", "#064E3B", "#10B981");
+        String[] vmLabels = {"VM: ES6 JS", "VM: LUA 5.2", "VM: VXS"};
+        String[] vmCodes = {"JS", "LUA", "VXS"};
+        String initVmLabel = "JS".equalsIgnoreCase(project.scriptLanguage) ? vmLabels[0]
+                : ("LUA".equalsIgnoreCase(project.scriptLanguage) ? vmLabels[1] : vmLabels[2]);
+        langDropdown = new VortexMobileUi.VortexDropdown(this, vmLabels, initVmLabel);
+        langDropdown.setMinimumHeight(dp(34));
+        langDropdown.setPadding(dp(10), dp(6), dp(10), dp(6));
+        langDropdown.setOnSelectionListener((idx, val) -> {
+            syncCodeFromEditor();
+            project.scriptLanguage = vmCodes[idx];
+            rebuildSnippetBar();
+            scriptStatusTv.setText("Switched VM to " + describeVm(project.scriptLanguage) + " — tap CHECK SYNTAX.");
+            scriptStatusTv.setTextColor(VortexMobileUi.C_CYAN);
+            saveProjectQuiet();
+        });
+        toolbar.addView(langDropdown, rightMarginLp(6));
+
+        TextView checkBtn = VortexMobileUi.makeButton(this, "✓ CHECK", VortexMobileUi.ButtonVariant.ACCENT, true);
         checkBtn.setOnClickListener(v -> validateCurrentScript());
         toolbar.addView(checkBtn, rightMarginLp(6));
 
-        langToggleBtn = makeChip("LANG: " + project.scriptLanguage, "#10253A", "#00E5FF");
-        langToggleBtn.setOnClickListener(v -> toggleScriptLanguage());
-        toolbar.addView(langToggleBtn, rightMarginLp(6));
-
-        TextView forgeBtn = makeChip("🤖 FORGE AI", "#261B38", "#E040FB");
+        TextView forgeBtn = VortexMobileUi.makeButton(this, "🤖 FORGE AI", VortexMobileUi.ButtonVariant.SECONDARY, true);
         forgeBtn.setOnClickListener(v -> showForgeAiDialog());
         toolbar.addView(forgeBtn, rightMarginLp(6));
 
-        TextView objBtn = makeChip("🧊 .OBJ MESHES", "#1E1B4B", "#818CF8");
+        TextView objBtn = VortexMobileUi.makeButton(this, "🧊 .OBJ MESH", VortexMobileUi.ButtonVariant.SECONDARY, true);
         objBtn.setOnClickListener(v -> showCustomObjEditorDialog());
         toolbar.addView(objBtn, rightMarginLp(6));
 
-        TextView helpBtn = makeChip("📖 API DOCS", "#1E293B", "#38BDF8");
+        TextView helpBtn = VortexMobileUi.makeButton(this, "📖 API DOCS", VortexMobileUi.ButtonVariant.SECONDARY, true);
         helpBtn.setOnClickListener(v -> showApiDocsDialog());
         toolbar.addView(helpBtn);
 
@@ -997,16 +1031,12 @@ public class EditorActivity extends Activity {
         }
     }
 
-    private void toggleScriptLanguage() {
-        syncCodeFromEditor();
-        if ("JS".equalsIgnoreCase(project.scriptLanguage)) project.scriptLanguage = "LUA";
-        else if ("LUA".equalsIgnoreCase(project.scriptLanguage)) project.scriptLanguage = "VXS";
-        else project.scriptLanguage = "JS";
-        langToggleBtn.setText("LANG: " + project.scriptLanguage);
+    private void syncLangDropdownUi() {
+        if (langDropdown == null || project == null) return;
+        int idx = "JS".equalsIgnoreCase(project.scriptLanguage) ? 0
+                : ("LUA".equalsIgnoreCase(project.scriptLanguage) ? 1 : 2);
+        langDropdown.setSelectedIndex(idx, false);
         rebuildSnippetBar();
-        scriptStatusTv.setText("Switched VM to " + describeVm(project.scriptLanguage) + " — tap CHECK SYNTAX to verify.");
-        scriptStatusTv.setTextColor(Color.parseColor("#38BDF8"));
-        saveProjectQuiet();
     }
 
     private boolean validateCurrentScript() {
@@ -1026,22 +1056,23 @@ public class EditorActivity extends Activity {
     private void showForgeAiDialog() {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(dp(16), dp(10), dp(16), dp(6));
 
         TextView info = new TextView(this);
-        info.setText("Inspired by hacvilke/roforge: local-first BYOK + instant Offline Generator! Automatically creates an Undo checkpoint before editing your project.");
-        info.setTextColor(Color.parseColor("#94A3B8"));
+        info.setText("Inspired by hacvilke/roforge: local-first BYOK + instant Offline Generator. Automatically creates an Undo checkpoint before modifying your scene.");
+        info.setTextColor(VortexMobileUi.C_TEXT_MUTED);
         info.setTextSize(11.5f);
         form.addView(info);
 
-        Spinner provSpin = addLabeledSpinner(form, "AI Engine Mode", VortexForgeAgent.PROVIDERS, VortexForgeAgent.PROVIDERS[0]);
-        EditText keyEt = addLabeledEdit(form, "Optional API Key (leave blank for Offline Generator)", "", false);
+        VortexMobileUi.VortexDropdown provSpin = addLabeledSpinner(form, "AI Engine Mode", VortexForgeAgent.PROVIDERS, VortexForgeAgent.PROVIDERS[0]);
+        EditText keyEt = addLabeledEdit(form, "Optional API Key (blank = Offline Generator)", "", false);
         EditText promptEt = addLabeledEdit(form, "What should Forge AI build?", "2D cyber swarm arena with animated drones and auto-aim blaster", false);
 
-        new AlertDialog.Builder(this)
-                .setTitle("🤖 Vortex Forge AI Agent")
-                .setView(form)
-                .setPositiveButton("⚡ Generate (+ Undo Checkpoint)", (d, w) -> {
+        VortexMobileUi.showModal(
+                this,
+                "🤖 Vortex Forge AI Agent",
+                form,
+                "⚡ Generate (+ Undo)",
+                () -> {
                     pushUndoSnapshot();
                     final int pIdx = provSpin.getSelectedItemPosition();
                     final String apiKey = keyEt.getText().toString().trim();
@@ -1049,77 +1080,72 @@ public class EditorActivity extends Activity {
                     new Thread(() -> {
                         try {
                             final String summary = VortexForgeAgent.applyPromptToProject(project, prompt, pIdx, apiKey);
-                            runOnUiThread(() -> {
-                                applyRestoredProject("🤖 " + summary);
-                            });
+                            runOnUiThread(() -> applyRestoredProject("🤖 " + summary));
                         } catch (Exception ex) {
                             runOnUiThread(() -> Toast.makeText(EditorActivity.this, "Forge AI error: " + ex.getMessage(), Toast.LENGTH_LONG).show());
                         }
                     }).start();
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
+                },
+                null,
+                null,
+                "Cancel");
     }
 
     private void showCustomObjEditorDialog() {
-        EditText objEt = new EditText(this);
-        objEt.setTypeface(Typeface.MONOSPACE);
-        objEt.setTextSize(12f);
-        objEt.setMinLines(8);
         String existing = project.customObjMeshes.isEmpty()
                 ? "# Wavefront .obj vertices & faces\nv 0 1 0\nv -1 -1 1\nv 1 -1 1\nv 0 -1 -1\nf 1 2 3\nf 1 3 4\nf 1 4 2\nf 2 4 3\n"
                 : project.customObjMeshes.values().iterator().next();
-        objEt.setText(existing);
+        EditText objEt = VortexMobileUi.createInput(this, existing, false, true);
+        objEt.setTypeface(Typeface.MONOSPACE);
+        objEt.setTextSize(12f);
+        objEt.setMinLines(8);
 
-        new AlertDialog.Builder(this)
-                .setTitle("Custom 3D .OBJ Mesh Asset")
-                .setView(objEt)
-                .setPositiveButton("Save Mesh", (d, w) -> {
+        VortexMobileUi.showModal(
+                this,
+                "Custom 3D .OBJ Mesh Asset",
+                objEt,
+                "Save Mesh",
+                () -> {
                     String key = project.customObjMeshes.isEmpty() ? "custom" : project.customObjMeshes.keySet().iterator().next();
                     project.customObjMeshes.put(key, objEt.getText().toString());
                     viewportSurface.loadProjectForEdit(project);
                     saveProjectQuiet();
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
+                },
+                null,
+                null,
+                "Cancel");
     }
 
     private void showApiDocsDialog() {
         String docs =
-                "=== LUA 5.2 (LuaJ) API (`vortex.*`) ===\n" +
-                "Callbacks:\n" +
-                "  function onStart() end\n" +
-                "  function onUpdate(dt) end\n" +
-                "  function onButton(btn) end -- 'A' or 'B'\n" +
-                "  function onCollide(a, b, tagA, tagB) end\n\n" +
-                "Controls & Physics:\n" +
+                "=== ES6+ JAVASCRIPT (Mozilla Rhino / Web V8) ===\n" +
+                "  class WaveDirector { constructor() {} }\n" +
+                "  function onStart() {}\n" +
+                "  function onUpdate(dt) {}\n" +
+                "  function onButton(btn) {} // 'A' or 'B'\n" +
+                "  function onCollide(a, b, tagA, tagB) {}\n\n" +
+                "Engine API (`vortex.*` or global functions):\n" +
                 "  vortex.joyX(), vortex.joyY(), vortex.btnA(), vortex.btnB()\n" +
-                "  vortex.getX(n), vortex.getY(n), vortex.getZ(n)\n" +
-                "  vortex.setPos(n, x, y [, z])\n" +
-                "  vortex.setVel(n, vx, vy [, vz])\n" +
-                "  vortex.applyImpulse(n, ix, iy)  -- JBox2D!\n" +
-                "  vortex.jump(n, impulse)\n" +
-                "  vortex.noise2D(x, z)            -- FastNoiseLite!\n" +
-                "  vortex.terrainHeight(x, z)      -- 3D Height!\n" +
-                "  vortex.spawn2D(name, tag, prim, x, y, w, h, hex, body)\n" +
-                "  vortex.spawn3D(name, tag, prim, x, y, z, sx, sy, sz, hex, body)\n" +
-                "  vortex.particles(x, y, z, count, hex)\n" +
-                "  vortex.playSound('jump'|'coin'|'laser'|'explosion'|'hit'|'powerup')\n\n" +
-                "=== v3.0 AI, TWEENS & CHIPTUNE ===\n" +
-                "  vortex.chaseAI(seeker, target, speed)   -- Theta* A*!\n" +
-                "  vortex.chaseTagAI('enemy', 'Player', 4.5)\n" +
-                "  vortex.raycast(ox,oy,oz, dx,dy,dz, maxDist)\n" +
-                "  vortex.tweenPos(n, tx,ty,tz, dur, 'BOUNCE', -1)\n" +
-                "  vortex.tweenScale(n, sx,sy,sz, dur, 'ELASTIC', 1)\n" +
+                "  vortex.setPos(n, x, y [, z]) | vortex.setVel(n, vx, vy [, vz])\n" +
+                "  vortex.findNearestTag('Player', 'enemy', 30)\n" +
+                "  vortex.setSpriteAnim('Player', 'knight_1,knight_2', 7)\n" +
+                "  vortex.saveData('best', 500) | vortex.loadNum('best', 0)\n" +
+                "  vortex.chaseTagAI('enemy', 'Player', 4.5)  // Theta* AI\n" +
                 "  vortex.tweenTagYoyo('coin', 0.4, 0.9, 'SINE')\n" +
-                "  vortex.playMusic('CYBERPUNK'|'DUNGEON'|'BOSS'|'SKYCHILL', bpm)\n\n" +
-                "=== VORTEXSCRIPT (.vxs) ===\n" +
-                "Same functions called directly: joyX(), setVel(...), jump(...), playSound(...);";
-        new AlertDialog.Builder(this)
-                .setTitle("Lua 5.2 & VortexScript Reference")
-                .setMessage(docs)
-                .setPositiveButton("Got It", null)
-                .show();
+                "  vortex.raycast(ox,oy,oz, dx,dy,dz, maxDist)\n" +
+                "  vortex.playMusic('CYBERPUNK'|'DUNGEON'|'BOSS'|'SKYCHILL', bpm)\n" +
+                "  vortex.playSound('jump'|'coin'|'laser'|'explosion'|'hit'|'powerup')\n\n" +
+                "=== LUA 5.2 (LuaJ) & VORTEXSCRIPT (.vxs) ===\n" +
+                "Identical `vortex.*` methods in Lua 5.2 and direct globals in .vxs!";
+        VortexMobileUi.showMessageModal(
+                this,
+                "Scripting API Reference (ES6 JS • Lua 5.2 • VXS)",
+                docs,
+                "Got It",
+                null,
+                null,
+                null,
+                null);
     }
 
     // =========================================================================
@@ -1151,9 +1177,7 @@ public class EditorActivity extends Activity {
         LinearLayout compileRow = new LinearLayout(this);
         compileRow.setOrientation(LinearLayout.HORIZONTAL);
 
-        TextView compileJsBtn = makeChip("⚡ COMPILE ➔ ES6 JS", "#26200B", "#FACC15");
-        compileJsBtn.setGravity(Gravity.CENTER);
-        compileJsBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        TextView compileJsBtn = VortexMobileUi.makeButton(this, "⚡ COMPILE ➔ ES6 JS", VortexMobileUi.ButtonVariant.PRIMARY, false);
         compileJsBtn.setOnClickListener(v -> {
             if (project.flowRules.isEmpty()) {
                 Toast.makeText(this, "Add at least 1 Flow rule below first!", Toast.LENGTH_SHORT).show();
@@ -1164,8 +1188,7 @@ public class EditorActivity extends Activity {
             project.scriptLanguage = "JS";
             project.scriptCode = js;
             if (scriptEditor != null) scriptEditor.setText(js);
-            if (langToggleBtn != null) langToggleBtn.setText("LANG: JS");
-            rebuildSnippetBar();
+            syncLangDropdownUi();
             saveProjectQuiet();
             Toast.makeText(this, "✓ Compiled " + project.flowRules.size() + " Flow rules into ES6 JavaScript!", Toast.LENGTH_LONG).show();
         });
@@ -1173,9 +1196,7 @@ public class EditorActivity extends Activity {
         cjLp.rightMargin = dp(6);
         compileRow.addView(compileJsBtn, cjLp);
 
-        TextView compileBtn = makeChip("⚡ COMPILE ➔ LUA 5.2", "#064E3B", "#00E676");
-        compileBtn.setGravity(Gravity.CENTER);
-        compileBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        TextView compileBtn = VortexMobileUi.makeButton(this, "⚡ COMPILE ➔ LUA 5.2", VortexMobileUi.ButtonVariant.SECONDARY, false);
         compileBtn.setOnClickListener(v -> {
             if (project.flowRules.isEmpty()) {
                 Toast.makeText(this, "Add at least 1 Flow rule below first!", Toast.LENGTH_SHORT).show();
@@ -1186,8 +1207,7 @@ public class EditorActivity extends Activity {
             project.scriptLanguage = "LUA";
             project.scriptCode = lua;
             if (scriptEditor != null) scriptEditor.setText(lua);
-            if (langToggleBtn != null) langToggleBtn.setText("LANG: LUA");
-            rebuildSnippetBar();
+            syncLangDropdownUi();
             saveProjectQuiet();
             Toast.makeText(this, "✓ Compiled " + project.flowRules.size() + " Flow rules into Lua 5.2!", Toast.LENGTH_LONG).show();
         });
@@ -1199,9 +1219,9 @@ public class EditorActivity extends Activity {
         builderCard.setOrientation(LinearLayout.VERTICAL);
         builderCard.setPadding(dp(12), dp(10), dp(12), dp(12));
         GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setColor(Color.parseColor("#111A2C"));
-        cardBg.setCornerRadius(dp(10));
-        cardBg.setStroke(dp(1), Color.parseColor("#243656"));
+        cardBg.setColor(VortexMobileUi.C_SURFACE);
+        cardBg.setCornerRadius(dp(11));
+        cardBg.setStroke(dp(1), VortexMobileUi.C_BORDER);
         builderCard.setBackground(cardBg);
         LinearLayout.LayoutParams bcLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -1210,12 +1230,12 @@ public class EditorActivity extends Activity {
 
         TextView addTitle = new TextView(this);
         addTitle.setText("➕ CREATE EVENT ➔ ACTION RULE");
-        addTitle.setTextColor(Color.parseColor("#FFD54F"));
+        addTitle.setTextColor(VortexMobileUi.C_CYAN);
         addTitle.setTextSize(12.5f);
         addTitle.setTypeface(Typeface.DEFAULT_BOLD);
         builderCard.addView(addTitle);
 
-        Spinner evSpin = addLabeledSpinner(builderCard, "WHEN Event Happens:",
+        VortexMobileUi.VortexDropdown evSpin = addLabeledSpinner(builderCard, "WHEN Event Happens:",
                 VortexFlowCompiler.EVENT_LABELS, VortexFlowCompiler.EVENT_LABELS[0]);
 
         LinearLayout evRow = new LinearLayout(this);
@@ -1224,7 +1244,7 @@ public class EditorActivity extends Activity {
         EditText evP2 = addLabeledEditCompact(evRow, "Tag B (e.g. coin / enemy)", "coin");
         builderCard.addView(evRow);
 
-        Spinner actSpin = addLabeledSpinner(builderCard, "DO Game Action:",
+        VortexMobileUi.VortexDropdown actSpin = addLabeledSpinner(builderCard, "DO Game Action:",
                 VortexFlowCompiler.ACTION_LABELS, VortexFlowCompiler.ACTION_LABELS[0]);
 
         LinearLayout actRow = new LinearLayout(this);
@@ -1233,9 +1253,7 @@ public class EditorActivity extends Activity {
         EditText actP2 = addLabeledEditCompact(actRow, "Speed / Force / SFX / BPM", "10");
         builderCard.addView(actRow);
 
-        TextView addRuleBtn = makeChip("＋ ADD RULE TO EVENT SHEET", "#16263D", "#00E5FF");
-        addRuleBtn.setGravity(Gravity.CENTER);
-        addRuleBtn.setPadding(dp(10), dp(10), dp(10), dp(10));
+        TextView addRuleBtn = VortexMobileUi.makeButton(this, "＋ ADD RULE TO EVENT SHEET", VortexMobileUi.ButtonVariant.ACCENT, false);
         addRuleBtn.setOnClickListener(v -> {
             pushUndoSnapshot();
             String evKey = VortexFlowCompiler.EVENT_KEYS[evSpin.getSelectedItemPosition()];
@@ -1245,7 +1263,7 @@ public class EditorActivity extends Activity {
                     actKey, actP1.getText().toString().trim(), actP2.getText().toString().trim()));
             refreshFlowRuleList();
             saveProjectQuiet();
-            Toast.makeText(this, "Added Flow rule!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "✓ Added Flow rule!", Toast.LENGTH_SHORT).show();
         });
         LinearLayout.LayoutParams arLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -1273,17 +1291,14 @@ public class EditorActivity extends Activity {
     private EditText addLabeledEditCompact(LinearLayout row, String label, String val) {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(0, dp(4), dp(6), 0);
+        col.setPadding(0, dp(6), dp(6), 0);
         TextView tv = new TextView(this);
         tv.setText(label);
-        tv.setTextColor(Color.parseColor("#94A3B8"));
+        tv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
         tv.setTextSize(10.5f);
+        tv.setPadding(0, 0, 0, dp(3));
         col.addView(tv);
-        EditText et = new EditText(this);
-        et.setText(val);
-        et.setTextColor(Color.WHITE);
-        et.setTextSize(12.5f);
-        et.setSingleLine(true);
+        EditText et = VortexMobileUi.createInput(this, val, false, false);
         col.addView(et);
         row.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         return et;
@@ -1369,9 +1384,7 @@ public class EditorActivity extends Activity {
         r1.setOrientation(LinearLayout.HORIZONTAL);
         r1.setPadding(0, dp(8), 0, 0);
 
-        TextView commitBtn = makeChip("📤 COMMIT TO LRM", "#064E3B", "#00E676");
-        commitBtn.setGravity(Gravity.CENTER);
-        commitBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        TextView commitBtn = VortexMobileUi.makeButton(this, "📤 COMMIT TO LRM", VortexMobileUi.ButtonVariant.PRIMARY, false);
         commitBtn.setOnClickListener(v -> {
             File dir = exportUnpackedLrmRepo();
             if (dir != null) {
@@ -1385,9 +1398,7 @@ public class EditorActivity extends Activity {
         c1.rightMargin = dp(6);
         r1.addView(commitBtn, c1);
 
-        TextView shareBtn = makeChip("🔑 LRM SHARE KEY", "#16263D", "#00E5FF");
-        shareBtn.setGravity(Gravity.CENTER);
-        shareBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        TextView shareBtn = VortexMobileUi.makeButton(this, "🔑 LRM SHARE KEY", VortexMobileUi.ButtonVariant.ACCENT, false);
         shareBtn.setOnClickListener(v -> {
             File dir = exportUnpackedLrmRepo();
             if (dir != null) {
@@ -1402,9 +1413,7 @@ public class EditorActivity extends Activity {
         r2.setOrientation(LinearLayout.HORIZONTAL);
         r2.setPadding(0, dp(8), 0, 0);
 
-        TextView joinBtn = makeChip("🌐 JOIN PORT KEY", "#261B38", "#B388FF");
-        joinBtn.setGravity(Gravity.CENTER);
-        joinBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        TextView joinBtn = VortexMobileUi.makeButton(this, "🌐 JOIN PORT KEY", VortexMobileUi.ButtonVariant.SECONDARY, false);
         joinBtn.setOnClickListener(v -> {
             String pk = portKeyEt.getText().toString().trim();
             if (pk.isEmpty()) {
@@ -1418,9 +1427,7 @@ public class EditorActivity extends Activity {
         c2.rightMargin = dp(6);
         r2.addView(joinBtn, c2);
 
-        TextView dropBtn = makeChip("📥 WI-FI DROP", "#1E293B", "#FFD54F");
-        dropBtn.setGravity(Gravity.CENTER);
-        dropBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        TextView dropBtn = VortexMobileUi.makeButton(this, "📥 WI-FI DROP", VortexMobileUi.ButtonVariant.SECONDARY, false);
         dropBtn.setOnClickListener(v -> {
             File dir = exportUnpackedLrmRepo();
             if (dir != null) {
@@ -1431,7 +1438,7 @@ public class EditorActivity extends Activity {
         box.addView(r2);
 
         // Row 3: Reload Synced LRM Repo & Inbox Back into Studio!
-        TextView reloadBtn = makeChip("🔄 RELOAD SYNCED LRM REPO & INBOX INTO STUDIO", "#102A43", "#38BDF8");
+        TextView reloadBtn = VortexMobileUi.makeButton(this, "🔄 RELOAD SYNCED LRM REPO & INBOX INTO STUDIO", VortexMobileUi.ButtonVariant.ACCENT, false);
         reloadBtn.setGravity(Gravity.CENTER);
         reloadBtn.setPadding(dp(10), dp(12), dp(10), dp(12));
         reloadBtn.setOnClickListener(v -> {
@@ -1521,24 +1528,23 @@ public class EditorActivity extends Activity {
         // --- SECTION 1: 16-STEP POLYPHONIC CHIPTUNE COMPOSER ---
         TextView musicHead = new TextView(this);
         musicHead.setText("🎵 16-STEP CHIPTUNE MUSIC COMPOSER");
-        musicHead.setTextColor(Color.parseColor("#00E676"));
+        musicHead.setTextColor(VortexMobileUi.C_CYAN);
         musicHead.setTextSize(15.5f);
         musicHead.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(musicHead);
 
         TextView musicSub = new TextView(this);
         musicSub.setText("4-Channel Polyphonic Synth (Square Lead + Triangle Bass + Kick/Hat). Loops in Android APKs, Desktop .exe & HTML5 Web exports with zero MP3 bloat!");
-        musicSub.setTextColor(Color.parseColor("#94A3B8"));
+        musicSub.setTextColor(VortexMobileUi.C_TEXT_MUTED);
         musicSub.setTextSize(11.5f);
         musicSub.setPadding(0, dp(3), 0, dp(8));
         box.addView(musicSub);
 
-        CheckBox musicEnableCb = new CheckBox(this);
-        musicEnableCb.setText("Auto-play Chiptune Soundtrack when game starts (" + project.musicBpm + " BPM)");
-        musicEnableCb.setTextColor(Color.WHITE);
-        musicEnableCb.setChecked(project.musicEnabled);
-        musicEnableCb.setOnCheckedChangeListener((b, checked) -> {
-            project.musicEnabled = checked;
+        VortexMobileUi.VortexToggle musicEnableCb = new VortexMobileUi.VortexToggle(
+                this, "Auto-play Chiptune Soundtrack when game starts (" + project.musicBpm + " BPM)", project.musicEnabled);
+        musicEnableCb.setOnClickListener(v -> {
+            musicEnableCb.setChecked(!musicEnableCb.isChecked());
+            project.musicEnabled = musicEnableCb.isChecked();
             saveProjectQuiet();
         });
         box.addView(musicEnableCb);
@@ -1557,10 +1563,10 @@ public class EditorActivity extends Activity {
                 if (stepBtns[i] != null) {
                     stepBtns[i].setText((i + 1) + ":" + lbl);
                     boolean active = idx > 0;
-                    styleChip(stepBtns[i], active ? "#142E24" : "#162032", active ? "#00E676" : "#334155");
+                    VortexMobileUi.applyButtonVariant(this, stepBtns[i],
+                            active ? VortexMobileUi.ButtonVariant.ACCENT : VortexMobileUi.ButtonVariant.SECONDARY, true);
                 }
             }
-            musicEnableCb.setText("Auto-play Chiptune Soundtrack when game starts (" + project.musicBpm + " BPM)");
         };
 
         String[][] genrePresets = {
@@ -1625,15 +1631,13 @@ public class EditorActivity extends Activity {
         transportRow.setOrientation(LinearLayout.HORIZONTAL);
         transportRow.setPadding(0, dp(8), 0, dp(16));
 
-        TextView playLoopBtn = makeChip("▶ PREVIEW LOOP", "#064E3B", "#00E676");
-        playLoopBtn.setGravity(Gravity.CENTER);
+        TextView playLoopBtn = VortexMobileUi.makeButton(this, "▶ PREVIEW LOOP", VortexMobileUi.ButtonVariant.PRIMARY, false);
         playLoopBtn.setOnClickListener(v -> sfxPreview.startMusicLoop(project.musicPattern, project.musicBpm));
         LinearLayout.LayoutParams plLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         plLp.rightMargin = dp(6);
         transportRow.addView(playLoopBtn, plLp);
 
-        TextView stopLoopBtn = makeChip("■ STOP MUSIC", "#2D161E", "#FF5252");
-        stopLoopBtn.setGravity(Gravity.CENTER);
+        TextView stopLoopBtn = VortexMobileUi.makeButton(this, "■ STOP MUSIC", VortexMobileUi.ButtonVariant.SECONDARY, false);
         stopLoopBtn.setOnClickListener(v -> sfxPreview.stopMusicLoop());
         transportRow.addView(stopLoopBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         box.addView(transportRow);
@@ -1641,25 +1645,25 @@ public class EditorActivity extends Activity {
         // --- SECTION 2: ONE-SHOT ARCADE SFX SYNTH ---
         TextView head = new TextView(this);
         head.setText("🔊 PROCEDURAL RETRO SFX SYNTHESIZER");
-        head.setTextColor(Color.parseColor("#00E5FF"));
-        head.setTextSize(16f);
+        head.setTextColor(VortexMobileUi.C_CYAN);
+        head.setTextSize(15.5f);
         head.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(head);
 
         TextView desc = new TextView(this);
-        desc.setText("Real-time 22.05kHz PCM wave synthesizer bundled inside every exported Android & Desktop game (zero external audio files needed!). Tap any preset to audition or insert into your script:");
-        desc.setTextColor(Color.parseColor("#94A3B8"));
-        desc.setTextSize(12f);
+        desc.setText("Real-time 22.05kHz PCM wave synthesizer bundled inside every exported Android, Desktop & Web game. Tap any preset to audition or insert:");
+        desc.setTextColor(VortexMobileUi.C_TEXT_MUTED);
+        desc.setTextSize(11.5f);
         desc.setPadding(0, dp(4), 0, dp(12));
         box.addView(desc);
 
         String[][] presets = {
-                {"jump", "🚀 JUMP SWEEP", "Rising square/sine arcade jump sweep", "#00E5FF"},
-                {"coin", "🪙 CRYSTAL / COIN", "Dual-tone B5 -> E6 chime pickup", "#FFD740"},
-                {"laser", "⚡ PLASMA LASER", "Fast frequency-drop sci-fi blaster", "#00E676"},
-                {"explosion", "💥 EXPLOSION", "Low-rumble white-noise burst", "#FF5252"},
-                {"hit", "🛡 DAMAGE / HIT", "Crunch impact feedback", "#FF4081"},
-                {"powerup", "✨ LEVEL CLEAR / WARP", "4-note ascending arpeggio fanfare", "#B388FF"}
+                {"jump", "🚀 JUMP SWEEP", "Rising square/sine arcade jump sweep"},
+                {"coin", "🪙 CRYSTAL / COIN", "Dual-tone B5 -> E6 chime pickup"},
+                {"laser", "⚡ PLASMA LASER", "Fast frequency-drop sci-fi blaster"},
+                {"explosion", "💥 EXPLOSION", "Low-rumble white-noise burst"},
+                {"hit", "🛡 DAMAGE / HIT", "Crunch impact feedback"},
+                {"powerup", "✨ LEVEL CLEAR / WARP", "4-note ascending arpeggio fanfare"}
         };
 
         for (String[] pr : presets) {
@@ -1668,38 +1672,40 @@ public class EditorActivity extends Activity {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(12), dp(10), dp(12), dp(10));
             GradientDrawable bg = new GradientDrawable();
-            bg.setColor(Color.parseColor("#131C2E"));
+            bg.setColor(VortexMobileUi.C_SURFACE);
             bg.setCornerRadius(dp(10));
-            bg.setStroke(dp(1), Color.parseColor("#24324B"));
+            bg.setStroke(dp(1), VortexMobileUi.C_BORDER);
             row.setBackground(bg);
 
             LinearLayout txtCol = new LinearLayout(this);
             txtCol.setOrientation(LinearLayout.VERTICAL);
             TextView t1 = new TextView(this);
             t1.setText(pr[1]);
-            t1.setTextColor(Color.parseColor(pr[3]));
+            t1.setTextColor(VortexMobileUi.C_TEXT);
             t1.setTypeface(Typeface.DEFAULT_BOLD);
-            t1.setTextSize(13.5f);
+            t1.setTextSize(13f);
             txtCol.addView(t1);
 
             TextView t2 = new TextView(this);
             t2.setText(pr[2]);
-            t2.setTextColor(Color.parseColor("#94A3B8"));
-            t2.setTextSize(11.5f);
+            t2.setTextColor(VortexMobileUi.C_TEXT_MUTED);
+            t2.setTextSize(11f);
             txtCol.addView(t2);
             row.addView(txtCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-            TextView playBtn = makeChip("▶ PLAY", "#16263D", pr[3]);
+            TextView playBtn = VortexMobileUi.makeButton(this, "▶ PLAY", VortexMobileUi.ButtonVariant.ACCENT, true);
             playBtn.setOnClickListener(v -> sfxPreview.play(pr[0]));
             row.addView(playBtn, rightMarginLp(6));
 
-            TextView insBtn = makeChip("＋ SCRIPT", "#1E293B", "#64748B");
+            TextView insBtn = VortexMobileUi.makeButton(this, "＋ CODE", VortexMobileUi.ButtonVariant.SECONDARY, true);
             insBtn.setOnClickListener(v -> {
-                String call = "LUA".equalsIgnoreCase(project.scriptLanguage)
+                String call = "JS".equalsIgnoreCase(project.scriptLanguage)
+                        ? "\n  vortex.playSound('" + pr[0] + "');\n"
+                        : ("LUA".equalsIgnoreCase(project.scriptLanguage)
                         ? "\n    vortex.playSound('" + pr[0] + "')\n"
-                        : "\n    playSound('" + pr[0] + "');\n";
+                        : "\n    playSound('" + pr[0] + "');\n");
                 scriptEditor.getText().append(call);
-                Toast.makeText(this, "Appended " + pr[0] + " to Script!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "✓ Appended " + pr[0] + " to Script!", Toast.LENGTH_SHORT).show();
             });
             row.addView(insBtn);
 
@@ -1739,9 +1745,7 @@ public class EditorActivity extends Activity {
         box.addView(sub);
 
         // Instant Single-File HTML5 Web Exporter Button!
-        TextView webExportBtn = makeChip("🌐 EXPORT PLAYABLE HTML5 WEB GAME (.HTML)", "#102A43", "#00E5FF");
-        webExportBtn.setGravity(Gravity.CENTER);
-        webExportBtn.setPadding(dp(10), dp(12), dp(10), dp(12));
+        TextView webExportBtn = VortexMobileUi.makeButton(this, "🌐 EXPORT PLAYABLE HTML5 WEB GAME (.HTML)", VortexMobileUi.ButtonVariant.ACCENT, false);
         webExportBtn.setOnClickListener(v -> exportPlayableHtml5Web());
         LinearLayout.LayoutParams webBtnLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -1753,28 +1757,19 @@ public class EditorActivity extends Activity {
         EditText verEt = addLabeledEdit(box, "Version Name", project.versionName, false);
 
         String[] orients = {"landscape", "portrait", "sensor"};
-        Spinner orientSpin = addLabeledSpinner(box, "Screen Orientation", orients, project.orientation);
+        VortexMobileUi.VortexDropdown orientSpin = addLabeledSpinner(box, "Screen Orientation", orients, project.orientation);
 
         String[] glyphs = {"ROCKET", "CUBE", "SWORD", "STAR"};
-        Spinner glyphSpin = addLabeledSpinner(box, "Procedural App Icon Style", glyphs, project.iconGlyph);
+        VortexMobileUi.VortexDropdown glyphSpin = addLabeledSpinner(box, "Procedural App Icon Style", glyphs, project.iconGlyph);
 
-        CheckBox bgBuildCb = new CheckBox(this);
-        bgBuildCb.setText("Run 1-Tap Termux build silently in background");
-        bgBuildCb.setTextColor(Color.WHITE);
-        bgBuildCb.setChecked(true);
+        VortexMobileUi.VortexToggle bgBuildCb = new VortexMobileUi.VortexToggle(this, "Run 1-Tap Termux build silently in background", true);
         box.addView(bgBuildCb);
 
-        CheckBox fromSourceCb = new CheckBox(this);
-        fromSourceCb.setText("Compile full Engine + LuaJ + JBox2D Java sources (javac + d8)");
-        fromSourceCb.setTextColor(Color.WHITE);
-        fromSourceCb.setChecked(false);
+        VortexMobileUi.VortexToggle fromSourceCb = new VortexMobileUi.VortexToggle(this, "Compile full Engine + Rhino ES6 + LuaJ + JBox2D Java sources", false);
         box.addView(fromSourceCb);
 
-        // Primary Universal Build Button (Fits cleanly on 360dp portrait screens!)
-        TextView copyExportBtn = makeChip("🚀 EXPORT + COPY CMD (OPEN TERMUX)", "#00C853", "#69F0AE");
-        copyExportBtn.setTextColor(Color.parseColor("#041A0B"));
-        copyExportBtn.setGravity(Gravity.CENTER);
-        copyExportBtn.setPadding(dp(10), dp(12), dp(10), dp(12));
+        // Primary Universal Build Button (Unified Signature Cyan CTA!)
+        TextView copyExportBtn = VortexMobileUi.makeButton(this, "🚀 EXPORT + COPY CMD (OPEN TERMUX)", VortexMobileUi.ButtonVariant.PRIMARY, false);
         copyExportBtn.setOnClickListener(v -> {
             applyExportFields(titleEt, pkgEt, verEt, orients[orientSpin.getSelectedItemPosition()], glyphs[glyphSpin.getSelectedItemPosition()]);
             runExportAndBuild(false, false);
@@ -1789,8 +1784,7 @@ public class EditorActivity extends Activity {
         row2.setOrientation(LinearLayout.HORIZONTAL);
         row2.setPadding(0, dp(8), 0, 0);
 
-        TextView oneTapBtn = makeChip("⚡ 1-TAP BUILD", "#16263D", "#00E5FF");
-        oneTapBtn.setGravity(Gravity.CENTER);
+        TextView oneTapBtn = VortexMobileUi.makeButton(this, "⚡ 1-TAP BUILD", VortexMobileUi.ButtonVariant.ACCENT, false);
         oneTapBtn.setOnClickListener(v -> {
             applyExportFields(titleEt, pkgEt, verEt, orients[orientSpin.getSelectedItemPosition()], glyphs[glyphSpin.getSelectedItemPosition()]);
             runExportAndBuild(true, bgBuildCb.isChecked(), fromSourceCb.isChecked());
@@ -1799,8 +1793,7 @@ public class EditorActivity extends Activity {
         otLp.rightMargin = dp(6);
         row2.addView(oneTapBtn, otLp);
 
-        TextView permSettingsBtn = makeChip("🔓 PERMISSIONS", "#1E293B", "#FFB300");
-        permSettingsBtn.setGravity(Gravity.CENTER);
+        TextView permSettingsBtn = VortexMobileUi.makeButton(this, "🔓 PERMISSIONS", VortexMobileUi.ButtonVariant.SECONDARY, false);
         permSettingsBtn.setOnClickListener(v -> TermuxBridge.openAppPermissionSettings(this));
         row2.addView(permSettingsBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         box.addView(row2);
@@ -1810,14 +1803,13 @@ public class EditorActivity extends Activity {
         row3.setOrientation(LinearLayout.HORIZONTAL);
         row3.setPadding(0, dp(8), 0, 0);
 
-        TextView storageBtn = makeChip("📂 STORAGE", "#1E293B", "#64748B");
-        storageBtn.setGravity(Gravity.CENTER);
+        TextView storageBtn = VortexMobileUi.makeButton(this, "📂 STORAGE", VortexMobileUi.ButtonVariant.SECONDARY, false);
         storageBtn.setOnClickListener(v -> TermuxBridge.requestAllFilesAccess(this, 402));
         LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         stLp.rightMargin = dp(6);
         row3.addView(storageBtn, stLp);
 
-        TextView installBtn = makeChip("📲 INSTALL APK", "#311B92", "#B388FF");
+        TextView installBtn = VortexMobileUi.makeButton(this, "📲 INSTALL APK", VortexMobileUi.ButtonVariant.SECONDARY, false);
         installBtn.setGravity(Gravity.CENTER);
         installBtn.setOnClickListener(v -> {
             String path = lastExport != null
@@ -1939,8 +1931,14 @@ public class EditorActivity extends Activity {
 
         for (TextView tb : tabButtons) {
             boolean active = mode.equals(tb.getTag());
-            styleChip(tb, active ? "#00B8D4" : "#162032", active ? "#00E5FF" : "#334155");
-            tb.setTextColor(active ? Color.parseColor("#04131A") : Color.WHITE);
+            VortexMobileUi.applyButtonVariant(this, tb,
+                    active ? VortexMobileUi.ButtonVariant.PRIMARY : VortexMobileUi.ButtonVariant.SECONDARY, true);
+            if (active && topTabScroll != null) {
+                topTabScroll.post(() -> {
+                    int targetX = (tb.getLeft() + tb.getRight()) / 2 - topTabScroll.getWidth() / 2;
+                    topTabScroll.smoothScrollTo(Math.max(0, targetX), 0);
+                });
+            }
         }
 
         sceneBottomToolbar.setVisibility("SCENE".equals(mode) ? View.VISIBLE : View.GONE);
@@ -1952,11 +1950,24 @@ public class EditorActivity extends Activity {
         sfxPanel.setVisibility("SFX".equals(mode) ? View.VISIBLE : View.GONE);
         buildPanel.setVisibility("BUILD".equals(mode) ? View.VISIBLE : View.GONE);
 
+        View activePanel = null;
+        if ("SCENE".equals(mode)) activePanel = sceneBottomToolbar;
+        else if ("INSPECTOR".equals(mode)) activePanel = inspectorDrawer;
+        else if ("FLOW".equals(mode)) activePanel = flowPanel;
+        else if ("LRM".equals(mode)) activePanel = lrmPanel;
+        else if ("PIXEL".equals(mode)) activePanel = pixelArtPanel;
+        else if ("SCRIPT".equals(mode)) activePanel = scriptPanel;
+        else if ("SFX".equals(mode)) activePanel = sfxPanel;
+        else if ("BUILD".equals(mode)) activePanel = buildPanel;
+        if (activePanel != null) {
+            VortexMobileUi.animateEntrance(activePanel, 0L);
+        }
+
         if ("FLOW".equals(mode)) refreshFlowRuleList();
 
         if ("PLAY".equals(mode)) {
             if (!validateCurrentScript()) {
-                Toast.makeText(this, "Script syntax error — check Script tab!", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Script syntax error — check Code tab!", Toast.LENGTH_LONG).show();
                 switchMode("SCRIPT");
                 return;
             }
@@ -1996,21 +2007,12 @@ public class EditorActivity extends Activity {
     private EditText addLabeledEdit(LinearLayout parent, String label, String val, boolean numeric) {
         TextView tv = new TextView(this);
         tv.setText(label);
-        tv.setTextColor(Color.parseColor("#94A3B8"));
+        tv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
         tv.setTextSize(11.5f);
-        tv.setPadding(0, dp(6), 0, dp(2));
+        tv.setPadding(0, dp(8), 0, dp(3));
         parent.addView(tv);
 
-        EditText et = new EditText(this);
-        et.setText(val);
-        et.setTextColor(Color.WHITE);
-        et.setTextSize(13f);
-        et.setSingleLine(true);
-        if (numeric) {
-            et.setInputType(InputType.TYPE_CLASS_NUMBER
-                    | InputType.TYPE_NUMBER_FLAG_DECIMAL
-                    | InputType.TYPE_NUMBER_FLAG_SIGNED);
-        }
+        EditText et = VortexMobileUi.createInput(this, val, numeric, false);
         parent.addView(et);
         return et;
     }
@@ -2018,42 +2020,32 @@ public class EditorActivity extends Activity {
     private EditText addCompactNum(LinearLayout row, String label, float val) {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(0, dp(6), dp(5), 0);
         TextView tv = new TextView(this);
         tv.setText(label);
-        tv.setTextColor(Color.parseColor("#94A3B8"));
+        tv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
         tv.setTextSize(10.5f);
+        tv.setPadding(0, 0, 0, dp(3));
         col.addView(tv);
 
-        EditText et = new EditText(this);
-        et.setText(String.format(Locale.US, "%.2f", val));
-        et.setTextColor(Color.WHITE);
-        et.setTextSize(12.5f);
-        et.setSingleLine(true);
-        et.setInputType(InputType.TYPE_CLASS_NUMBER
-                | InputType.TYPE_NUMBER_FLAG_DECIMAL
-                | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        EditText et = VortexMobileUi.createInput(this, String.format(Locale.US, "%.2f", val), true, false);
         col.addView(et);
 
         row.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         return et;
     }
 
-    private Spinner addLabeledSpinner(LinearLayout parent, String label, String[] items, String current) {
+    private VortexMobileUi.VortexDropdown addLabeledSpinner(LinearLayout parent, String label, String[] items, String current) {
         TextView tv = new TextView(this);
         tv.setText(label);
-        tv.setTextColor(Color.parseColor("#94A3B8"));
+        tv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
         tv.setTextSize(11.5f);
-        tv.setPadding(0, dp(6), 0, dp(2));
+        tv.setPadding(0, dp(8), 0, dp(3));
         parent.addView(tv);
 
-        Spinner sp = new Spinner(this);
-        ArrayAdapter<String> ad = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items);
-        sp.setAdapter(ad);
-        for (int i = 0; i < items.length; i++) {
-            if (items[i].equalsIgnoreCase(current)) { sp.setSelection(i); break; }
-        }
-        parent.addView(sp);
-        return sp;
+        VortexMobileUi.VortexDropdown dd = new VortexMobileUi.VortexDropdown(this, items, current);
+        parent.addView(dd);
+        return dd;
     }
 
     private LinearLayout.LayoutParams rightMarginLp(int dpVal) {

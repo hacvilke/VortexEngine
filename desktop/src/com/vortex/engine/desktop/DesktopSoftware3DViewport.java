@@ -123,6 +123,16 @@ public class DesktopSoftware3DViewport extends JPanel {
         cachedTerrainVerts = null;
     }
 
+    public void resetEditorCamera() {
+        editorYawDeg = 35f;
+        editorPitchDeg = 26f;
+        editorDist = 19f;
+        editor2DCamX = 0f;
+        editor2DCamY = 1.5f;
+        editor2DZoom = 18f;
+        repaint();
+    }
+
     public void loadProject(final GameProject project, boolean startPlay) {
         this.activeProject = project;
         this.playing = startPlay;

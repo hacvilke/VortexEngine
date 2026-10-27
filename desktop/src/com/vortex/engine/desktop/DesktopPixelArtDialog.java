@@ -2,19 +2,24 @@ package com.vortex.engine.desktop;
 
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.model.PixelSpriteCodec;
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridLayout;
+import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.awt.geom.RoundRectangle2D;
 import java.util.Map;
+import java.util.function.Supplier;
 import javax.swing.BorderFactory;
-import javax.swing.JButton;
-import javax.swing.JCheckBox;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -23,7 +28,8 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 
 /**
- * Interactive 16x16 Desktop Pixel Art Painter with Mirror-X symmetry & 1-Click Scene Spawning.
+ * Interactive 16x16 Desktop Pixel Art Painter (Embedded Tab + Standalone Modal)
+ * Styled with the unified Vortex Obsidian + Electric Cyan UI system.
  */
 public class DesktopPixelArtDialog extends JDialog {
 
@@ -31,47 +37,66 @@ public class DesktopPixelArtDialog extends JDialog {
         void onSaved(String spriteName, boolean spawnInScene);
     }
 
-    private final int[] pixels = new int[PixelSpriteCodec.SIZE * PixelSpriteCodec.SIZE];
-    private int brushArgb = 0xFF00E5FF;
-    private boolean mirrorX = false;
-
     public DesktopPixelArtDialog(JFrame owner, GameProject project, OnSpriteSaved callback) {
         super(owner, "Vortex 16x16 Pixel Art Sprite Studio", true);
-        setLayout(new BorderLayout(8, 8));
-        getContentPane().setBackground(new Color(13, 19, 32));
+        setContentPane(createEmbeddedPanel(() -> project, (nm, spawn) -> {
+            if (callback != null) callback.onSaved(nm, spawn);
+            dispose();
+        }));
+        pack();
+        setLocationRelativeTo(owner);
+    }
 
+    public static JPanel createEmbeddedPanel(Supplier<GameProject> projectSupplier, OnSpriteSaved callback) {
+        final int[] pixels = new int[PixelSpriteCodec.SIZE * PixelSpriteCodec.SIZE];
+        final int[] brushRef = {0xFF00E5FF};
+        final boolean[] mirrorRef = {false};
+
+        GameProject initProj = projectSupplier.get();
         String initName = "hero_sprite";
         String initEncoded = PixelSpriteCodec.createDefaultKnightSprite();
-        if (!project.customSprites.isEmpty()) {
-            Map.Entry<String, String> first = project.customSprites.entrySet().iterator().next();
+        if (initProj != null && !initProj.customSprites.isEmpty()) {
+            Map.Entry<String, String> first = initProj.customSprites.entrySet().iterator().next();
             initName = first.getKey();
             initEncoded = first.getValue();
         }
         System.arraycopy(PixelSpriteCodec.decodeToArgbPixels(initEncoded), 0, pixels, 0, pixels.length);
 
-        // Top Bar
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
-        top.setBackground(new Color(19, 28, 46));
+        JPanel root = new JPanel(new BorderLayout(0, 6));
+        root.setBackground(DesktopUiKit.C_VOID);
+        root.setBorder(BorderFactory.createEmptyBorder(8, 10, 10, 10));
+
+        // Top Bar (2 clean rows so narrow dock widths never clip Preset dropdown!)
+        JPanel top = new JPanel(new GridLayout(2, 1, 0, 4));
+        top.setBackground(DesktopUiKit.C_PANEL);
+        top.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1),
+                BorderFactory.createEmptyBorder(5, 8, 5, 8)));
+
+        JPanel topRow1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        topRow1.setOpaque(false);
+        JPanel topRow2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        topRow2.setOpaque(false);
 
         JLabel lbl = new JLabel("Sprite ID:");
-        lbl.setForeground(Color.WHITE);
-        top.add(lbl);
+        lbl.setForeground(DesktopUiKit.C_TEXT_MUTED);
+        lbl.setFont(DesktopUiKit.FONT_UI_BOLD);
+        topRow1.add(lbl);
 
-        JTextField nameField = new JTextField(initName, 14);
-        top.add(nameField);
+        JTextField nameField = DesktopUiKit.createField(initName);
+        nameField.setColumns(10);
+        topRow1.add(nameField);
 
-        JCheckBox mirrorCb = new JCheckBox("Mirror-X Symmetry");
-        mirrorCb.setForeground(Color.WHITE);
-        mirrorCb.setOpaque(false);
-        mirrorCb.addActionListener(e -> mirrorX = mirrorCb.isSelected());
-        top.add(mirrorCb);
+        DesktopUiKit.VortexToggle mirrorToggle = new DesktopUiKit.VortexToggle("Mirror-X Symmetry", false);
+        mirrorToggle.setOnChange(() -> mirrorRef[0] = mirrorToggle.isSelected());
+        topRow2.add(mirrorToggle);
 
         JPanel canvas = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                Graphics2D g2 = (Graphics2D) g;
-                int size = Math.min(getWidth(), getHeight()) - 16;
+                Graphics2D g2 = (Graphics2D) g.create();
+                int size = Math.max(64, Math.min(getWidth(), getHeight()) - 14);
                 int ox = (getWidth() - size) / 2;
                 int oy = (getHeight() - size) / 2;
                 float cell = size / (float) PixelSpriteCodec.SIZE;
@@ -81,7 +106,7 @@ public class DesktopPixelArtDialog extends JDialog {
                         int x0 = Math.round(ox + x * cell);
                         int y0 = Math.round(oy + y * cell);
                         int cw = Math.max(1, Math.round(cell));
-                        g2.setColor(((x + y) % 2 == 0) ? new Color(21, 30, 45) : new Color(28, 40, 59));
+                        g2.setColor(((x + y) % 2 == 0) ? new Color(17, 25, 40) : new Color(23, 33, 52));
                         g2.fillRect(x0, y0, cw, cw);
 
                         int argb = pixels[y * PixelSpriteCodec.SIZE + x];
@@ -89,105 +114,129 @@ public class DesktopPixelArtDialog extends JDialog {
                             g2.setColor(new Color((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF));
                             g2.fillRect(x0, y0, cw, cw);
                         }
-                        g2.setColor(new Color(65, 85, 110, 90));
+                        g2.setColor(new Color(45, 62, 90, 95));
                         g2.drawRect(x0, y0, cw, cw);
                     }
                 }
+                g2.setColor(DesktopUiKit.C_BORDER);
+                g2.drawRect(ox, oy, Math.round(cell * PixelSpriteCodec.SIZE), Math.round(cell * PixelSpriteCodec.SIZE));
+                g2.dispose();
             }
         };
-        canvas.setPreferredSize(new Dimension(420, 420));
-        canvas.setBackground(new Color(9, 13, 22));
+        canvas.setPreferredSize(new Dimension(340, 320));
+        canvas.setBackground(DesktopUiKit.C_VOID);
 
+        Runnable paintHelper = () -> canvas.repaint();
         MouseAdapter painter = new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) { paintAt(e); }
+            @Override public void mousePressed(MouseEvent e) { applyBrush(canvas, pixels, brushRef[0], mirrorRef[0], e); }
         };
         canvas.addMouseListener(painter);
         canvas.addMouseMotionListener(new MouseMotionAdapter() {
-            @Override
-            public void mouseDragged(MouseEvent e) { paintAt(e); }
+            @Override public void mouseDragged(MouseEvent e) { applyBrush(canvas, pixels, brushRef[0], mirrorRef[0], e); }
         });
 
-        JButton clearBtn = new JButton("Clear");
+        DesktopUiKit.VortexButton clearBtn = new DesktopUiKit.VortexButton("✕ Clear Grid", DesktopUiKit.Variant.DANGER);
         clearBtn.addActionListener(e -> {
             for (int i = 0; i < pixels.length; i++) pixels[i] = 0;
-            canvas.repaint();
+            paintHelper.run();
         });
-        top.add(clearBtn);
+        topRow2.add(clearBtn);
 
-        JButton knightBtn = new JButton("Knight Preset");
-        knightBtn.addActionListener(e -> {
-            System.arraycopy(PixelSpriteCodec.decodeToArgbPixels(PixelSpriteCodec.createDefaultKnightSprite()), 0, pixels, 0, pixels.length);
-            canvas.repaint();
+        String[] presetLabels = {"Preset: Knight", "Preset: Knight Run 2", "Preset: Cyber Drone", "Preset: Crate", "Preset: Gem"};
+        DesktopUiKit.VortexDropdown presetDrop = new DesktopUiKit.VortexDropdown(presetLabels, presetLabels[0]);
+        presetDrop.setPreferredSize(new Dimension(168, 28));
+        presetDrop.setOnSelect((idx, val) -> {
+            String enc;
+            if (idx == 0) { enc = PixelSpriteCodec.createDefaultKnightSprite(); nameField.setText("knight_1"); }
+            else if (idx == 1) { enc = PixelSpriteCodec.createKnightRunFrame2Sprite(); nameField.setText("knight_2"); }
+            else if (idx == 2) { enc = PixelSpriteCodec.createDroneFrame1Sprite(); nameField.setText("drone_1"); }
+            else if (idx == 3) { enc = PixelSpriteCodec.createCrateSprite(); nameField.setText("crate"); }
+            else { enc = PixelSpriteCodec.createGemSprite(); nameField.setText("gem"); }
+            System.arraycopy(PixelSpriteCodec.decodeToArgbPixels(enc), 0, pixels, 0, pixels.length);
+            paintHelper.run();
         });
-        top.add(knightBtn);
+        topRow1.add(presetDrop);
 
-        JButton crateBtn = new JButton("Crate Preset");
-        crateBtn.addActionListener(e -> {
-            System.arraycopy(PixelSpriteCodec.decodeToArgbPixels(PixelSpriteCodec.createCrateSprite()), 0, pixels, 0, pixels.length);
-            canvas.repaint();
-        });
-        top.add(crateBtn);
+        top.add(topRow1);
+        top.add(topRow2);
+        root.add(top, BorderLayout.NORTH);
+        root.add(canvas, BorderLayout.CENTER);
 
-        add(top, BorderLayout.NORTH);
-        add(canvas, BorderLayout.CENTER);
+        // Palette + Actions
+        JPanel south = new JPanel(new BorderLayout(0, 6));
+        south.setOpaque(false);
 
-        // Palette + Save South Panel
-        JPanel south = new JPanel(new BorderLayout());
-        south.setBackground(new Color(19, 28, 46));
-
-        JPanel pal = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 6));
-        pal.setOpaque(false);
+        JPanel pal = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 4));
+        pal.setBackground(DesktopUiKit.C_PANEL);
+        pal.setBorder(BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1));
         int[] cols = {
                 0xFF00E5FF, 0xFF00E676, 0xFFFFD740, 0xFFFF5252,
                 0xFFFF4081, 0xFF7C4DFF, 0xFFFF9100, 0xFF8D6E63,
                 0xFFFFFFFF, 0xFF94A3B8, 0xFF334155, 0xFF090D16, 0x00000000
         };
         for (int c : cols) {
-            JButton sw = new JButton(c == 0 ? "ERASE" : "  ");
-            if (c != 0) {
-                sw.setBackground(new Color((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF));
-                sw.setOpaque(true);
-                sw.setBorder(BorderFactory.createLineBorder(Color.WHITE, 1));
-            }
-            sw.addActionListener(e -> brushArgb = c);
+            JComponent sw = new JComponent() {
+                {
+                    setPreferredSize(new Dimension(c == 0 ? 58 : 22, 22));
+                    setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                    addMouseListener(new MouseAdapter() {
+                        @Override public void mousePressed(MouseEvent e) {
+                            brushRef[0] = c;
+                            pal.repaint();
+                        }
+                    });
+                }
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    boolean active = (brushRef[0] == c);
+                    RoundRectangle2D rr = new RoundRectangle2D.Float(1, 1, getWidth() - 2, getHeight() - 2, 6, 6);
+                    g2.setColor(c == 0 ? DesktopUiKit.C_SURFACE : new Color((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF));
+                    g2.fill(rr);
+                    g2.setStroke(new BasicStroke(active ? 2.0f : 1.0f));
+                    g2.setColor(active ? DesktopUiKit.C_CYAN : DesktopUiKit.C_BORDER);
+                    g2.draw(rr);
+                    if (c == 0) {
+                        g2.setFont(DesktopUiKit.FONT_UI_BOLD);
+                        g2.setColor(DesktopUiKit.C_TEXT_MUTED);
+                        g2.drawString("ERASE", 5, 15);
+                    }
+                    g2.dispose();
+                }
+            };
             pal.add(sw);
         }
         south.add(pal, BorderLayout.NORTH);
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 6));
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 2));
         actions.setOpaque(false);
 
-        JButton saveOnly = new JButton("Save Asset");
+        DesktopUiKit.VortexButton saveOnly = new DesktopUiKit.VortexButton("Save Sprite Asset", DesktopUiKit.Variant.SECONDARY);
         saveOnly.addActionListener(e -> {
+            GameProject p = projectSupplier.get();
             String nm = nameField.getText().trim().isEmpty() ? "sprite_1" : nameField.getText().trim();
-            project.customSprites.put(nm, PixelSpriteCodec.encodeFromArgbPixels(pixels));
+            p.customSprites.put(nm, PixelSpriteCodec.encodeFromArgbPixels(pixels));
             if (callback != null) callback.onSaved(nm, false);
-            dispose();
         });
         actions.add(saveOnly);
 
-        JButton saveSpawn = new JButton("✓ Save & Spawn in 2D Scene");
-        saveSpawn.setBackground(new Color(0, 200, 83));
-        saveSpawn.setForeground(Color.BLACK);
+        DesktopUiKit.VortexButton saveSpawn = new DesktopUiKit.VortexButton("✓ Save & Spawn in 2D", DesktopUiKit.Variant.PRIMARY);
         saveSpawn.addActionListener(e -> {
+            GameProject p = projectSupplier.get();
             String nm = nameField.getText().trim().isEmpty() ? "sprite_1" : nameField.getText().trim();
-            project.customSprites.put(nm, PixelSpriteCodec.encodeFromArgbPixels(pixels));
+            p.customSprites.put(nm, PixelSpriteCodec.encodeFromArgbPixels(pixels));
             if (callback != null) callback.onSaved(nm, true);
-            dispose();
         });
         actions.add(saveSpawn);
 
         south.add(actions, BorderLayout.SOUTH);
-        add(south, BorderLayout.SOUTH);
-
-        pack();
-        setLocationRelativeTo(owner);
+        root.add(south, BorderLayout.SOUTH);
+        return root;
     }
 
-    private void paintAt(MouseEvent e) {
-        JPanel canvas = (JPanel) e.getComponent();
-        int size = Math.min(canvas.getWidth(), canvas.getHeight()) - 16;
+    private static void applyBrush(JPanel canvas, int[] pixels, int brushArgb, boolean mirrorX, MouseEvent e) {
+        int size = Math.max(64, Math.min(canvas.getWidth(), canvas.getHeight()) - 14);
         int ox = (canvas.getWidth() - size) / 2;
         int oy = (canvas.getHeight() - size) / 2;
         float cell = size / (float) PixelSpriteCodec.SIZE;
