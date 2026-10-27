@@ -1,105 +1,72 @@
-# Vortex Engine v3.0.0 ("Apex Edition") — 2D & 3D Game Engine + Cross-Platform Studio
+# Vortex Engine Studio — v4.0.0 ("Hyperion Edition")
 
-**Create, wire visually with No-Code Flow or Lua 5.2, compose 16-step Chiptune music, paint sprites, simulate Box2D & Theta\* AI, and export real 2D & 3D games to Android (`.apk` via Termux, zero laptop needed!), HTML5 Web (`.html`), Windows PC (`.exe`), and Linux!**
-
----
-
-## Massive New Upgrades in v3.0.0 ("Apex Edition")
-
-1. **⚡ "Vortex Flow" Visual Event-Sheet Builder (No-Code ➔ Lua 5.2 Compiler)**
-   - Build complete 2D & 3D game logic using Construct/GDevelop-style `WHEN [Event] ➔ DO [Action]` cards on phone or PC — then compile **1-to-1 into clean, editable Lua 5.2** with a single tap!
-2. **🧠 Autonomous Theta\* & A\* AI Pathfinding + 2D/3D Raycasting (`xaguzman/pathfinding`, Apache-2.0)**
-   - Dynamic `NavigationGrid` + `ThetaStarGridFinder` obstacle-avoiding enemy navigation (`vortex.chaseAI`, `vortex.chaseTagAI`) + analytical 2D/3D Slab Raycasting (`vortex.raycast`) for line-of-sight and hitscan lasers!
-3. **✨ Pro Easing & Yoyo Animations (`Universal Tween Engine 6.3.3`, Apache-2.0)**
-   - Animate positions, scales, and rotations with Robert Penner curves (`BOUNCE`, `ELASTIC`, `BACK`, `SINE`, `QUAD`, `EXPO`) and infinite Yoyo loops (`vortex.tweenPos`, `vortex.tweenScale`, `vortex.tweenRot`, `vortex.tweenTagYoyo`)!
-4. **🎵 Built-in 16-Step Polyphonic Chiptune Music Composer & Synth**
-   - 4-channel retro tracker (25%-pulse Square Lead + Triangle Bass + Pitch-Sweep Kick + Noise Hi-Hat) with interactive 16-step note grid and 4 instant genre presets (`CYBERPUNK`, `DUNGEON`, `BOSS`, `SKYCHILL`) — zero MP3 asset bloat!
-5. **🌐 1-Click Single-File HTML5 Web Game Exporter (`.html`)**
-   - Exports any 2D or 3D game into a **100% self-contained `.html` file** (Canvas 2D + Perspective 3D Renderer + WebAudio Chiptune & SFX Synth + Mobile Touch D-Pad + WASD Keyboard) ready for **itch.io**, Chrome, Discord, or mobile sharing!
-6. **↶ / ↷ 40-State Undo / Redo History + 10 Built-in Starter Templates**
-   - Includes **Cyber Hunters AI Maze 2D** (Theta\* AI + Tweens + Chiptune + Flow Sheet) and **Neon Citadel Siege 3D** (Universal Tween Crushers + 3D Raycast Boss Battle)!
+**Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
 
-## Core Engine Powerhouses (v2.0 + v3.0)
-- **Lua 5.2 Scripting VM (`LuaJ 3.0.1`, MIT)** alongside **VortexScript (`.vxs`)** — write full Lua 5.2 scripts (`math`, tables, closures, `vortex.*` bindings) or VortexScript in the same project!
-- **Box2D 2D Rigid-Body Physics (`JBox2D 2.2.1.1`, BSD-3)** — realistic tumbling crates, rotational torque, restitution/bounce, friction, impulses (`vortex.applyImpulse`), and sensor triggers!
-- **3D Procedural Worlds (`FastNoiseLite`, MIT)** — generate sunlit 3D mountain & valley heightfield terrains (`TERRAIN` primitive + `vortex.noise2D` / `vortex.terrainHeight` APIs) with 1-tap seed randomization!
-- **Built-in 16×16 Pixel Art Sprite Painter** — paint custom sprites (`CUSTOM_SPRITE`) with Mirror-X symmetry, 14-color neon/retro palette, eraser, and 1-tap scene spawning!
-- **Built-in Procedural SFX Lab** — 22.05kHz real-time PCM wave synthesizer (`jump`, `coin`, `laser`, `explosion`, `hit`, `powerup`) on both Android (`AudioTrack`) and Windows/Linux (`javax.sound.sampled`)!
+## What's New in v4.0.0 ("Hyperion Edition")
 
-### 2. Multi-Platform Desktop Builds (Windows `.exe` + Linux + Android `.apk`)
-- **Android Studio IDE (`VortexEngine-Studio-v2.0.0.apk`)**: Full mobile touchscreen 2D/3D OpenGL ES IDE + on-device Termux `.apk` compiler for creators without a PC.
-- **Windows x64 Studio (`VortexEngine-Studio-Windows-x64.exe`)**: Native Win32 x64 executable with embedded engine & **1-click Standalone Windows `.exe` Game Exporter** (export your own games as `.exe` files without needing a C compiler!).
-- **Linux x86_64 Studio (`VortexEngine-Studio-Linux-x86_64`)** & **Portable Desktop JAR (`VortexEngine-Studio-Desktop-v2.0.0.jar`)**.
-- **Universal `.vortex.json` Project Format**: Start a game on Windows/Linux, transfer to Android & build an `.apk`, or vice versa!
+### 1. ES6+ JavaScript Scripting Runtime (**Mozilla Rhino 1.7.15.1** + Native Browser V8)
+- **Quad-Runtime Scripting Architecture**: Choose per-project between **ES6+ JavaScript (`JS`)**, **Lua 5.2 (`LUA` via LuaJ)**, **Vortex Flow Visual Event-Sheet (`FLOW`)**, or **VortexScript (`VXS`)**:
+  - **ES6+ JavaScript (`JS`)**: Powered on Android (Dalvik/ART bytecode-free interpreter mode) and Desktop JVM by **[Mozilla Rhino 1.7.15.1](https://github.com/mozilla/rhino)** (`MPL-2.0`, 0 CVEs) plus a built-in ES6 class pre-pass — supporting `class` / `constructor` / `extends` / `static`, `let` / `const`, arrow functions (`=>`), template literals (`` `Wave ${n}` ``), `for (const x of arr)`, `Map` / `Set`, object shorthand, and `console.log(...)`.
+  - **Hardened Sandbox & Anti-Freeze Guard**: Custom `ClassShutter` blocks arbitrary Java reflection/process escape while an instruction-count quota (`250,000` ops per hook) cleanly aborts accidental infinite `while(true)` loops without freezing the Studio UI!
+  - **Zero-Transpile Native Web Execution**: On HTML5 export, JavaScript games execute **natively at full V8 / SpiderMonkey JIT speed** in the browser (`0` regex transpilation overhead!).
+- **Dual-Target Visual Event-Sheet (`⚡ Vortex Flow`)**: Visual `WHEN -> DO` rules now compile 1:1 into **clean, readable ES6+ JavaScript** *or* **Lua 5.2** with one tap.
 
-### 3. Mobile Portrait UI & Termux Permission Fixes
-- **Redesigned Responsive Portrait Layout**: Zero text-wrapping or squished buttons on ~360dp portrait phone screens (`MainActivity` 2-row cards & stacked header; `EditorActivity` 2-row header & dedicated full-width syntax status banner).
-- **Clear Termux Build Modes & Samsung One UI / Android 14–16 Permission Helper**:
-  - **Method 1 (Works Immediately — No Special Permission Needed!):** Tap **`🚀 EXPORT PROJECT + COPY BUILD CMD & OPEN TERMUX`** → paste in Termux & press Enter!
-  - **Method 2 (Optional 1-Tap Background Auto-Build):** If Android shows `RUN_COMMAND` not granted (common on Samsung One UI / Android 14+ when Studio was installed before Termux), tap **`🔓 APP PERMISSIONS`** → **Permissions** → **Additional permissions** (or top-right `⋮` → **All permissions**) → enable **`Run commands in Termux environment`**.
-- **Smarter `setup_termux.sh`**: Automatically skips already-installed tools and installs `openjdk-21` cleanly without duplicate JDK downloads.
+### 2. Native Integration with `hacvilke` Open-Source Ecosystem (`lrm`, `lrm-mobile`, & `roforge`)
+- **Serverless P2P Version Control & Cross-Device Sync (`🔄 LRM P2P` Tab & Desktop Hub)** — powered by **[`hacvilke/lrm`](https://github.com/hacvilke/lrm)** & **[`hacvilke/lrm-mobile`](https://github.com/hacvilke/lrm-mobile)**:
+  - **Git/LRM-Friendly Multi-File Project Unpacking (`LrmWorkspaceBridge`)**: Automatically decomposes monolithic `.vortex.json` projects into diff-friendly directory trees (`vortex.manifest.json`, `scripts/main.js`, `scene/entities.json`, `flow/rules.json`, `assets/sprites/*.sprite`, `assets/meshes/*.obj`) for clean per-file Blake3 content-addressed commits and vector-clock merges!
+  - **One-Tap P2P Port Key Sync (`lrm1_...`)**: Commit snapshots, view the DAG commit graph, discover LAN peers via mDNS (`lrm peers`), generate encrypted QUIC/TLS 1.3 Port Keys (`lrm share`), or pull a project straight from your phone to Windows/Linux (`lrm join <PORTKEY> --init`) — zero servers or accounts!
+  - **Zero-Config `inbox/` Asset Drop**: Drop `.obj` 3D meshes, `.sprite` pixel art, or `.js`/`.lua` scripts from any phone/laptop browser via `lrm receive` (`http://<device-ip>:8788`), then tap **Import Repo + Inbox** in Studio to auto-register every dropped asset into your scene!
+  - `setup_termux.sh` now automatically installs Android 14/15/16 PIE-compatible `lrm-mobile` alongside `aapt2`, `d8`, and `apksigner`.
+- **Vortex Forge AI Studio Agent (`🤖 FORGE AI`)** — inspired by **[`hacvilke/roforge`](https://github.com/hacvilke/roforge)**:
+  - **Zero-Backend BYOK + Offline Generator**: Describe any 2D or 3D game mechanic in natural language! Works **100% offline** out-of-the-box via a procedural scene + ES6 JS generator, OR connect your own API key directly over HTTPS to **Groq**, **Google Gemini**, **OpenRouter**, or **OpenAI** — with **automatic Undo Checkpoints** before every AI edit.
 
----
+### 3. Multi-Frame Flipbook Sprite Animation & Cross-Platform Save Storage
+- **Multi-Frame Flipbook Animation**: Entities now support comma-separated frame sequences (`spriteFrames = "knight_1,knight_2"`, `animFps = 8`) plus live runtime switching via `setSpriteAnim(name, "run_1,run_2", 10)` across **Android OpenGL ES 2.0/3.0**, **Desktop 60 FPS Viewport**, and **HTML5 Canvas**!
+- **Persistent Save-Data (`VortexSaveStore`)**: Save high scores, unlocked levels, and player loadouts across sessions with `saveData(key, value)`, `loadData(key, defaultVal)`, and `loadNum(key, defaultNum)` — backed by JSON disk persistence on Android/Desktop and `localStorage` on HTML5 Web!
+- **Spatial Target Queries**: Added `findNearestTag(fromName, tag, maxRange)` for instant auto-aim turrets, roguelite weapons, and homing missiles in 2D and 3D.
 
-## Downloads (GitHub Releases — `v3.0.0`)
-
-| Platform | File | Description |
-|---|---|---|
-| **Android (Phone/Tablet)** | `VortexEngine-Studio-v3.0.0.apk` | Full 2D/3D Mobile Game Engine IDE + Flow + Chiptune + Termux APK & HTML5 Exporter |
-| **HTML5 Web (Instant Play)** | `CyberMazeHunters-Web.html` | Zero-dependency playable HTML5 Web export of *Cyber Hunters: Theta\* AI Maze* |
-| **Windows 10/11 (64-bit)** | `VortexEngine-Studio-Windows-x64.exe` | Native Windows Studio IDE + `.html` / `.exe` / `.jar` / Android Exporter |
-| **Linux (x86_64)** | `VortexEngine-Studio-Linux-x86_64` | Self-contained Linux Desktop Studio IDE (`chmod +x` & run) |
-| **Cross-Platform JVM** | `VortexEngine-Studio-Desktop-v3.0.0.jar` | Portable Desktop Studio (`java -jar VortexEngine-Studio-Desktop-v3.0.0.jar`) |
-| **Sample Game (Android)** | `CyberHuntersAI-Android-Sample.apk` | Standalone Theta\* AI + Tween + Chiptune + Box2D game compiled via Termux pipeline |
-| **Sample Game (Windows)** | `CyberHuntersAI-Windows-Sample.exe` | Standalone Theta\* AI + Tween + Chiptune + Box2D game exported as a Windows `.exe` |
+### 4. Two New Flagship ES6+ JavaScript Game Templates (12 Built-In Templates Total!)
+1. **Neon Survivors Swarm (ES6 JS 2D)**: Bullet-heaven cyber arena written in modern ES6 classes (`WaveDirector`), featuring multi-frame animated Knight & Drone sprites, `findNearestTag` auto-aim plasma bolts, `A = Dash Burst`, `B = Shockwave Nova`, XP gem leveling, and persistent high-score storage!
+2. **Starhull Mecha Raiders 3D (ES6 JS 3D)**: Procedural FastNoiseLite 3D canyon raider with `MechaRig` ES6 class, 3D raycast railgun lock-on, Universal Tween Engine hovering drone squadrons, jump-jets, and persistent best score!
 
 ---
 
-## Lua 5.2 (`vortex.*`) Quick Reference
+## Integrated Open-Source Libraries & Ecosystem Tools
 
-```lua
-function onStart()
-    vortex.setBanner("SMASH THE JBOX2D TOWER!")
-end
-
-function onUpdate(dt)
-    -- Touch joystick on Android OR WASD/Arrow keys on Windows/Linux!
-    vortex.setVel("Player", vortex.joyX() * 9.5, vortex.getVY("Player"))
-end
-
-function onButton(btn)
-    -- Button A / B on Android OR Space/J (A) & Shift/K (B) on PC!
-    if btn == "A" then
-        vortex.jump("Player", 13.0)
-        vortex.playSound("jump")
-    end
-end
-
-function onCollide(a, b, tagA, tagB)
-    if a == "Player" and tagB == "coin" then
-        vortex.particles(vortex.getX(b), vortex.getY(b), vortex.getZ(b), 24, "#FFD740")
-        vortex.destroy(b)
-        vortex.addScore(100)
-        vortex.playSound("coin")
-    end
-end
-```
+| Subsystem | Project / Library | License | Role in Vortex Engine v4.0 |
+| :--- | :--- | :--- | :--- |
+| **ES6+ JavaScript VM** | **[Mozilla Rhino 1.7.15.1](https://github.com/mozilla/rhino)** | MPL-2.0 | Sandboxed ES6+ JS interpreter (`VERSION_ES6`, `ClassShutter`, 250k-op loop guard) on Android & Desktop |
+| **P2P Sync & VCS** | **[hacvilke/lrm](https://github.com/hacvilke/lrm)** & **[lrm-mobile](https://github.com/hacvilke/lrm-mobile)** | Open Source | Serverless P2P encrypted DAG version control, Port Key sync & Wi-Fi `inbox/` asset drops |
+| **BYOK AI Agent Pattern** | **[hacvilke/roforge](https://github.com/hacvilke/roforge)** | Open Source | Zero-backend local BYOK + offline AI scene/ES6 generator with automatic Undo checkpoints |
+| **Lua 5.2 VM** | **[LuaJ 3.0.1](https://github.com/luaj/luaj)** | MIT | Pure-Java Lua 5.2 scripting compiler & runtime |
+| **2D Physics** | **[JBox2D 2.2.1.1](https://github.com/jbox2d/jbox2d)** | BSD-3-Clause | Rigid-body solver, impulses, restitution, friction & triggers |
+| **AI Pathfinding** | **[xaguzman Pathfinding 0.2.6](https://github.com/xaguzman/pathfinding)** | Apache-2.0 | Grid A* & Theta* any-angle line-of-sight obstacle navigation |
+| **Tween Animation** | **[Universal Tween Engine 6.3.3](https://github.com/AurelienRibon/universal-tween-engine)** | Apache-2.0 | Robert Penner easing curves (`SINE`, `BOUNCE`, `ELASTIC`, `BACK`) & yoyo loops |
+| **3D Terrain Noise** | **[FastNoiseLite](https://github.com/Auburn/FastNoiseLite)** | MIT | OpenSimplex2 / Perlin / Cellular FBm procedural 3D heightmaps |
 
 ---
 
-## Building From Source
+## Multi-Platform Build & Test Commands
 
 ```bash
-# Build Android Studio APK (requires JDK 17 + Android SDK 34)
+# 1. Build Android Studio v4.0.0 APK (includes Rhino ES6 + LuaJ + JBox2D + LRM + Forge AI + Termux bundle)
 ./scripts/build_studio_apk.sh
 
-# Build Windows .exe, Linux Binary & Desktop .jar (requires JDK 17 + mingw-w64)
+# 2. Build Windows x64 .EXE, Linux x86_64 Binary & Portable Desktop Fat JAR + Run Headless Suite
 ./scripts/build_desktop.sh
 
-# Run full Termux (--fast & --from-source) + Headless LuaJ/JBox2D/FastNoiseLite tests
+# 3. Run End-to-End Termux APK (--fast & --from-source), Browser JS Check & LRM Verification
 ./scripts/test_termux_pipeline.sh
 ```
 
-See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for open-source attributions.
+### One-Line Termux Mobile Toolchain + `lrm-mobile` Setup (On Android)
+```bash
+pkg update -y && pkg install -y curl && bash /sdcard/Download/VortexEngine/setup_termux.sh
+```
+
+---
+
+## License
+Released under the **MIT License** (with bundled permissively licensed open-source libraries under MIT, BSD-3-Clause, Apache-2.0, and MPL-2.0 unmodified JAR binary library).

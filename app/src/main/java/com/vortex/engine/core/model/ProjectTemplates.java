@@ -10,6 +10,8 @@ import com.vortex.engine.core.flow.VortexFlowCompiler;
 public class ProjectTemplates {
 
     public static final String[] TEMPLATE_KEYS = {
+            "NEON_SURVIVORS_JS_2D",
+            "STARHULL_MECHA_JS_3D",
             "CYBER_MAZE_AI_2D",
             "CITADEL_TWEEN_3D",
             "ANGRY_BOX2D_LUA",
@@ -23,20 +25,24 @@ public class ProjectTemplates {
     };
 
     public static final String[] TEMPLATE_NAMES = {
-            "2D AI Maze: Cyber Hunters (Theta* Pathfinding + Chiptune + Tweens)",
-            "3D Siege: Neon Citadel (Universal Tween Engine + Raycast + Boss Synth)",
+            "2D Rogue-Lite: Neon Survivors Swarm (ES6 JS • Rhino + Animated Sprites + Auto-Aim)",
+            "3D Mecha Combat: Starhull Raiders (ES6 JS • Rhino + 3D Terrain + Railgun)",
+            "2D AI Maze: Cyber Hunters (Lua 5.2 + Theta* Pathfinding + Chiptune)",
+            "3D Siege: Neon Citadel (Lua 5.2 + Universal Tween Engine + Raycast)",
             "2D Physics: Angry Crates Siege (Lua 5.2 + JBox2D Rigid-Body)",
             "3D World: Procedural Frontier (Lua 5.2 + FastNoiseLite Terrain)",
             "3D Sci-Fi: Neon Horizon Runner (Custom .obj Starfighter)",
             "3D Parkour: Sky Islands Adventure (3D Physics & Relics)",
             "2D Action: Starbound Cavern (Platformer + Slime AI)",
             "2D Arcade: Nova Blaster (Space Shooter + Plasma Lasers)",
-            "3D Sandbox: Blank 3D Project (Lua 5.2)",
-            "2D Sandbox: Blank 2D Project (Lua 5.2 + JBox2D)"
+            "3D Sandbox: Blank 3D Project (Lua 5.2 / ES6 JS)",
+            "2D Sandbox: Blank 2D Project (Lua 5.2 / ES6 JS + JBox2D)"
     };
 
     public static GameProject create(String templateKey, String title, String pkgName) {
         switch (templateKey) {
+            case "NEON_SURVIVORS_JS_2D":    return buildNeonSurvivorsJs2D(title, pkgName);
+            case "STARHULL_MECHA_JS_3D":    return buildStarhullMechaJs3D(title, pkgName);
             case "CYBER_MAZE_AI_2D":        return buildCyberMazeAI2D(title, pkgName);
             case "CITADEL_TWEEN_3D":        return buildCitadelTween3D(title, pkgName);
             case "ANGRY_BOX2D_LUA":         return buildAngryCratesBox2D(title, pkgName);
@@ -725,6 +731,287 @@ public class ProjectTemplates {
                 "        vortex.setPos('Player', 0, 2.0, 6.0)\n" +
                 "    end\n" +
                 "end\n";
+        return p;
+    }
+
+    private static GameProject buildNeonSurvivorsJs2D(String title, String pkgName) {
+        GameProject p = new GameProject();
+        p.title = title;
+        p.packageName = pkgName;
+        p.dimensionMode = "2D";
+        p.scriptLanguage = "JS";
+        p.useBox2D = true;
+        p.gravityX = 0f;
+        p.gravityY = 0f;
+        p.cameraMode = "FOLLOW";
+        p.cameraTargetName = "Player";
+        p.zoom2D = 16.0f;
+        p.skyColorHex = "#060913";
+        p.iconBgHex = "#091022";
+        p.iconAccentHex = "#00E676";
+        p.iconGlyph = "STAR";
+        p.musicEnabled = true;
+        p.musicBpm = 138;
+        p.musicPattern = ChiptuneGenerator.PRESET_CYBERPUNK;
+
+        p.customSprites.put("knight_1", PixelSpriteCodec.createDefaultKnightSprite());
+        p.customSprites.put("knight_2", PixelSpriteCodec.createKnightRunFrame2Sprite());
+        p.customSprites.put("drone_1", PixelSpriteCodec.createDroneFrame1Sprite());
+        p.customSprites.put("drone_2", PixelSpriteCodec.createDroneFrame2Sprite());
+        p.customSprites.put("gem", PixelSpriteCodec.createGemSprite());
+
+        // Arena Bounds + Tactical Pillars for Theta* Pathfinding
+        p.entities.add(Entity.create2D("ArenaN", "solid", "RECT", 0f, 11f, 30f, 1f, "#182B49", "STATIC"));
+        p.entities.add(Entity.create2D("ArenaS", "solid", "RECT", 0f, -11f, 30f, 1f, "#182B49", "STATIC"));
+        p.entities.add(Entity.create2D("ArenaW", "solid", "RECT", -14.5f, 0f, 1f, 23f, "#182B49", "STATIC"));
+        p.entities.add(Entity.create2D("ArenaE", "solid", "RECT", 14.5f, 0f, 1f, 23f, "#182B49", "STATIC"));
+
+        float[][] pillars = {{-5.5f, 4.5f}, {5.5f, 4.5f}, {-5.5f, -4.5f}, {5.5f, -4.5f}};
+        for (int i = 0; i < pillars.length; i++) {
+            p.entities.add(Entity.create2D("Pillar_" + i, "solid", "RECT", pillars[i][0], pillars[i][1], 2.1f, 2.1f, "#004D61", "STATIC"));
+        }
+
+        Entity player = Entity.create2D("Player", "player", "CUSTOM_SPRITE", 0f, 0f, 1.38f, 1.38f, "#00E5FF", "DYNAMIC");
+        player.customSpriteName = "knight_1";
+        player.spriteFrames = "knight_1,knight_2";
+        player.animFps = 7.5f;
+        p.entities.add(player);
+
+        for (int i = 0; i < 6; i++) {
+            double ang = i * Math.PI * 2.0 / 6.0;
+            Entity drone = Entity.create2D("Drone_" + i, "enemy", "CUSTOM_SPRITE",
+                    (float) Math.cos(ang) * 9.5f, (float) Math.sin(ang) * 7.5f, 1.25f, 1.25f, "#FF5252", "DYNAMIC");
+            drone.customSpriteName = "drone_1";
+            drone.spriteFrames = "drone_1,drone_2";
+            drone.animFps = 9.5f;
+            p.entities.add(drone);
+        }
+
+        for (int i = 0; i < 6; i++) {
+            double ang = i * Math.PI * 2.0 / 6.0 + 0.5;
+            Entity gem = Entity.create2D("Gem_" + i, "coin", "CUSTOM_SPRITE",
+                    (float) Math.cos(ang) * 5.0f, (float) Math.sin(ang) * 4.0f, 0.9f, 0.9f, "#00E676", "STATIC");
+            gem.customSpriteName = "gem";
+            gem.isTrigger = true;
+            p.entities.add(gem);
+        }
+
+        p.scriptCode =
+                "// Neon Survivors Swarm 2D — Powered by Mozilla Rhino ES6+ JS & Native Browser V8!\n" +
+                "class SwarmDirector {\n" +
+                "  constructor() {\n" +
+                "    this.wave = 1;\n" +
+                "    this.level = 1;\n" +
+                "    this.xp = 0;\n" +
+                "    this.fireTimer = 0;\n" +
+                "    this.spawnTimer = 0;\n" +
+                "    this.novaCd = 0;\n" +
+                "    this.seq = 100;\n" +
+                "    this.best = vortex.loadNum('survivorsBest', 0);\n" +
+                "  }\n" +
+                "  fireInterval() { return Math.max(0.16, 0.52 - (this.level - 1) * 0.06); }\n" +
+                "  hud() {\n" +
+                "    vortex.setBanner(`NEON SURVIVORS [ES6 JS] • LVL ${this.level} • WAVE ${this.wave} • BEST ${this.best}`);\n" +
+                "  }\n" +
+                "}\n\n" +
+                "const dir = new SwarmDirector();\n\n" +
+                "function onStart() {\n" +
+                "  vortex.setFixedRotation('Player', true);\n" +
+                "  vortex.playMusic('CYBERPUNK', 138);\n" +
+                "  vortex.tweenTagYoyo('coin', 0.28, 0.85, 'SINE');\n" +
+                "  dir.hud();\n" +
+                "}\n\n" +
+                "function onUpdate(dt) {\n" +
+                "  if (!vortex.exists('Player')) return;\n" +
+                "  dir.novaCd = Math.max(0, dir.novaCd - dt);\n" +
+                "  vortex.setVel('Player', vortex.joyX() * 8.6, vortex.joyY() * 8.6);\n" +
+                "  vortex.chaseTagAI('enemy', 'Player', 3.9 + dir.wave * 0.25);\n\n" +
+                "  // Auto-Aiming Plasma Weapon targeting closest Theta* Cyber-Drone!\n" +
+                "  dir.fireTimer += dt;\n" +
+                "  if (dir.fireTimer >= dir.fireInterval()) {\n" +
+                "    dir.fireTimer = 0;\n" +
+                "    const nearest = vortex.findNearestTag('Player', 'enemy');\n" +
+                "    if (nearest) {\n" +
+                "      const px = vortex.getX('Player'), py = vortex.getY('Player');\n" +
+                "      const dx = vortex.getX(nearest) - px, dy = vortex.getY(nearest) - py;\n" +
+                "      const len = Math.sqrt(dx * dx + dy * dy) || 1;\n" +
+                "      const b = `Bolt_${++dir.seq}`;\n" +
+                "      vortex.spawn2D(b, 'projectile', 'CIRCLE', px, py, 0.42, 0.42, '#00E5FF', 'KINEMATIC');\n" +
+                "      vortex.setVel(b, (dx / len) * 18.5, (dy / len) * 18.5);\n" +
+                "      vortex.playSound('laser');\n" +
+                "    }\n" +
+                "  }\n\n" +
+                "  // Endless Wave Spawner\n" +
+                "  dir.spawnTimer += dt;\n" +
+                "  if (dir.spawnTimer >= 2.8 && vortex.countByTag('enemy') < 12) {\n" +
+                "    dir.spawnTimer = 0;\n" +
+                "    dir.wave = 1 + Math.floor(vortex.time() / 15);\n" +
+                "    const ang = vortex.rand(0, 6.283);\n" +
+                "    const nm = `Drone_${++dir.seq}`;\n" +
+                "    vortex.spawn2D(nm, 'enemy', 'CUSTOM_SPRITE', Math.cos(ang) * 10.5, Math.sin(ang) * 8.0, 1.25, 1.25, '#FF5252', 'DYNAMIC');\n" +
+                "    vortex.setSpriteAnim(nm, 'drone_1,drone_2', 9.5);\n" +
+                "    dir.hud();\n" +
+                "  }\n" +
+                "}\n\n" +
+                "function onButton(btn) {\n" +
+                "  if (!vortex.exists('Player')) return;\n" +
+                "  if (btn === 'A' && dir.novaCd <= 0) {\n" +
+                "    dir.novaCd = 2.0;\n" +
+                "    const px = vortex.getX('Player'), py = vortex.getY('Player');\n" +
+                "    vortex.tweenScale('Player', 1.85, 1.85, 1.0, 0.24, 'ELASTIC', 1);\n" +
+                "    vortex.particles(px, py, 0, 36, '#00E676');\n" +
+                "    vortex.shake(0.35, 0.22);\n" +
+                "    vortex.playSound('powerup');\n" +
+                "    for (let k = 0; k < 8; k++) {\n" +
+                "      const a = (k / 8) * Math.PI * 2;\n" +
+                "      const b = `Nova_${++dir.seq}`;\n" +
+                "      vortex.spawn2D(b, 'projectile', 'CIRCLE', px, py, 0.45, 0.45, '#00E676', 'KINEMATIC');\n" +
+                "      vortex.setVel(b, Math.cos(a) * 16, Math.sin(a) * 16);\n" +
+                "    }\n" +
+                "  }\n" +
+                "}\n\n" +
+                "function onCollide(a, b, tagA, tagB) {\n" +
+                "  if ((tagA === 'projectile' && tagB === 'enemy') || (tagB === 'projectile' && tagA === 'enemy')) {\n" +
+                "    const en = tagA === 'enemy' ? a : b;\n" +
+                "    const ex = vortex.getX(en), ey = vortex.getY(en);\n" +
+                "    vortex.particles(ex, ey, 0, 22, '#FF5252');\n" +
+                "    vortex.destroy(a); vortex.destroy(b);\n" +
+                "    const gem = `Gem_${++dir.seq}`;\n" +
+                "    vortex.spawn2D(gem, 'coin', 'CIRCLE', ex, ey, 0.62, 0.62, '#00E676', 'STATIC');\n" +
+                "    const sc = vortex.addScore(100);\n" +
+                "    if (sc > dir.best) { dir.best = sc; vortex.saveData('survivorsBest', sc); }\n" +
+                "    vortex.playSound('explosion');\n" +
+                "    dir.hud();\n" +
+                "    return;\n" +
+                "  }\n" +
+                "  const other = tagA === 'player' ? b : (tagB === 'player' ? a : null);\n" +
+                "  const oTag  = tagA === 'player' ? tagB : tagA;\n" +
+                "  if (!other) return;\n" +
+                "  if (oTag === 'coin') {\n" +
+                "    vortex.particles(vortex.getX(other), vortex.getY(other), 0, 18, '#00E676');\n" +
+                "    vortex.destroy(other);\n" +
+                "    vortex.addScore(50);\n" +
+                "    dir.xp += 1;\n" +
+                "    if (dir.xp >= dir.level * 3) { dir.level += 1; vortex.playSound('powerup'); }\n" +
+                "    else vortex.playSound('coin');\n" +
+                "    dir.hud();\n" +
+                "  } else if (oTag === 'enemy') {\n" +
+                "    vortex.addHealth(-15);\n" +
+                "    vortex.shake(0.45, 0.22);\n" +
+                "    vortex.playSound('hit');\n" +
+                "    vortex.destroy(other);\n" +
+                "    if (vortex.getHealth() <= 0) {\n" +
+                "      vortex.setBanner(`SWARM OVERRUN! FINAL SCORE: ${vortex.getScore()} (BEST: ${dir.best})`);\n" +
+                "      vortex.destroy('Player');\n" +
+                "    }\n" +
+                "  }\n" +
+                "}\n";
+        return p;
+    }
+
+    private static GameProject buildStarhullMechaJs3D(String title, String pkgName) {
+        GameProject p = new GameProject();
+        p.title = title;
+        p.packageName = pkgName;
+        p.dimensionMode = "3D";
+        p.scriptLanguage = "JS";
+        p.terrainSeed = 4096;
+        p.terrainFreq = 0.055f;
+        p.skyColorHex = "#070B18";
+        p.ambientColorHex = "#24345A";
+        p.fogEnabled = true;
+        p.fogNear = 22f;
+        p.fogFar = 84f;
+        p.cameraMode = "FOLLOW";
+        p.cameraTargetName = "Player";
+        p.cameraDistance = 13.5f;
+        p.cameraHeight = 6.8f;
+        p.iconBgHex = "#0B132B";
+        p.iconAccentHex = "#38BDF8";
+        p.iconGlyph = "ROCKET";
+        p.musicEnabled = true;
+        p.musicBpm = 142;
+        p.musicPattern = ChiptuneGenerator.PRESET_BOSS;
+
+        Entity terrain = Entity.create3D("StarhullCanyon", "solid", "TERRAIN", 0f, 0f, 0f, 75f, 9.0f, 75f, "#1E3A5F", "STATIC");
+        terrain.checkerTexture = true;
+        terrain.secondaryColorHex = "#0F1E36";
+        p.entities.add(terrain);
+
+        Entity mecha = Entity.create3D("Player", "player", "CUBE", 0f, 5.5f, 8f, 1.35f, 1.5f, 1.35f, "#00E5FF", "DYNAMIC");
+        p.entities.add(mecha);
+
+        for (int i = 0; i < 6; i++) {
+            double ang = i * Math.PI * 2.0 / 6.0;
+            float rx = (float) Math.cos(ang) * 14f;
+            float rz = (float) Math.sin(ang) * 14f;
+            Entity walker = Entity.create3D("HullWalker_" + i, "enemy", "PYRAMID", rx, 7f, rz, 1.5f, 2.0f, 1.5f, "#FF1744", "DYNAMIC");
+            walker.spinY = 110f;
+            p.entities.add(walker);
+
+            Entity cell = Entity.create3D("FusionCell_" + i, "coin", "SPHERE", rx * 0.55f, 6.2f, rz * 0.55f, 0.9f, 0.9f, 0.9f, "#FFD54F", "STATIC");
+            cell.isTrigger = true;
+            p.entities.add(cell);
+        }
+
+        p.scriptCode =
+                "// Starhull Mecha Raiders 3D — ES6+ JavaScript (Mozilla Rhino + 3D Terrain + Auto-Lock Railgun)\n" +
+                "class MechaSystem {\n" +
+                "  constructor() {\n" +
+                "    this.railCd = 0;\n" +
+                "    this.best = vortex.loadNum('starhullBest', 0);\n" +
+                "  }\n" +
+                "}\n" +
+                "const sys = new MechaSystem();\n\n" +
+                "function onStart() {\n" +
+                "  vortex.playMusic('BOSS', 142);\n" +
+                "  vortex.tweenTagYoyo('coin', 0.7, 0.95, 'SINE');\n" +
+                "  vortex.setBanner(`STARHULL MECHA 3D [ES6 JS] • A=JUMP JETS • B=LOCK RAILGUN (BEST ${sys.best})`);\n" +
+                "}\n\n" +
+                "function onUpdate(dt) {\n" +
+                "  if (!vortex.exists('Player')) return;\n" +
+                "  sys.railCd = Math.max(0, sys.railCd - dt);\n" +
+                "  vortex.setVel('Player', vortex.joyX() * 10.2, vortex.getVY('Player'), -vortex.joyY() * 10.2);\n" +
+                "  vortex.chaseTagAI('enemy', 'Player', 4.6);\n" +
+                "}\n\n" +
+                "function onButton(btn) {\n" +
+                "  if (!vortex.exists('Player')) return;\n" +
+                "  if (btn === 'A') {\n" +
+                "    vortex.jump('Player', 13.5);\n" +
+                "    vortex.particles(vortex.getX('Player'), vortex.getY('Player') - 0.6, vortex.getZ('Player'), 16, '#38BDF8');\n" +
+                "  } else if (btn === 'B' && sys.railCd <= 0) {\n" +
+                "    sys.railCd = 0.35;\n" +
+                "    vortex.playSound('laser');\n" +
+                "    const locked = vortex.findNearestTag('Player', 'enemy');\n" +
+                "    if (locked && vortex.distance('Player', locked) < 28) {\n" +
+                "      const tx = vortex.getX(locked), ty = vortex.getY(locked), tz = vortex.getZ(locked);\n" +
+                "      vortex.particles(tx, ty, tz, 32, '#00E5FF');\n" +
+                "      vortex.destroy(locked);\n" +
+                "      vortex.shake(0.38, 0.20);\n" +
+                "      vortex.playSound('explosion');\n" +
+                "      const sc = vortex.addScore(250);\n" +
+                "      if (sc > sys.best) { sys.best = sc; vortex.saveData('starhullBest', sc); }\n" +
+                "      if (vortex.countByTag('enemy') === 0) {\n" +
+                "        vortex.setBanner(`SECTOR CLEARED! ALL HULL WALKERS DESTROYED! SCORE: ${sc}`);\n" +
+                "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}\n\n" +
+                "function onCollide(a, b, tagA, tagB) {\n" +
+                "  const other = tagA === 'player' ? b : (tagB === 'player' ? a : null);\n" +
+                "  const oTag  = tagA === 'player' ? tagB : tagA;\n" +
+                "  if (!other) return;\n" +
+                "  if (oTag === 'coin') {\n" +
+                "    vortex.particles(vortex.getX(other), vortex.getY(other), vortex.getZ(other), 22, '#FFD54F');\n" +
+                "    vortex.destroy(other);\n" +
+                "    vortex.addScore(100);\n" +
+                "    vortex.playSound('coin');\n" +
+                "  } else if (oTag === 'enemy') {\n" +
+                "    vortex.addHealth(-20);\n" +
+                "    vortex.shake(0.48, 0.24);\n" +
+                "    vortex.playSound('hit');\n" +
+                "  }\n" +
+                "}\n";
         return p;
     }
 }

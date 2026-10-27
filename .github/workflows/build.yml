@@ -1,4 +1,4 @@
-name: Vortex Engine v3.0 Multi-Platform Build (Android APK + Windows EXE + Linux + HTML5 Web)
+name: Vortex Engine v4.0 Multi-Platform Build (Android APK + Windows EXE + Linux + HTML5 Web)
 
 on:
   push:
@@ -23,14 +23,15 @@ jobs:
       - name: Set up Android SDK 34
         uses: android-actions/setup-android@v3
 
-      - name: Install Android Build-Tools 34.0.0 & MinGW-w64 Windows Cross-Compiler
+      - name: Install Android Build-Tools 34.0.0, MinGW-w64 & hacvilke/lrm CLI
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 zip unzip file
+          sudo apt-get install -y gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 zip unzip file curl
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
+          curl -fsSL https://raw.githubusercontent.com/hacvilke/lrm/main/scripts/install.sh | sh || true
 
-      - name: Build Android Studio v3.0.0 APK
+      - name: Build Android Studio v4.0.0 APK
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
@@ -40,23 +41,26 @@ jobs:
       - name: Build Windows x64 .EXE, Linux x86_64 Binary & Desktop .JAR
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$HOME/.local/bin:$PATH"
           ./scripts/build_desktop.sh
 
-      - name: Verify Termux APK Pipeline (--fast & --from-source), HTML5 Export & Headless Tests
+      - name: Verify Termux APK Pipeline (--fast & --from-source), HTML5 ES6 Export & Headless Tests
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export PATH="$HOME/.local/bin:$PATH"
           ./scripts/test_termux_pipeline.sh
 
       - name: Upload Multi-Platform Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: VortexEngine-v3.0.0-All-Platforms
+          name: VortexEngine-v4.0.0-All-Platforms
           path: |
-            dist/VortexEngine-Studio-v3.0.0.apk
+            dist/VortexEngine-Studio-v4.0.0.apk
             dist/VortexEngine-Studio-Windows-x64.exe
             dist/VortexEngine-Studio-Linux-x86_64
-            dist/VortexEngine-Studio-Desktop-v3.0.0.jar
-            dist/CyberHuntersAI-Android-Sample.apk
-            dist/CyberHuntersAI-Windows-Sample.exe
-            dist/CyberMazeHunters-Web.html
+            dist/VortexEngine-Studio-Desktop-v4.0.0.jar
+            dist/NeonSurvivorsSwarm-Android-Sample.apk
+            dist/NeonSurvivorsSwarm-Windows-Sample.exe
+            dist/NeonSurvivorsSwarm-Web.html
+            dist/StarhullMecha3D-Web.html

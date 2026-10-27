@@ -33,11 +33,14 @@ import com.vortex.engine.core.audio.ChiptuneGenerator;
 import com.vortex.engine.core.audio.SynthAudioEngine;
 import com.vortex.engine.core.export.Html5WebExporter;
 import com.vortex.engine.core.flow.VortexFlowCompiler;
+import com.vortex.engine.core.forge.VortexForgeAgent;
+import com.vortex.engine.core.lrm.LrmWorkspaceBridge;
 import com.vortex.engine.core.model.Entity;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.model.PixelSpriteCodec;
 import com.vortex.engine.core.render.VortexGLRenderer;
 import com.vortex.engine.core.script.VortexScriptEngine;
+import com.vortex.engine.core.storage.VortexSaveStore;
 import com.vortex.engine.core.ui.VortexGameSurfaceView;
 import android.os.Environment;
 import java.io.File;
@@ -79,6 +82,8 @@ public class EditorActivity extends Activity {
     private LinearLayout snippetBar;
     private ScrollView flowPanel;
     private LinearLayout flowRuleListContainer;
+    private ScrollView lrmPanel;
+    private TextView lrmLogTv;
     private ScrollView sfxPanel;
     private ScrollView buildPanel;
     private TextView buildLogTv;
@@ -110,6 +115,7 @@ public class EditorActivity extends Activity {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        VortexSaveStore.setSaveRootDir(new File(getFilesDir(), "vortex_saves"));
 
         String id = getIntent().getStringExtra(EXTRA_PROJECT_ID);
         project = ProjectRepository.loadProject(this, id);
@@ -208,6 +214,10 @@ public class EditorActivity extends Activity {
         workspace.addView(flowPanel, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
+        lrmPanel = buildLrmSyncPanel();
+        workspace.addView(lrmPanel, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
         sfxPanel = buildSfxLabPanel();
         workspace.addView(sfxPanel, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -298,6 +308,7 @@ public class EditorActivity extends Activity {
                 {"SCRIPT", "📜 SCRIPT"},
                 {"PIXEL", "🎨 PIXEL"},
                 {"SFX", "🎵 MUSIC/SFX"},
+                {"LRM", "🔄 LRM P2P"},
                 {"PLAY", "▶ PLAY"},
                 {"BUILD", "📦 EXPORT"}
         };
@@ -882,6 +893,10 @@ public class EditorActivity extends Activity {
         langToggleBtn.setOnClickListener(v -> toggleScriptLanguage());
         toolbar.addView(langToggleBtn, rightMarginLp(6));
 
+        TextView forgeBtn = makeChip("🤖 FORGE AI", "#261B38", "#E040FB");
+        forgeBtn.setOnClickListener(v -> showForgeAiDialog());
+        toolbar.addView(forgeBtn, rightMarginLp(6));
+
         TextView objBtn = makeChip("🧊 .OBJ MESHES", "#1E1B4B", "#818CF8");
         objBtn.setOnClickListener(v -> showCustomObjEditorDialog());
         toolbar.addView(objBtn, rightMarginLp(6));
@@ -895,7 +910,7 @@ public class EditorActivity extends Activity {
 
         // Row 2: Dedicated Full-Width Syntax Status Bar (Fixes Screenshot #1!)
         scriptStatusTv = new TextView(this);
-        scriptStatusTv.setText("✓ Syntax Ready (" + ("LUA".equalsIgnoreCase(project.scriptLanguage) ? "Lua 5.2 LuaJ VM" : "VortexScript VM") + ")");
+        scriptStatusTv.setText("✓ Syntax Ready (" + describeVm(project.scriptLanguage) + ")");
         scriptStatusTv.setTextColor(Color.parseColor("#00E676"));
         scriptStatusTv.setBackgroundColor(Color.parseColor("#0D1524"));
         scriptStatusTv.setTextSize(12f);
@@ -934,18 +949,35 @@ public class EditorActivity extends Activity {
         return panel;
     }
 
+    private String describeVm(String lang) {
+        if ("JS".equalsIgnoreCase(lang)) return "ES6+ JavaScript • Mozilla Rhino VM";
+        if ("LUA".equalsIgnoreCase(lang)) return "Lua 5.2 • LuaJ VM";
+        return "VortexScript (.vxs) VM";
+    }
+
     private void rebuildSnippetBar() {
         if (snippetBar == null) return;
         snippetBar.removeAllViews();
+        boolean isJs = "JS".equalsIgnoreCase(project.scriptLanguage);
         boolean isLua = "LUA".equalsIgnoreCase(project.scriptLanguage);
-        String[] snippets = isLua
+        String[] snippets = isJs
+                ? new String[]{
+                        "const t = vortex.findNearestTag('Player', 'enemy');",
+                        "vortex.chaseTagAI('enemy', 'Player', 4.5);",
+                        "vortex.setSpriteAnim('Player', 'knight_1,knight_2', 7);",
+                        "vortex.tweenTagYoyo('coin', 0.35, 0.9, 'SINE');",
+                        "vortex.saveData('best', vortex.getScore());",
+                        "vortex.playMusic('CYBERPUNK', 136);",
+                        "vortex.particles(0, 1, 0, 22, '#00E5FF');",
+                        "class WaveDirector {\n  constructor() {}\n}"}
+                : isLua
                 ? new String[]{
                         "vortex.joyX()", "vortex.chaseTagAI('enemy', 'Player', 4.5)",
+                        "vortex.findNearestTag('Player', 'enemy')",
                         "vortex.tweenTagYoyo('coin', 0.4, 0.9, 'SINE')",
                         "vortex.playMusic('CYBERPUNK', 132)",
                         "vortex.raycast(x, y, z, 0, 0, -1, 35)",
-                        "vortex.jump('Player', 12)", "vortex.particles(0, 1, 0, 20, '#00E5FF')",
-                        "vortex.playSound('coin')", "vortex.noise2D(x, z)"}
+                        "vortex.jump('Player', 12)", "vortex.particles(0, 1, 0, 20, '#00E5FF')"}
                 : new String[]{
                         "joyX()", "jump('Player', 12.0);", "setVel('Player', 0, 0, 0);",
                         "particles(0, 1, 0, 20, '#00E5FF');", "playSound('coin');",
@@ -967,30 +999,66 @@ public class EditorActivity extends Activity {
 
     private void toggleScriptLanguage() {
         syncCodeFromEditor();
-        boolean toLua = !"LUA".equalsIgnoreCase(project.scriptLanguage);
-        project.scriptLanguage = toLua ? "LUA" : "VXS";
+        if ("JS".equalsIgnoreCase(project.scriptLanguage)) project.scriptLanguage = "LUA";
+        else if ("LUA".equalsIgnoreCase(project.scriptLanguage)) project.scriptLanguage = "VXS";
+        else project.scriptLanguage = "JS";
         langToggleBtn.setText("LANG: " + project.scriptLanguage);
         rebuildSnippetBar();
-        scriptStatusTv.setText("Switched VM to " + (toLua ? "Lua 5.2 (LuaJ)" : "VortexScript (.vxs)")
-                + " — tap CHECK SYNTAX to verify.");
+        scriptStatusTv.setText("Switched VM to " + describeVm(project.scriptLanguage) + " — tap CHECK SYNTAX to verify.");
         scriptStatusTv.setTextColor(Color.parseColor("#38BDF8"));
         saveProjectQuiet();
     }
 
     private boolean validateCurrentScript() {
         syncCodeFromEditor();
-        VortexScriptEngine tester = new VortexScriptEngine();
-        tester.attach(project, null, null);
-        boolean ok = tester.compileAndInit(project.scriptCode);
-        if (ok) {
-            scriptStatusTv.setText("✓ Syntax Valid ("
-                    + ("LUA".equalsIgnoreCase(project.scriptLanguage) ? "Lua 5.2 LuaJ VM" : "VortexScript VM") + ")");
+        String check = VortexScriptEngine.validateSyntax(project.scriptLanguage, project.scriptCode);
+        if (check.startsWith("OK")) {
+            scriptStatusTv.setText("✓ " + check);
             scriptStatusTv.setTextColor(Color.parseColor("#00E676"));
+            return true;
         } else {
-            scriptStatusTv.setText("✕ " + tester.getLastError());
+            scriptStatusTv.setText("✕ " + check);
             scriptStatusTv.setTextColor(Color.parseColor("#FF5252"));
+            return false;
         }
-        return ok;
+    }
+
+    private void showForgeAiDialog() {
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(16), dp(10), dp(16), dp(6));
+
+        TextView info = new TextView(this);
+        info.setText("Inspired by hacvilke/roforge: local-first BYOK + instant Offline Generator! Automatically creates an Undo checkpoint before editing your project.");
+        info.setTextColor(Color.parseColor("#94A3B8"));
+        info.setTextSize(11.5f);
+        form.addView(info);
+
+        Spinner provSpin = addLabeledSpinner(form, "AI Engine Mode", VortexForgeAgent.PROVIDERS, VortexForgeAgent.PROVIDERS[0]);
+        EditText keyEt = addLabeledEdit(form, "Optional API Key (leave blank for Offline Generator)", "", false);
+        EditText promptEt = addLabeledEdit(form, "What should Forge AI build?", "2D cyber swarm arena with animated drones and auto-aim blaster", false);
+
+        new AlertDialog.Builder(this)
+                .setTitle("🤖 Vortex Forge AI Agent")
+                .setView(form)
+                .setPositiveButton("⚡ Generate (+ Undo Checkpoint)", (d, w) -> {
+                    pushUndoSnapshot();
+                    final int pIdx = provSpin.getSelectedItemPosition();
+                    final String apiKey = keyEt.getText().toString().trim();
+                    final String prompt = promptEt.getText().toString().trim();
+                    new Thread(() -> {
+                        try {
+                            final String summary = VortexForgeAgent.applyPromptToProject(project, prompt, pIdx, apiKey);
+                            runOnUiThread(() -> {
+                                applyRestoredProject("🤖 " + summary);
+                            });
+                        } catch (Exception ex) {
+                            runOnUiThread(() -> Toast.makeText(EditorActivity.this, "Forge AI error: " + ex.getMessage(), Toast.LENGTH_LONG).show());
+                        }
+                    }).start();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void showCustomObjEditorDialog() {
@@ -1079,10 +1147,35 @@ public class EditorActivity extends Activity {
         desc.setPadding(0, dp(3), 0, dp(10));
         box.addView(desc);
 
-        // Compile Flow -> Lua 5.2 Action Button
-        TextView compileBtn = makeChip("⚡ COMPILE FLOW RULES ➔ LUA 5.2 SCRIPT", "#064E3B", "#00E676");
+        // Dual-Target Compile Row: ES6 JavaScript (Rhino/Web) OR Lua 5.2!
+        LinearLayout compileRow = new LinearLayout(this);
+        compileRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        TextView compileJsBtn = makeChip("⚡ COMPILE ➔ ES6 JS", "#26200B", "#FACC15");
+        compileJsBtn.setGravity(Gravity.CENTER);
+        compileJsBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        compileJsBtn.setOnClickListener(v -> {
+            if (project.flowRules.isEmpty()) {
+                Toast.makeText(this, "Add at least 1 Flow rule below first!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            pushUndoSnapshot();
+            String js = VortexFlowCompiler.compileToJavaScript(project);
+            project.scriptLanguage = "JS";
+            project.scriptCode = js;
+            if (scriptEditor != null) scriptEditor.setText(js);
+            if (langToggleBtn != null) langToggleBtn.setText("LANG: JS");
+            rebuildSnippetBar();
+            saveProjectQuiet();
+            Toast.makeText(this, "✓ Compiled " + project.flowRules.size() + " Flow rules into ES6 JavaScript!", Toast.LENGTH_LONG).show();
+        });
+        LinearLayout.LayoutParams cjLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        cjLp.rightMargin = dp(6);
+        compileRow.addView(compileJsBtn, cjLp);
+
+        TextView compileBtn = makeChip("⚡ COMPILE ➔ LUA 5.2", "#064E3B", "#00E676");
         compileBtn.setGravity(Gravity.CENTER);
-        compileBtn.setPadding(dp(10), dp(11), dp(10), dp(11));
+        compileBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
         compileBtn.setOnClickListener(v -> {
             if (project.flowRules.isEmpty()) {
                 Toast.makeText(this, "Add at least 1 Flow rule below first!", Toast.LENGTH_SHORT).show();
@@ -1094,10 +1187,12 @@ public class EditorActivity extends Activity {
             project.scriptCode = lua;
             if (scriptEditor != null) scriptEditor.setText(lua);
             if (langToggleBtn != null) langToggleBtn.setText("LANG: LUA");
+            rebuildSnippetBar();
             saveProjectQuiet();
             Toast.makeText(this, "✓ Compiled " + project.flowRules.size() + " Flow rules into Lua 5.2!", Toast.LENGTH_LONG).show();
         });
-        box.addView(compileBtn);
+        compileRow.addView(compileBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        box.addView(compileRow);
 
         // Add New Rule Card
         LinearLayout builderCard = new LinearLayout(this);
@@ -1239,6 +1334,177 @@ public class EditorActivity extends Activity {
             lp.bottomMargin = dp(6);
             flowRuleListContainer.addView(card, lp);
         }
+    }
+
+    // =========================================================================
+    // 🔄 LRM P2P SYNC & VERSION CONTROL (hacvilke/lrm & hacvilke/lrm-mobile)
+    // =========================================================================
+    private ScrollView buildLrmSyncPanel() {
+        ScrollView sv = new ScrollView(this);
+        sv.setBackgroundColor(Color.parseColor("#0B0F17"));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(14), dp(12), dp(14), dp(28));
+
+        TextView head = new TextView(this);
+        head.setText("🔄 LRM P2P LIVE SYNC & VERSION CONTROL");
+        head.setTextColor(Color.parseColor("#00E5FF"));
+        head.setTextSize(15.5f);
+        head.setTypeface(Typeface.DEFAULT_BOLD);
+        box.addView(head);
+
+        TextView desc = new TextView(this);
+        desc.setText("Powered by hacvilke/lrm & hacvilke/lrm-mobile (PIE e_type:3 for Termux): sync your game peer-to-peer between Android, Windows & Linux with encrypted Port Keys (lrm1_...) and zero servers!");
+        desc.setTextColor(Color.parseColor("#94A3B8"));
+        desc.setTextSize(11.5f);
+        desc.setPadding(0, dp(3), 0, dp(10));
+        box.addView(desc);
+
+        EditText commitMsgEt = addLabeledEdit(box, "LRM Commit Message", "Update " + project.title, false);
+        EditText portKeyEt = addLabeledEdit(box, "Remote Peer Port Key (paste lrm1_... to Join & Pull)", "", false);
+
+        // Row 1: Unpack + Commit | Share Port Key
+        LinearLayout r1 = new LinearLayout(this);
+        r1.setOrientation(LinearLayout.HORIZONTAL);
+        r1.setPadding(0, dp(8), 0, 0);
+
+        TextView commitBtn = makeChip("📤 COMMIT TO LRM", "#064E3B", "#00E676");
+        commitBtn.setGravity(Gravity.CENTER);
+        commitBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        commitBtn.setOnClickListener(v -> {
+            File dir = exportUnpackedLrmRepo();
+            if (dir != null) {
+                String msg = commitMsgEt.getText().toString().trim().replace("\"", "'");
+                if (msg.isEmpty()) msg = "Update game";
+                String sub = "( [ -d .lrm ] || lrm init --user mobile ) && lrm commit -m \"" + msg + "\" && lrm log --limit 5 --oneline";
+                dispatchOrCopyLrmTermux(dir, sub);
+            }
+        });
+        LinearLayout.LayoutParams c1 = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        c1.rightMargin = dp(6);
+        r1.addView(commitBtn, c1);
+
+        TextView shareBtn = makeChip("🔑 LRM SHARE KEY", "#16263D", "#00E5FF");
+        shareBtn.setGravity(Gravity.CENTER);
+        shareBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        shareBtn.setOnClickListener(v -> {
+            File dir = exportUnpackedLrmRepo();
+            if (dir != null) {
+                dispatchOrCopyLrmTermux(dir, "( [ -d .lrm ] || (lrm init --user mobile && lrm commit -m 'Initial snapshot') ) && lrm share");
+            }
+        });
+        r1.addView(shareBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        box.addView(r1);
+
+        // Row 2: Join Port Key | Wi-Fi Asset Drop (lrm receive)
+        LinearLayout r2 = new LinearLayout(this);
+        r2.setOrientation(LinearLayout.HORIZONTAL);
+        r2.setPadding(0, dp(8), 0, 0);
+
+        TextView joinBtn = makeChip("🌐 JOIN PORT KEY", "#261B38", "#B388FF");
+        joinBtn.setGravity(Gravity.CENTER);
+        joinBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        joinBtn.setOnClickListener(v -> {
+            String pk = portKeyEt.getText().toString().trim();
+            if (pk.isEmpty()) {
+                Toast.makeText(this, "Paste an lrm1_... Port Key above first!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            File dir = getSharedLrmRepoDir();
+            dispatchOrCopyLrmTermux(dir, "lrm join \"" + pk + "\" --init");
+        });
+        LinearLayout.LayoutParams c2 = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        c2.rightMargin = dp(6);
+        r2.addView(joinBtn, c2);
+
+        TextView dropBtn = makeChip("📥 WI-FI DROP", "#1E293B", "#FFD54F");
+        dropBtn.setGravity(Gravity.CENTER);
+        dropBtn.setPadding(dp(8), dp(11), dp(8), dp(11));
+        dropBtn.setOnClickListener(v -> {
+            File dir = exportUnpackedLrmRepo();
+            if (dir != null) {
+                dispatchOrCopyLrmTermux(dir, "( [ -d .lrm ] || lrm init --user mobile ) && lrm receive --port 8788");
+            }
+        });
+        r2.addView(dropBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        box.addView(r2);
+
+        // Row 3: Reload Synced LRM Repo & Inbox Back into Studio!
+        TextView reloadBtn = makeChip("🔄 RELOAD SYNCED LRM REPO & INBOX INTO STUDIO", "#102A43", "#38BDF8");
+        reloadBtn.setGravity(Gravity.CENTER);
+        reloadBtn.setPadding(dp(10), dp(12), dp(10), dp(12));
+        reloadBtn.setOnClickListener(v -> {
+            try {
+                File dir = getSharedLrmRepoDir();
+                pushUndoSnapshot();
+                GameProject synced = LrmWorkspaceBridge.importFromLrmRepo(dir);
+                synced.id = project.id;
+                project = synced;
+                applyRestoredProject("✓ Imported LRM Repo & Inbox (" + project.entities.size() + " entities)!");
+                appendLrmLog("[✓] Reloaded project from LRM repo: " + dir.getAbsolutePath());
+            } catch (Exception ex) {
+                appendLrmLog("[!] Could not import repo yet: " + ex.getMessage());
+                Toast.makeText(this, "LRM import: " + ex.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+        LinearLayout.LayoutParams rlLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        rlLp.topMargin = dp(8);
+        box.addView(reloadBtn, rlLp);
+
+        lrmLogTv = new TextView(this);
+        lrmLogTv.setTypeface(Typeface.MONOSPACE);
+        lrmLogTv.setTextSize(11.5f);
+        lrmLogTv.setTextColor(Color.parseColor("#A7F3D0"));
+        lrmLogTv.setBackgroundColor(Color.parseColor("#06090F"));
+        lrmLogTv.setPadding(dp(12), dp(12), dp(12), dp(12));
+        lrmLogTv.setText("LRM Console Ready (hacvilke/lrm-mobile).\n"
+                + "• Unpacks your game into diffable files: vortex.manifest.json, scene/entities.json, scripts/main.js, flow/rules.json, assets/* & inbox/.\n"
+                + "• Tap COMMIT, SHARE KEY, JOIN, or WI-FI DROP to copy & run in Termux!\n");
+        LinearLayout.LayoutParams lgLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lgLp.topMargin = dp(10);
+        box.addView(lrmLogTv, lgLp);
+
+        sv.addView(box);
+        return sv;
+    }
+
+    private File getSharedLrmRepoDir() {
+        File dl = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                "VortexEngine/LRM/" + project.getSlug());
+        return dl;
+    }
+
+    private File exportUnpackedLrmRepo() {
+        try {
+            syncCodeFromEditor();
+            File dir = getSharedLrmRepoDir();
+            try {
+                LrmWorkspaceBridge.exportToLrmRepo(project, dir);
+            } catch (Exception fallback) {
+                dir = new File(getExternalFilesDir(null), "LRM/" + project.getSlug());
+                LrmWorkspaceBridge.exportToLrmRepo(project, dir);
+            }
+            appendLrmLog("[✓] Unpacked multi-file LRM workspace -> " + dir.getAbsolutePath());
+            return dir;
+        } catch (Exception ex) {
+            appendLrmLog("[ERROR] Unpack failed: " + ex.getMessage());
+            return null;
+        }
+    }
+
+    private void dispatchOrCopyLrmTermux(File repoDir, String subCmd) {
+        String fullCmd = LrmWorkspaceBridge.buildTermuxShellSequence(repoDir.getAbsolutePath(), subCmd);
+        TermuxBridge.copyToClipboard(this, "Vortex LRM Command", fullCmd);
+        appendLrmLog("[CMD COPIED]\n  " + fullCmd);
+        Toast.makeText(this, "Copied LRM command! Paste in Termux (auto-installs lrm-mobile if needed).", Toast.LENGTH_LONG).show();
+        TermuxBridge.openTermuxApp(this);
+    }
+
+    private void appendLrmLog(String msg) {
+        if (lrmLogTv != null) lrmLogTv.append("\n" + msg);
     }
 
     // =========================================================================
@@ -1680,6 +1946,7 @@ public class EditorActivity extends Activity {
         sceneBottomToolbar.setVisibility("SCENE".equals(mode) ? View.VISIBLE : View.GONE);
         inspectorDrawer.setVisibility("INSPECTOR".equals(mode) ? View.VISIBLE : View.GONE);
         flowPanel.setVisibility("FLOW".equals(mode) ? View.VISIBLE : View.GONE);
+        lrmPanel.setVisibility("LRM".equals(mode) ? View.VISIBLE : View.GONE);
         pixelArtPanel.setVisibility("PIXEL".equals(mode) ? View.VISIBLE : View.GONE);
         scriptPanel.setVisibility("SCRIPT".equals(mode) ? View.VISIBLE : View.GONE);
         sfxPanel.setVisibility("SFX".equals(mode) ? View.VISIBLE : View.GONE);

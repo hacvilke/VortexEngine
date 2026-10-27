@@ -145,7 +145,8 @@ public class DesktopExporter {
             }
 
             putUtf8(zos, "assets/project.vortex.json", p.toJsonString());
-            String scriptExt = "LUA".equalsIgnoreCase(p.scriptLanguage) ? "main.lua" : "main.vxs";
+            String scriptExt = "JS".equalsIgnoreCase(p.scriptLanguage) ? "main.js"
+                    : ("LUA".equalsIgnoreCase(p.scriptLanguage) ? "main.lua" : "main.vxs");
             putUtf8(zos, "assets/scripts/" + scriptExt, p.scriptCode == null ? "" : p.scriptCode);
 
             for (Map.Entry<String, String> m : p.customObjMeshes.entrySet()) {
@@ -154,6 +155,8 @@ public class DesktopExporter {
 
             byte[] dex = readResourceBytes("/toolchain/vortex-runtime.dex");
             if (dex != null) putBytes(zos, "prebuilt/vortex-runtime.dex", dex);
+            byte[] dex2 = readResourceBytes("/toolchain/vortex-runtime-2.dex");
+            if (dex2 != null) putBytes(zos, "prebuilt/vortex-runtime-2.dex", dex2);
 
             byte[] buildSh = readResourceBytes("/toolchain/build_termux.sh");
             if (buildSh != null) putBytes(zos, "build_termux.sh", buildSh);

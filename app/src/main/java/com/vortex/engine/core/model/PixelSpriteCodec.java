@@ -106,6 +106,94 @@ public class PixelSpriteCodec {
         return fromAsciiArt(rows);
     }
 
+    public static String createKnightRunFrame2Sprite() {
+        String[] rows = new String[]{
+                ".....CCCCCC.....",
+                "....CCCCCCCC....",
+                "...CCWWWWWWCC...",
+                "...CCWKKKKWCC...",
+                "...CCWWWWWWCC...",
+                "....CCCCCCCC....",
+                "...BBBBBBBBBB...",
+                "..BBCCCCCCCCBB..",
+                "..BBCYYYYYYCBB..",
+                "..BBCCCCCCCCBB..",
+                "....BBBBBBBB....",
+                "...BBB....BBB...",
+                "..BBBB....BBBB..",
+                "..KKKK....KKKK..",
+                "................",
+                "................"
+        };
+        return fromAsciiArt(rows);
+    }
+
+    public static String createDroneFrame1Sprite() {
+        String[] rows = new String[]{
+                "..CCCC....CCCC..",
+                ".WWWWWW..WWWWWW.",
+                "................",
+                "....RRRRRRRR....",
+                "...RRRRRRRRRR...",
+                "..RRRYYYYYYRRR..",
+                "..RRRYKKKKYRRR..",
+                "..RRRYYYYYYRRR..",
+                "...RRRRRRRRRR...",
+                "....RRRRRRRR....",
+                "...CC......CC...",
+                "..CC........CC..",
+                "................",
+                "................",
+                "................",
+                "................"
+        };
+        return fromAsciiArt(rows);
+    }
+
+    public static String createDroneFrame2Sprite() {
+        String[] rows = new String[]{
+                "................",
+                "..WWWW....WWWW..",
+                ".CCCCCC..CCCCCC.",
+                "....RRRRRRRR....",
+                "...RRRRRRRRRR...",
+                "..RRRYYYYYYRRR..",
+                "..RRRYRRRRRYRR..",
+                "..RRRYYYYYYRRR..",
+                "...RRRRRRRRRR...",
+                "....RRRRRRRR....",
+                "....CC....CC....",
+                "...CC......CC...",
+                "................",
+                "................",
+                "................",
+                "................"
+        };
+        return fromAsciiArt(rows);
+    }
+
+    public static String createGemSprite() {
+        String[] rows = new String[]{
+                "................",
+                ".......GG.......",
+                "......GGGG......",
+                ".....GGWWGG.....",
+                "....GGWWWWGG....",
+                "...GGGGWWGGGG...",
+                "..GGGGGGGGGGGG..",
+                "..GGGGGGGGGGGG..",
+                "...GGGGGGGGGG...",
+                "....GGGGGGGG....",
+                ".....GGGGGG.....",
+                "......GGGG......",
+                ".......GG.......",
+                "................",
+                "................",
+                "................"
+        };
+        return fromAsciiArt(rows);
+    }
+
     private static String fromAsciiArt(String[] rows16) {
         StringBuilder sb = new StringBuilder();
         for (int y = 0; y < SIZE; y++) {

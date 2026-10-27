@@ -6,7 +6,7 @@
 set -e
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║   Vortex Engine v2.0 — Termux APK Toolchain Setup        ║"
+echo "║ Vortex Engine v4.0 — Termux APK + LRM Mobile P2P Setup   ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 
 mkdir -p "$HOME/.termux"
@@ -68,6 +68,14 @@ fi
 if [ -d "/sdcard/Download" ] && [ -w "/sdcard/Download" ]; then
     mkdir -p "/sdcard/Download/VortexEngine"
     date > "/sdcard/Download/VortexEngine/.toolchain_ready" 2>/dev/null || true
+fi
+
+export PATH="$HOME/.local/bin:$PATH"
+if ! command -v lrm >/dev/null 2>&1; then
+    echo "[*] Installing LRM Mobile (hacvilke/lrm-mobile — Android PIE P2P Version Control)..."
+    curl -fsSL https://raw.githubusercontent.com/hacvilke/lrm-mobile/main/scripts/install.sh | sh || true
+else
+    echo "[✓] LRM P2P Version Control ($(lrm --version 2>/dev/null || echo 'ready')) already installed!"
 fi
 
 echo ""

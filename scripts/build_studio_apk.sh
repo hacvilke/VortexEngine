@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Vortex Engine Studio v3.0.0 (Apex Edition) — Full Android APK Build Script
-# Compiles Core + LuaJ + JBox2D + FastNoiseLite + Tween Engine + Pathfinding + Studio IDE
+# Vortex Engine Studio v4.0.0 (Hyperion Edition) — Full Android APK Build Script
+# Compiles Core + Rhino ES6 + LuaJ + JBox2D + FastNoiseLite + Tween + Pathfinding + LRM + Forge AI
 # ============================================================================
 set -euo pipefail
 
@@ -26,7 +26,8 @@ LUAJ_JAR="$ROOT_DIR/app/libs/luaj-jse-3.0.1.jar"
 JBOX2D_JAR="$ROOT_DIR/app/libs/jbox2d-library-2.2.1.1.jar"
 TWEEN_JAR="$ROOT_DIR/app/libs/universal-tween-engine-6.3.3.jar"
 PATHFINDING_JAR="$ROOT_DIR/app/libs/pathfinding-0.2.6.jar"
-LIB_CP="$PLATFORM_JAR:$LUAJ_JAR:$JBOX2D_JAR:$TWEEN_JAR:$PATHFINDING_JAR"
+RHINO_JAR="$ROOT_DIR/app/libs/rhino-1.7.15.1.jar"
+LIB_CP="$PLATFORM_JAR:$LUAJ_JAR:$JBOX2D_JAR:$TWEEN_JAR:$PATHFINDING_JAR:$RHINO_JAR"
 
 BUILD_DIR="$ROOT_DIR/build_studio"
 DIST_DIR="$ROOT_DIR/dist"
@@ -53,17 +54,21 @@ find app/src/main/java/com/vortex/engine/core \
 (cd "$BUILD_DIR/runtime_classes" && zip -qr "$BUILD_DIR/runtime.jar" .)
 "$D8" --min-api 24 --lib "$PLATFORM_JAR" \
     --output "$BUILD_DIR/runtime_dex" \
-    "$BUILD_DIR/runtime.jar" "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR"
+    "$BUILD_DIR/runtime.jar" "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR" "$RHINO_JAR"
 cp "$BUILD_DIR/runtime_dex/classes.dex" "$BUILD_DIR/assets/toolchain/vortex-runtime.dex"
+[ -f "$BUILD_DIR/runtime_dex/classes2.dex" ] && cp "$BUILD_DIR/runtime_dex/classes2.dex" "$BUILD_DIR/assets/toolchain/vortex-runtime-2.dex"
 
 echo "=== [2/7] Packaging Termux Toolchain & Open-Source Runtime Bundle ==="
 cp scripts/termux/build_termux.sh "$BUILD_DIR/assets/toolchain/build_termux.sh"
 cp scripts/termux/setup_termux.sh "$BUILD_DIR/assets/toolchain/setup_termux.sh"
+mkdir -p app/src/main/assets/toolchain
+cp scripts/termux/build_termux.sh app/src/main/assets/toolchain/build_termux.sh
+cp scripts/termux/setup_termux.sh app/src/main/assets/toolchain/setup_termux.sh
 
 mkdir -p "$BUILD_DIR/src_bundle/src/main/java/com/vortex/engine" "$BUILD_DIR/src_bundle/libs"
 cp -R app/src/main/java/com/vortex/engine/core "$BUILD_DIR/src_bundle/src/main/java/com/vortex/engine/"
 cp -R app/src/main/java/com/vortex/engine/runtime "$BUILD_DIR/src_bundle/src/main/java/com/vortex/engine/"
-cp "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR" "$BUILD_DIR/src_bundle/libs/"
+cp "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR" "$RHINO_JAR" "$BUILD_DIR/src_bundle/libs/"
 (cd "$BUILD_DIR/src_bundle" && zip -qr "$BUILD_DIR/assets/toolchain/vortex-runtime-src.zip" src libs)
 
 echo "=== [3/7] Generating Procedural Studio Launcher Icons ==="
@@ -105,7 +110,7 @@ public class GenStudioIcons {
             g.setColor(Color.WHITE);
             g.setFont(new Font("SansSerif", Font.BOLD, Math.max(9, Math.round(s * 0.22f))));
             FontMetrics fm = g.getFontMetrics();
-            String lbl = "V3";
+            String lbl = "V4";
             g.drawString(lbl, (s - fm.stringWidth(lbl)) / 2, Math.round(s * 0.56f));
             g.dispose();
 
@@ -144,7 +149,7 @@ find app/src/main/java "$BUILD_DIR/studio_gen" -name "*.java" > "$BUILD_DIR/stud
 (cd "$BUILD_DIR/studio_classes" && zip -qr "$BUILD_DIR/studio.jar" .)
 "$D8" --min-api 24 --lib "$PLATFORM_JAR" \
     --output "$BUILD_DIR/studio_dex" \
-    "$BUILD_DIR/studio.jar" "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR"
+    "$BUILD_DIR/studio.jar" "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR" "$RHINO_JAR"
 
 echo "=== [6/7] Injecting DEX & Aligning APK ==="
 (cd "$BUILD_DIR/studio_dex" && zip -qj "$BUILD_DIR/studio-unaligned.apk" classes*.dex)
@@ -163,7 +168,7 @@ KEYSTORE="$BUILD_DIR/studio-release.keystore"
     -keypass vortex123 \
     -dname "CN=Vortex Engine Studio, OU=GameEngine, O=VortexEngine, L=Global, S=Mobile, C=US" >/dev/null 2>&1
 
-OUT_APK="$DIST_DIR/VortexEngine-Studio-v3.0.0.apk"
+OUT_APK="$DIST_DIR/VortexEngine-Studio-v4.0.0.apk"
 "$APKSIGNER" sign \
     --ks "$KEYSTORE" \
     --ks-pass pass:vortex123 \
@@ -176,4 +181,4 @@ OUT_APK="$DIST_DIR/VortexEngine-Studio-v3.0.0.apk"
 
 "$APKSIGNER" verify --verbose "$OUT_APK" | head -n 10
 ls -lh "$OUT_APK"
-echo "[SUCCESS] Vortex Engine Studio v3.0.0 APK ready at: $OUT_APK"
+echo "[SUCCESS] Vortex Engine Studio v4.0.0 APK ready at: $OUT_APK"

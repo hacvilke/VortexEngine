@@ -52,6 +52,7 @@ public class PhysicsWorld {
     private FastNoiseLite cachedTerrainNoise;
     private int cachedNoiseSeed = Integer.MIN_VALUE;
     private float cachedNoiseFreq = -1f;
+    private float animClock = 0f;
 
     public synchronized void reset() {
         box2dWorld = null;
@@ -59,6 +60,7 @@ public class PhysicsWorld {
         boundProjectId = null;
         events.clear();
         pairDedup.clear();
+        animClock = 0f;
     }
 
     public synchronized void applyImpulse2D(Entity e, float impulseX, float impulseY) {
@@ -82,6 +84,19 @@ public class PhysicsWorld {
         if (project == null || dt <= 0f) return events;
 
         float clampedDt = Math.min(dt, 0.05f);
+        animClock += clampedDt;
+        // Advance multi-frame flipbook sprites automatically across Android GLES & Desktop!
+        for (int i = 0; i < project.entities.size(); i++) {
+            Entity ent = project.entities.get(i);
+            if (ent.alive && ent.spriteFrames != null && !ent.spriteFrames.isEmpty()) {
+                String[] frames = ent.spriteFrames.split(",");
+                if (frames.length > 0) {
+                    int fIdx = ((int) (animClock * Math.max(0.5f, ent.animFps))) % frames.length;
+                    String nextSprite = frames[fIdx].trim();
+                    if (!nextSprite.isEmpty()) ent.customSpriteName = nextSprite;
+                }
+            }
+        }
         boolean mode3D = "3D".equalsIgnoreCase(project.dimensionMode);
 
         if (!mode3D && project.useBox2D) {

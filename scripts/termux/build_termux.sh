@@ -21,7 +21,7 @@ while [ $# -gt 0 ]; do
 done
 
 echo "============================================================"
-echo "  Vortex Engine v3.0 APK Builder (LuaJ + Box2D + AI + Tween)"
+echo "  Vortex Engine v4.0 APK Builder (ES6 JS Rhino + LuaJ + Box2D)"
 echo "============================================================"
 
 find_tool() {
@@ -134,28 +134,29 @@ if [ -d "libs" ]; then
 fi
 
 if [ "$MODE" = "source" ] && [ "$CAN_COMPILE_JAVA" = "true" ]; then
-    echo "[4/6] Compiling Engine + LuaJ + JBox2D Java sources from scratch..."
+    echo "[4/6] Compiling Engine + Mozilla Rhino ES6 + LuaJ + JBox2D Java sources from scratch..."
     find src/main/java build/gen -name "*.java" > build/sources.txt
     "$JAVAC_BIN" --release 8 -encoding UTF-8 -cp "$EXTRA_CP" -d build/classes @build/sources.txt
     (cd build/classes && zip -qr ../classes.jar .)
     "$D8_BIN" --min-api 24 --lib "$ANDROID_JAR" --output build/dex build/classes.jar "${EXTRA_JARS[@]}"
-    cp build/dex/classes.dex "$WORK_DIR/classes.dex"
+    cp build/dex/classes*.dex "$WORK_DIR/"
 elif [ -f "prebuilt/vortex-runtime.dex" ]; then
-    echo "[4/6] Injecting prebuilt Vortex v2.0 Runtime DEX (GLES + LuaJ + JBox2D + FastNoiseLite)..."
+    echo "[4/6] Injecting prebuilt Vortex v4.0 Runtime DEX (GLES + Rhino ES6 + LuaJ + JBox2D + AI + Tween)..."
     cp prebuilt/vortex-runtime.dex "$WORK_DIR/classes.dex"
+    [ -f "prebuilt/vortex-runtime-2.dex" ] && cp prebuilt/vortex-runtime-2.dex "$WORK_DIR/classes2.dex"
 elif [ "$CAN_COMPILE_JAVA" = "true" ]; then
     echo "[4/6] Compiling Engine Java sources..."
     find src/main/java build/gen -name "*.java" > build/sources.txt
     "$JAVAC_BIN" --release 8 -encoding UTF-8 -cp "$EXTRA_CP" -d build/classes @build/sources.txt
     (cd build/classes && zip -qr ../classes.jar .)
     "$D8_BIN" --min-api 24 --lib "$ANDROID_JAR" --output build/dex build/classes.jar "${EXTRA_JARS[@]}"
-    cp build/dex/classes.dex "$WORK_DIR/classes.dex"
+    cp build/dex/classes*.dex "$WORK_DIR/"
 else
     echo "[!] Neither prebuilt/vortex-runtime.dex nor full Java SDK compiler available."
     exit 5
 fi
 
-zip -qj build/unaligned.apk classes.dex
+zip -qj build/unaligned.apk classes*.dex
 
 echo "[5/6] Optimizing alignment with zipalign..."
 "$ZIPALIGN_BIN" -f -p 4 build/unaligned.apk build/aligned.apk

@@ -8,6 +8,7 @@ import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.noise.FastNoiseLite;
 import com.vortex.engine.core.noise.TerrainGenerator;
 import com.vortex.engine.core.physics.PhysicsWorld;
+import com.vortex.engine.core.storage.VortexSaveStore;
 import com.vortex.engine.core.tween.VortexTweenSystem;
 import org.luaj.vm2.Globals;
 import org.luaj.vm2.LuaTable;
@@ -15,6 +16,14 @@ import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Varargs;
 import org.luaj.vm2.lib.VarArgFunction;
 import org.luaj.vm2.lib.jse.JsePlatform;
+import org.mozilla.javascript.BaseFunction;
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.ContextFactory;
+import org.mozilla.javascript.Function;
+import org.mozilla.javascript.RhinoException;
+import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -60,9 +69,53 @@ public class VortexScriptEngine {
     private FastNoiseLite fastNoise = TerrainGenerator.createConfiguredNoise(1337, 0.065f);
     private final Random rng = new Random();
 
-    // Active VM mode
+    // Active VM mode: "JS" (Mozilla Rhino ES6+), "LUA" (LuaJ 5.2), or "VXS" (VortexScript)
+    private String activeVmMode = "JS";
     private boolean usingLua = false;
     private Globals luaGlobals;
+    private Scriptable rhinoScope;
+
+    private static final int MAX_RHINO_OPS_PER_CALL = 250_000;
+    private static final ThreadLocal<Integer> rhinoOpsCounter = new ThreadLocal<>();
+
+    private static final ContextFactory SANDBOXED_RHINO_FACTORY = new ContextFactory() {
+        @Override
+        protected Context makeContext() {
+            Context cx = super.makeContext();
+            cx.setLanguageVersion(Context.VERSION_ES6);
+            // Optimization level -1 runs Rhino's fast bytecode interpreter identically on Android ART/DEX & Desktop JVM!
+            cx.setOptimizationLevel(-1);
+            cx.setInstructionObserverThreshold(25_000);
+            cx.setClassShutter(fullClassName -> false);
+            return cx;
+        }
+
+        @Override
+        protected void observeInstructionCount(Context cx, int instructionCount) {
+            Integer prev = rhinoOpsCounter.get();
+            int total = (prev == null ? 0 : prev) + instructionCount;
+            if (total > MAX_RHINO_OPS_PER_CALL) {
+                throw new Error("JavaScript Execution Quota Exceeded (Infinite Loop Guard > " + MAX_RHINO_OPS_PER_CALL + " ops)");
+            }
+            rhinoOpsCounter.set(total);
+        }
+    };
+
+    public static final String[] ENGINE_API_NAMES = new String[]{
+            "joyX", "inputX", "joyY", "inputY", "btnA", "btnB", "touchDown", "touchX", "touchY",
+            "exists", "getX", "getY", "getZ", "getVX", "getVY", "getVZ", "getRotY", "getRotZ", "getTag",
+            "isGrounded", "dist", "distance", "countByTag", "findNearestTag",
+            "setPos", "move", "setVel", "addVel", "applyImpulse", "setAngularVel", "setFixedRotation",
+            "jump", "setRot", "rotate", "setScale", "setSpin", "setColor", "setSpriteAnim", "destroy",
+            "spawn3D", "spawn2D", "particles", "emitParticles", "playSound", "playMusic", "stopMusic",
+            "shake", "shakeCamera", "setCamTarget", "setCamDist", "setSky",
+            "addScore", "setScore", "getScore", "setHealth", "addHealth", "getHealth",
+            "saveData", "loadData", "loadNum",
+            "setBanner", "setHudText", "log",
+            "chaseAI", "chaseTagAI", "raycast",
+            "tweenPos", "tweenScale", "tweenRot", "tweenTagYoyo",
+            "noise2D", "noise3D", "terrainHeight", "rand", "clamp", "time"
+    };
 
     private final Map<String, Object> globals = new HashMap<>();
     private final Map<String, FnDecl> functions = new HashMap<>();
@@ -82,29 +135,173 @@ public class VortexScriptEngine {
         }
     }
 
-    public static boolean detectLuaMode(String langSetting, String code) {
+    public static String detectRuntimeMode(String langSetting, String code) {
+        if ("JS".equalsIgnoreCase(langSetting) || "JAVASCRIPT".equalsIgnoreCase(langSetting)) {
+            return "JS";
+        }
         if ("LUA".equalsIgnoreCase(langSetting)) {
-            if (code != null && code.contains("fn on") && !code.contains("function ")) {
-                return false;
-            }
-            return true;
+            if (code != null && code.contains("fn on") && !code.contains("function ")) return "VXS";
+            return "LUA";
         }
         if (code != null) {
             String trimmed = code.trim();
-            if (trimmed.startsWith("--") || code.contains("function onStart") || code.contains("function onUpdate")) {
-                return true;
+            if (trimmed.contains("const ") || trimmed.contains("class ") || trimmed.contains("=>") || trimmed.contains("console.log")) {
+                return "JS";
+            }
+            if (trimmed.startsWith("--") || code.contains("then\n") || code.contains("elseif ")) {
+                return "LUA";
             }
         }
-        return false;
+        return "VXS";
+    }
+
+    public static boolean detectLuaMode(String langSetting, String code) {
+        return "LUA".equals(detectRuntimeMode(langSetting, code));
+    }
+
+    /**
+     * Bridges ES6 class declarations & `for (const x of ...)` for Mozilla Rhino 1.7.15
+     * while preserving `let`, `const`, arrow functions, template literals, Map/Set, etc.
+     */
+    public static String transpileModernEs6ForRhino(String src) {
+        if (src == null || src.isEmpty()) return "";
+        String out = src.replaceAll("for\\s*\\(\\s*const\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\s+of\\b", "for (let $1 of");
+        java.util.regex.Pattern classPat = java.util.regex.Pattern.compile(
+                "(?m)(^|[;\\s])class\\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\\s+extends\\s+([A-Za-z_$][A-Za-z0-9_$.]*))?\\s*\\{");
+        int guard = 0;
+        while (guard++ < 32) {
+            java.util.regex.Matcher m = classPat.matcher(out);
+            if (!m.find()) break;
+            String lead = m.group(1);
+            String clsName = m.group(2);
+            String baseName = m.group(3);
+            int bodyStart = m.end(); // right after '{'
+            int bodyEnd = findMatchingBrace(out, bodyStart - 1);
+            if (bodyEnd < 0) break;
+
+            String body = out.substring(bodyStart, bodyEnd);
+            String desugared = desugarClassBody(clsName, baseName, body);
+            out = out.substring(0, m.start()) + lead + desugared + out.substring(bodyEnd + 1);
+        }
+        return out;
+    }
+
+    private static int findMatchingBrace(String s, int openBraceIdx) {
+        int depth = 0;
+        int n = s.length();
+        for (int i = openBraceIdx; i < n; i++) {
+            char c = s.charAt(i);
+            if (c == '\'' || c == '"' || c == '`') {
+                char q = c;
+                i++;
+                while (i < n && s.charAt(i) != q) {
+                    if (s.charAt(i) == '\\') i++;
+                    i++;
+                }
+                continue;
+            }
+            if (c == '/' && i + 1 < n) {
+                if (s.charAt(i + 1) == '/') {
+                    while (i < n && s.charAt(i) != '\n') i++;
+                    continue;
+                } else if (s.charAt(i + 1) == '*') {
+                    i += 2;
+                    while (i + 1 < n && !(s.charAt(i) == '*' && s.charAt(i + 1) == '/')) i++;
+                    i++;
+                    continue;
+                }
+            }
+            if (c == '{') depth++;
+            else if (c == '}') {
+                depth--;
+                if (depth == 0) return i;
+            }
+        }
+        return -1;
+    }
+
+    private static String desugarClassBody(String clsName, String baseName, String body) {
+        StringBuilder ctor = new StringBuilder();
+        StringBuilder methods = new StringBuilder();
+        boolean hasCtor = false;
+        int idx = 0;
+        int n = body.length();
+        java.util.regex.Pattern mPat = java.util.regex.Pattern.compile(
+                "\\G[\\s;]*(?:(static)\\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\\s*\\(([^)]*)\\)\\s*\\{");
+        while (idx < n) {
+            // Skip comments and whitespace between methods
+            while (idx < n && (Character.isWhitespace(body.charAt(idx)) || body.charAt(idx) == ';')) idx++;
+            if (idx >= n) break;
+            if (body.startsWith("//", idx)) {
+                while (idx < n && body.charAt(idx) != '\n') idx++;
+                continue;
+            }
+            if (body.startsWith("/*", idx)) {
+                int endC = body.indexOf("*/", idx + 2);
+                idx = endC < 0 ? n : endC + 2;
+                continue;
+            }
+            java.util.regex.Matcher mm = mPat.matcher(body);
+            if (!mm.find(idx) || mm.start() != idx) break;
+            boolean isStatic = mm.group(1) != null;
+            String mName = mm.group(2);
+            String mArgs = mm.group(3);
+            int mOpen = mm.end() - 1;
+            int mClose = findMatchingBrace(body, mOpen);
+            if (mClose < 0) break;
+            String mBody = body.substring(mOpen + 1, mClose);
+            if ("constructor".equals(mName) && !isStatic) {
+                hasCtor = true;
+                String patchedBody = baseName != null
+                        ? mBody.replaceAll("\\bsuper\\s*\\(", baseName + ".call(this, ")
+                        : mBody;
+                ctor.append("function ").append(clsName).append("(").append(mArgs).append(") {").append(patchedBody).append("}\n");
+            } else if (isStatic) {
+                methods.append(clsName).append(".").append(mName)
+                        .append(" = function(").append(mArgs).append(") {").append(mBody).append("};\n");
+            } else {
+                methods.append(clsName).append(".prototype.").append(mName)
+                        .append(" = function(").append(mArgs).append(") {").append(mBody).append("};\n");
+            }
+            idx = mClose + 1;
+        }
+        StringBuilder res = new StringBuilder();
+        if (!hasCtor) {
+            res.append("function ").append(clsName).append("() {")
+               .append(baseName != null ? " " + baseName + ".apply(this, arguments); " : "")
+               .append("}\n");
+        } else {
+            res.append(ctor);
+        }
+        if (baseName != null) {
+            res.append(clsName).append(".prototype = Object.create(").append(baseName).append(".prototype);\n");
+            res.append(clsName).append(".prototype.constructor = ").append(clsName).append(";\n");
+        }
+        res.append(methods);
+        return res.toString();
     }
 
     public static String validateSyntax(String langSetting, String code) {
-        boolean isLua = detectLuaMode(langSetting, code);
-        if (isLua) {
+        String mode = detectRuntimeMode(langSetting, code);
+        if ("JS".equals(mode)) {
+            Context cx = SANDBOXED_RHINO_FACTORY.enterContext();
+            try {
+                String jsSrc = transpileModernEs6ForRhino(code == null ? "" : code);
+                cx.compileString(jsSrc, "main.js", 1, null);
+                return "OK (ES6+ JavaScript • Mozilla Rhino)";
+            } catch (RhinoException re) {
+                return "JS Syntax Error (Line " + re.lineNumber() + "): " + re.details();
+            } catch (Exception ex) {
+                return "JS Syntax Error: " + ex.getMessage();
+            } finally {
+                Context.exit();
+            }
+        }
+        if ("LUA".equals(mode)) {
             try {
                 Globals g = JsePlatform.standardGlobals();
                 g.load(code == null ? "" : code, "main.lua");
-                return "OK (Lua 5.2)";
+                return "OK (Lua 5.2 • LuaJ)";
             } catch (Exception ex) {
                 return "Lua Syntax Error: " + ex.getMessage();
             }
@@ -121,6 +318,7 @@ public class VortexScriptEngine {
         globals.clear();
         functions.clear();
         luaGlobals = null;
+        rhinoScope = null;
         score = 0;
         health = 100;
         hudBanner = "";
@@ -135,9 +333,32 @@ public class VortexScriptEngine {
         }
 
         String lang = project != null ? project.scriptLanguage : "VXS";
-        usingLua = detectLuaMode(lang, sourceCode);
+        activeVmMode = detectRuntimeMode(lang, sourceCode);
+        usingLua = "LUA".equals(activeVmMode);
 
-        if (usingLua) {
+        if ("JS".equals(activeVmMode)) {
+            Context cx = SANDBOXED_RHINO_FACTORY.enterContext();
+            try {
+                rhinoOpsCounter.set(0);
+                rhinoScope = cx.initSafeStandardObjects();
+                registerRhinoEngineApi(cx, rhinoScope);
+                String jsSrc = transpileModernEs6ForRhino(sourceCode == null ? "" : sourceCode);
+                cx.evaluateString(rhinoScope, jsSrc, "main.js", 1, null);
+                compiledOk = true;
+            } catch (RhinoException re) {
+                lastError = "Line " + re.lineNumber() + ": " + re.details();
+                log("[JS Error] " + lastError);
+                return false;
+            } catch (Throwable t) {
+                lastError = t.getMessage();
+                log("[JS Error] " + lastError);
+                return false;
+            } finally {
+                Context.exit();
+            }
+            callHook("onStart");
+            return compiledOk;
+        } else if (usingLua) {
             try {
                 luaGlobals = JsePlatform.standardGlobals();
                 registerLuaEngineApi(luaGlobals);
@@ -173,22 +394,55 @@ public class VortexScriptEngine {
         }
     }
 
+    private void registerRhinoEngineApi(Context cx, Scriptable scope) {
+        Scriptable vortexObj = cx.newObject(scope);
+        for (final String fnName : ENGINE_API_NAMES) {
+            BaseFunction jsFn = new BaseFunction() {
+                @Override
+                public Object call(Context c, Scriptable sc, Scriptable thisObj, Object[] args) {
+                    Object[] jArgs = new Object[args == null ? 0 : args.length];
+                    for (int i = 0; i < jArgs.length; i++) {
+                        Object raw = args[i];
+                        if (raw == null || raw == Undefined.instance) jArgs[i] = null;
+                        else if (raw instanceof Boolean) jArgs[i] = raw;
+                        else if (raw instanceof Number) jArgs[i] = ((Number) raw).doubleValue();
+                        else jArgs[i] = Context.toString(raw);
+                    }
+                    Object res = callBuiltIn(fnName, jArgs, 0);
+                    if (res == null) return Undefined.instance;
+                    return res;
+                }
+            };
+            ScriptableObject.putProperty(vortexObj, fnName, jsFn);
+            ScriptableObject.putProperty(scope, fnName, jsFn);
+        }
+        ScriptableObject.putProperty(scope, "vortex", vortexObj);
+
+        BaseFunction printFn = new BaseFunction() {
+            @Override
+            public Object call(Context c, Scriptable sc, Scriptable thisObj, Object[] args) {
+                StringBuilder sb = new StringBuilder();
+                if (args != null) {
+                    for (int i = 0; i < args.length; i++) {
+                        if (i > 0) sb.append(' ');
+                        sb.append(Context.toString(args[i]));
+                    }
+                }
+                log(sb.toString());
+                return Undefined.instance;
+            }
+        };
+        ScriptableObject.putProperty(scope, "print", printFn);
+        Scriptable consoleObj = cx.newObject(scope);
+        ScriptableObject.putProperty(consoleObj, "log", printFn);
+        ScriptableObject.putProperty(consoleObj, "warn", printFn);
+        ScriptableObject.putProperty(consoleObj, "error", printFn);
+        ScriptableObject.putProperty(scope, "console", consoleObj);
+    }
+
     private void registerLuaEngineApi(Globals g) {
         LuaTable vortexTbl = new LuaTable();
-        String[] apiNames = new String[]{
-                "joyX", "inputX", "joyY", "inputY", "btnA", "btnB", "touchDown", "touchX", "touchY",
-                "exists", "getX", "getY", "getZ", "getVX", "getVY", "getVZ", "getRotY", "getRotZ", "getTag",
-                "isGrounded", "dist", "distance", "countByTag",
-                "setPos", "move", "setVel", "addVel", "applyImpulse", "setAngularVel", "setFixedRotation",
-                "jump", "setRot", "rotate", "setScale", "setSpin", "setColor", "destroy",
-                "spawn3D", "spawn2D", "particles", "emitParticles", "playSound", "playMusic", "stopMusic",
-                "shake", "shakeCamera", "setCamTarget", "setCamDist", "setSky",
-                "addScore", "setScore", "getScore", "setHealth", "addHealth", "getHealth",
-                "setBanner", "setHudText", "log",
-                "chaseAI", "chaseTagAI", "raycast",
-                "tweenPos", "tweenScale", "tweenRot", "tweenTagYoyo",
-                "noise2D", "noise3D", "terrainHeight", "rand", "clamp", "time"
-        };
+        String[] apiNames = ENGINE_API_NAMES;
 
         for (final String fnName : apiNames) {
             VarArgFunction bridgeFn = new VarArgFunction() {
@@ -250,6 +504,27 @@ public class VortexScriptEngine {
     }
 
     public synchronized Object callHook(String fnName, Object... args) {
+        if ("JS".equals(activeVmMode)) {
+            if (rhinoScope == null) return null;
+            Object prop = ScriptableObject.getProperty(rhinoScope, fnName);
+            if (!(prop instanceof Function)) return null;
+            Context cx = SANDBOXED_RHINO_FACTORY.enterContext();
+            try {
+                rhinoOpsCounter.set(0);
+                return ((Function) prop).call(cx, rhinoScope, rhinoScope, args == null ? new Object[0] : args);
+            } catch (RhinoException re) {
+                lastError = "Line " + re.lineNumber() + ": " + re.details();
+                log("[JS Runtime Error in " + fnName + "] " + lastError);
+                compiledOk = false;
+            } catch (Throwable t) {
+                lastError = t.getMessage();
+                log("[JS Error in " + fnName + "] " + lastError);
+                compiledOk = false;
+            } finally {
+                Context.exit();
+            }
+            return null;
+        }
         if (usingLua) {
             if (luaGlobals == null) return null;
             LuaValue fn = luaGlobals.get(fnName);
@@ -582,6 +857,48 @@ public class VortexScriptEngine {
                     return (double) physicsWorld.sampleTerrainHeightAt(project, flt(a, 0, 0f), flt(a, 1, 0f));
                 }
                 return 0.0;
+            }
+            // v4.0 Multi-Frame Flipbook Sprite Animation + Nearest Target Lock + Persistent Save Store!
+            case "setSpriteAnim": {
+                Entity e = project.findByName(str(a, 0));
+                if (e != null) {
+                    e.spriteFrames = str(a, 1);
+                    e.animFps = flt(a, 2, 6.0f);
+                }
+                return 0.0;
+            }
+            case "findNearestTag": {
+                Entity from = project.findByName(str(a, 0));
+                String tag = str(a, 1);
+                if (from == null) return "";
+                Entity best = null;
+                float bestD2 = Float.MAX_VALUE;
+                for (int i = 0; i < project.entities.size(); i++) {
+                    Entity cand = project.entities.get(i);
+                    if (cand.alive && cand != from && tag.equalsIgnoreCase(cand.tag)) {
+                        float d2 = (cand.x - from.x) * (cand.x - from.x)
+                                 + (cand.y - from.y) * (cand.y - from.y)
+                                 + (cand.z - from.z) * (cand.z - from.z);
+                        if (d2 < bestD2) {
+                            bestD2 = d2;
+                            best = cand;
+                        }
+                    }
+                }
+                return best != null ? best.name : "";
+            }
+            case "saveData": {
+                VortexSaveStore.save(project != null ? project.getSlug() : "game", str(a, 0), str(a, 1));
+                return 0.0;
+            }
+            case "loadData": {
+                String def = a.length > 1 ? str(a, 1) : "";
+                return VortexSaveStore.load(project != null ? project.getSlug() : "game", str(a, 0), def);
+            }
+            case "loadNum": {
+                float def = flt(a, 1, 0f);
+                String raw = VortexSaveStore.load(project != null ? project.getSlug() : "game", str(a, 0), String.valueOf(def));
+                try { return Double.parseDouble(raw); } catch (Exception ex) { return (double) def; }
             }
             case "shake":
             case "shakeCamera": {

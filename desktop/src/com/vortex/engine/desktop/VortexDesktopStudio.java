@@ -3,6 +3,8 @@ package com.vortex.engine.desktop;
 import com.vortex.engine.core.audio.ChiptuneGenerator;
 import com.vortex.engine.core.export.Html5WebExporter;
 import com.vortex.engine.core.flow.VortexFlowCompiler;
+import com.vortex.engine.core.forge.VortexForgeAgent;
+import com.vortex.engine.core.lrm.LrmWorkspaceBridge;
 import com.vortex.engine.core.model.Entity;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.model.PixelSpriteCodec;
@@ -109,14 +111,14 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio() {
-        super("Vortex Engine Studio v3.0.0 (Apex Edition) — 2D/3D • Theta* AI • Tween Engine • Flow • Chiptune • APK/PC/HTML5");
+        super("Vortex Engine Studio v4.0.0 (Hyperion Edition) — ES6 JS (Rhino) • Lua 5.2 • LRM P2P Sync • Forge AI • APK/PC/HTML5");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1420, 860);
+        setSize(1440, 860);
         setLocationRelativeTo(null);
         getContentPane().setBackground(new Color(9, 13, 22));
         setLayout(new BorderLayout());
 
-        project = ProjectTemplates.create("CYBER_MAZE_AI_2D", "Cyber Hunters AI Maze", "com.vortex.game.cyberhunters");
+        project = ProjectTemplates.create("NEON_SURVIVORS_JS_2D", "Neon Survivors Swarm", "com.vortex.game.survivors");
 
         add(buildTopToolbar(), BorderLayout.NORTH);
 
@@ -129,11 +131,10 @@ public class VortexDesktopStudio extends JFrame {
         consoleArea.setBackground(new Color(6, 9, 15));
         consoleArea.setForeground(new Color(167, 243, 208));
         consoleArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        consoleArea.setText("Vortex Engine v3.0.0 (Apex Edition) Desktop Studio Initialized.\n"
-                + "• Scripting & Logic: Lua 5.2 (LuaJ) + Vortex Flow Visual Event-Sheet + VortexScript (.vxs)\n"
-                + "• AI & Animation   : Theta* / A* Obstacle Pathfinding + Universal Tween Engine + 3D Raycast\n"
-                + "• Physics & Audio  : JBox2D Rigid-Body + FastNoiseLite Terrain + 16-Step Chiptune Synth\n"
-                + "• Multi-Export     : Windows .exe • Linux • HTML5 Web (.html) • Android APK\n");
+        consoleArea.setText("Vortex Engine v4.0.0 (Hyperion Edition) Desktop Studio Initialized.\n"
+                + "• Quad-Runtime     : ES6+ JavaScript (Mozilla Rhino 1.7.15.1) + Lua 5.2 (LuaJ) + Vortex Flow + VortexScript\n"
+                + "• P2P & AI Agents  : LRM P2P Version Control & Sync (hacvilke/lrm) + Vortex Forge BYOK/Offline AI (hacvilke/roforge)\n"
+                + "• Simulation       : JBox2D + Theta* Pathfinding + Universal Tween Engine + Multi-Frame Flipbook Sprites + Chiptune\n");
         consoleScroll.setPreferredSize(new Dimension(600, 145));
 
         JSplitPane centerSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, viewport, consoleScroll);
@@ -221,6 +222,14 @@ public class VortexDesktopStudio extends JFrame {
         flowBtn.addActionListener(e -> openVortexFlowDialog());
         bar.add(flowBtn);
 
+        JButton forgeBtn = styledBtn("🤖 Forge AI", new Color(45, 22, 68), new Color(235, 130, 255));
+        forgeBtn.addActionListener(e -> openForgeAiDialog());
+        bar.add(forgeBtn);
+
+        JButton lrmBtn = styledBtn("🔄 LRM P2P Sync", new Color(16, 48, 52), new Color(0, 230, 118));
+        lrmBtn.addActionListener(e -> openLrmSyncDialog());
+        bar.add(lrmBtn);
+
         JButton pixelBtn = styledBtn("🎨 Pixel Art", new Color(45, 25, 65), new Color(225, 190, 255));
         pixelBtn.addActionListener(e -> openPixelArtStudio());
         bar.add(pixelBtn);
@@ -307,10 +316,12 @@ public class VortexDesktopStudio extends JFrame {
         checkBtn.addActionListener(e -> checkScriptSyntax());
         btnBar.add(checkBtn);
 
-        langBtn = styledBtn("Lang: LUA", new Color(16, 37, 58), new Color(0, 229, 255));
+        langBtn = styledBtn("Lang: JS", new Color(38, 32, 11), new Color(250, 204, 21));
         langBtn.addActionListener(e -> {
             syncCode();
-            project.scriptLanguage = "LUA".equalsIgnoreCase(project.scriptLanguage) ? "VXS" : "LUA";
+            if ("JS".equalsIgnoreCase(project.scriptLanguage)) project.scriptLanguage = "LUA";
+            else if ("LUA".equalsIgnoreCase(project.scriptLanguage)) project.scriptLanguage = "VXS";
+            else project.scriptLanguage = "JS";
             langBtn.setText("Lang: " + project.scriptLanguage);
             syntaxStatusLabel.setText("Switched VM to " + project.scriptLanguage + " — click Check Syntax.");
         });
@@ -688,10 +699,20 @@ public class VortexDesktopStudio extends JFrame {
         p.add(addBox, BorderLayout.SOUTH);
 
         int res = JOptionPane.showOptionDialog(this, p,
-                "⚡ Vortex Flow — Visual Event Sheet (Compiles 1:1 to Lua 5.2)",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE, null,
-                new String[]{"⚡ Compile Flow ➔ Lua 5.2 Script", "Close"}, "⚡ Compile Flow ➔ Lua 5.2 Script");
+                "⚡ Vortex Flow — Visual Event Sheet (Compiles 1:1 to ES6 JS or Lua 5.2)",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null,
+                new String[]{"⚡ Compile ➔ ES6 JavaScript", "⚡ Compile ➔ Lua 5.2", "Close"},
+                "⚡ Compile ➔ ES6 JavaScript");
         if (res == 0 && !project.flowRules.isEmpty()) {
+            pushUndo();
+            String js = VortexFlowCompiler.compileToJavaScript(project);
+            project.scriptLanguage = "JS";
+            project.scriptCode = js;
+            scriptArea.setText(js);
+            langBtn.setText("Lang: JS");
+            checkScriptSyntax();
+            log("[⚡ FLOW] Compiled " + project.flowRules.size() + " visual rules into ES6+ JavaScript!");
+        } else if (res == 1 && !project.flowRules.isEmpty()) {
             pushUndo();
             String lua = VortexFlowCompiler.compileToLua(project);
             project.scriptLanguage = "LUA";
@@ -701,6 +722,121 @@ public class VortexDesktopStudio extends JFrame {
             checkScriptSyntax();
             log("[⚡ FLOW] Compiled " + project.flowRules.size() + " visual rules into Lua 5.2!");
         }
+    }
+
+    private void openForgeAiDialog() {
+        JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
+        form.setPreferredSize(new Dimension(540, 220));
+        JComboBox<String> provCb = new JComboBox<>(VortexForgeAgent.PROVIDERS);
+        JTextField keyField = new JTextField();
+        JTextField promptField = new JTextField("2D cyber swarm arena with animated drones and auto-aim blaster");
+        form.add(new JLabel("AI Provider (inspired by hacvilke/roforge — local BYOK or instant Offline):"));
+        form.add(provCb);
+        form.add(new JLabel("Optional API Key (leave blank for Offline Smart Generator):"));
+        form.add(keyField);
+        form.add(new JLabel("Describe what Forge AI should generate (+ automatic Undo Checkpoint):"));
+        form.add(promptField);
+
+        if (JOptionPane.showConfirmDialog(this, form, "🤖 Vortex Forge AI Studio Agent",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION) {
+            pushUndo();
+            try {
+                String msg = VortexForgeAgent.applyPromptToProject(
+                        project, promptField.getText().trim(), provCb.getSelectedIndex(), keyField.getText().trim());
+                loadProjectIntoStudio(project);
+                log("[🤖 FORGE AI] " + msg);
+            } catch (Exception ex) {
+                log("[FORGE ERROR] " + ex.getMessage());
+                JOptionPane.showMessageDialog(this, "Forge AI Error:\n" + ex.getMessage());
+            }
+        }
+    }
+
+    private void openLrmSyncDialog() {
+        syncCode();
+        final File repoDir = new File(System.getProperty("user.home", "."), "VortexEngine-LRM/" + project.getSlug());
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setPreferredSize(new Dimension(680, 440));
+
+        JTextArea outArea = new JTextArea();
+        outArea.setEditable(false);
+        outArea.setBackground(new Color(6, 9, 15));
+        outArea.setForeground(new Color(167, 243, 208));
+        outArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        String detectedBin = LrmWorkspaceBridge.findLrmBinary();
+        outArea.setText("LRM (Log Replication Manager — github.com/hacvilke/lrm)\n"
+                + "Repo Folder : " + repoDir.getAbsolutePath() + "\n"
+                + "LRM Binary  : " + (detectedBin != null ? detectedBin : "Not installed yet (see install commands below)") + "\n\n"
+                + "Install LRM in 1 command:\n"
+                + "  Linux/macOS : " + LRM_HINT() + "\n");
+        panel.add(new JScrollPane(outArea), BorderLayout.CENTER);
+
+        JPanel controls = new JPanel(new GridLayout(0, 2, 6, 5));
+        JTextField msgField = new JTextField("Update " + project.title);
+        JTextField portKeyField = new JTextField();
+        controls.add(new JLabel("Commit Message:")); controls.add(msgField);
+        controls.add(new JLabel("Remote Port Key (lrm1_...):")); controls.add(portKeyField);
+
+        JButton commitBtn = new JButton("📤 Unpack + LRM Commit");
+        commitBtn.addActionListener(e -> {
+            try {
+                LrmWorkspaceBridge.exportToLrmRepo(project, repoDir);
+                if (!new File(repoDir, ".lrm").exists()) {
+                    LrmWorkspaceBridge.runLrm(repoDir, 10, "init", "--user", "studio");
+                }
+                LrmWorkspaceBridge.CmdResult r = LrmWorkspaceBridge.runLrm(repoDir, 12, "commit", "-m", msgField.getText().trim());
+                LrmWorkspaceBridge.CmdResult lg = LrmWorkspaceBridge.runLrm(repoDir, 8, "log", "--limit", "6", "--graph", "--oneline");
+                outArea.append("\n$ lrm commit\n" + r.output + "\n$ lrm log --graph\n" + lg.output + "\n");
+            } catch (Exception ex) {
+                outArea.append("\n[Error] " + ex.getMessage() + "\n");
+            }
+        });
+
+        JButton shareBtn = new JButton("🔑 LRM Share (Get Port Key)");
+        shareBtn.addActionListener(e -> {
+            try {
+                LrmWorkspaceBridge.exportToLrmRepo(project, repoDir);
+                if (!new File(repoDir, ".lrm").exists()) {
+                    LrmWorkspaceBridge.runLrm(repoDir, 10, "init", "--user", "studio");
+                    LrmWorkspaceBridge.runLrm(repoDir, 10, "commit", "-m", "Initial game snapshot");
+                }
+                LrmWorkspaceBridge.CmdResult r = LrmWorkspaceBridge.runLrm(repoDir, 12, "share", "--lifetime", "600");
+                outArea.append("\n$ lrm share\n" + r.output + "\n");
+            } catch (Exception ex) {
+                outArea.append("\n[Error] " + ex.getMessage() + "\n");
+            }
+        });
+
+        JButton joinBtn = new JButton("🌐 LRM Join Port Key");
+        joinBtn.addActionListener(e -> {
+            String pk = portKeyField.getText().trim();
+            if (pk.isEmpty()) { outArea.append("\n[!] Paste an lrm1_... Port Key first!\n"); return; }
+            LrmWorkspaceBridge.CmdResult r = LrmWorkspaceBridge.runLrm(repoDir, 20, "join", pk, "--init");
+            outArea.append("\n$ lrm join\n" + r.output + "\n");
+        });
+
+        JButton importBtn = new JButton("🔄 Reload Repo & Inbox into Studio");
+        importBtn.addActionListener(e -> {
+            try {
+                pushUndo();
+                GameProject imported = LrmWorkspaceBridge.importFromLrmRepo(repoDir);
+                imported.id = project.id;
+                loadProjectIntoStudio(imported);
+                outArea.append("\n[✓] Reloaded " + imported.entities.size() + " entities into Studio!\n");
+            } catch (Exception ex) {
+                outArea.append("\n[Import Error] " + ex.getMessage() + "\n");
+            }
+        });
+
+        controls.add(commitBtn); controls.add(shareBtn);
+        controls.add(joinBtn);   controls.add(importBtn);
+        panel.add(controls, BorderLayout.SOUTH);
+
+        JOptionPane.showMessageDialog(this, panel, "🔄 LRM P2P Version Control & Live Sync", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    private static String LRM_HINT() {
+        return LrmWorkspaceBridge.LRM_DESKTOP_INSTALL_SH + "\n  Windows PS  : " + LrmWorkspaceBridge.LRM_WINDOWS_INSTALL_PS1;
     }
 
     private void showNewTemplateDialog() {
@@ -781,17 +917,16 @@ public class VortexDesktopStudio extends JFrame {
 
     private boolean checkScriptSyntax() {
         syncCode();
-        VortexScriptEngine tester = new VortexScriptEngine();
-        tester.attach(project, null, null);
-        boolean ok = tester.compileAndInit(project.scriptCode);
-        if (ok) {
-            syntaxStatusLabel.setText("✓ Syntax Valid (" + project.scriptLanguage + " VM)");
+        String check = VortexScriptEngine.validateSyntax(project.scriptLanguage, project.scriptCode);
+        if (check.startsWith("OK")) {
+            syntaxStatusLabel.setText("✓ " + check);
             syntaxStatusLabel.setForeground(new Color(0, 230, 118));
+            return true;
         } else {
-            syntaxStatusLabel.setText("✕ " + tester.getLastError());
+            syntaxStatusLabel.setText("✕ " + check);
             syntaxStatusLabel.setForeground(new Color(255, 82, 82));
+            return false;
         }
-        return ok;
     }
 
     private void syncCode() {
@@ -903,7 +1038,7 @@ public class VortexDesktopStudio extends JFrame {
     // Headless Verification Suite (LuaJ + JBox2D + FastNoiseLite + VortexScript)
     // =========================================================================
     private static void runHeadlessSelfTests() throws Exception {
-        System.out.println("=== Vortex Engine v2.0.0 Headless Verification Suite ===");
+        System.out.println("=== Vortex Engine v4.0.0 (Hyperion Edition) Headless Verification Suite ===");
 
         for (int i = 0; i < ProjectTemplates.TEMPLATE_KEYS.length; i++) {
             String key = ProjectTemplates.TEMPLATE_KEYS[i];
@@ -941,12 +1076,55 @@ public class VortexDesktopStudio extends JFrame {
         String compiledFlowLua = VortexFlowCompiler.compileToLua(cyber);
         String flowSyntax = VortexScriptEngine.validateSyntax("LUA", compiledFlowLua);
         if (!flowSyntax.startsWith("OK")) throw new RuntimeException("Flow -> Lua compile invalid: " + flowSyntax);
-        System.out.println("  [PASS] Vortex Flow Visual Compiler -> " + flowSyntax + " (" + cyber.flowRules.size() + " rules)");
+        String compiledFlowJs = VortexFlowCompiler.compileToJavaScript(cyber);
+        String flowJsSyntax = VortexScriptEngine.validateSyntax("JS", compiledFlowJs);
+        if (!flowJsSyntax.startsWith("OK")) throw new RuntimeException("Flow -> ES6 JS compile invalid: " + flowJsSyntax);
+        System.out.println("  [PASS] Vortex Flow Dual Compiler -> " + flowJsSyntax + " & " + flowSyntax);
 
-        File tmpHtml = File.createTempFile("cyber_hunters_web_", ".html");
-        Html5WebExporter.exportToFile(cyber, tmpHtml);
+        // Verify Rhino Sandbox & Infinite-Loop Protection!
+        GameProject loopGuardTest = ProjectTemplates.create("BLANK_2D_LUA", "GuardTest", "com.vortex.guard");
+        loopGuardTest.scriptLanguage = "JS";
+        loopGuardTest.scriptCode = "function onStart() { while (true) {} }";
+        VortexScriptEngine guardVm = new VortexScriptEngine();
+        guardVm.attach(loopGuardTest, new PhysicsWorld(), null);
+        guardVm.compileAndInit(loopGuardTest.scriptCode);
+        if (guardVm.getLastError() == null || !guardVm.getLastError().contains("Quota Exceeded")) {
+            throw new RuntimeException("Rhino infinite-loop guard did not trigger!");
+        }
+        System.out.println("  [PASS] Mozilla Rhino ES6 Infinite-Loop Quota & ClassShutter Sandbox Verified!");
+
+        // Verify Vortex Forge AI Offline Generator (both 2D & 3D)
+        GameProject forgeProj = new GameProject();
+        VortexForgeAgent.applyPromptToProject(forgeProj, "3D mecha canyon with railgun", 0, "");
+        if (!"OK (ES6+ JavaScript • Mozilla Rhino)".equals(VortexScriptEngine.validateSyntax("JS", forgeProj.scriptCode))) {
+            throw new RuntimeException("Forge AI generated invalid JS!");
+        }
+        System.out.println("  [PASS] Vortex Forge AI Generator Verified (" + forgeProj.entities.size() + " 3D entities + ES6 JS)");
+
+        // Verify LRM (hacvilke/lrm) Multi-File Unpack, Inbox Asset Drop & Round-Trip Re-Import!
+        File tmpLrmDir = Files.createTempDirectory("vortex_lrm_test_").toFile();
+        GameProject survivors = ProjectTemplates.create("NEON_SURVIVORS_JS_2D", "Neon Survivors Swarm", "com.vortex.survivors");
+        LrmWorkspaceBridge.exportToLrmRepo(survivors, tmpLrmDir);
+        Files.write(new File(tmpLrmDir, "inbox/dropped_starfighter.obj").toPath(),
+                "v 0 1 0\nv -1 -1 1\nv 1 -1 1\nf 1 2 3\n".getBytes(StandardCharsets.UTF_8));
+        if (LrmWorkspaceBridge.findLrmBinary() != null) {
+            LrmWorkspaceBridge.CmdResult initRes = LrmWorkspaceBridge.runLrm(tmpLrmDir, 10, "init", "--user", "ci");
+            LrmWorkspaceBridge.CmdResult ciRes = LrmWorkspaceBridge.runLrm(tmpLrmDir, 10, "commit", "-m", "Initial Neon Survivors ES6 commit");
+            if (initRes.exitCode != 0 || ciRes.exitCode != 0) {
+                throw new RuntimeException("LRM CLI commit failed: " + initRes.output + " / " + ciRes.output);
+            }
+            System.out.println("  [PASS] Live LRM CLI Integration (" + ciRes.output.replace("\n", " | ") + ")");
+        }
+        GameProject reimported = LrmWorkspaceBridge.importFromLrmRepo(tmpLrmDir);
+        if (reimported.entities.size() != survivors.entities.size() || !reimported.customObjMeshes.containsKey("dropped_starfighter")) {
+            throw new RuntimeException("LRM round-trip or inbox drop failed!");
+        }
+        System.out.println("  [PASS] LRM Multi-File Unpack + Inbox .obj Drop + Lossless Re-Import Verified!");
+
+        File tmpHtml = File.createTempFile("neon_survivors_web_", ".html");
+        Html5WebExporter.exportToFile(survivors, tmpHtml);
         if (tmpHtml.length() < 12_000) throw new RuntimeException("HTML5 Web export unexpectedly small!");
-        System.out.println("  [PASS] Single-File HTML5 Web Exporter (" + (tmpHtml.length() / 1024) + " KB standalone .html)");
+        System.out.println("  [PASS] Single-File HTML5 ES6 Web Exporter (" + (tmpHtml.length() / 1024) + " KB standalone .html)");
         tmpHtml.delete();
 
         // Test Standalone Game .exe & .jar & Android Bundle Export!

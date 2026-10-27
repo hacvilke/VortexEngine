@@ -778,8 +778,9 @@ public class DesktopSoftware3DViewport extends JPanel {
             String prim = e.primitive == null ? "RECT" : e.primitive.toUpperCase();
             Color col = toAwtColor(e.colorHex, Math.round(e.alpha * 255));
 
-            if ("CUSTOM_SPRITE".equals(prim) || (e.customSpriteName != null && !e.customSpriteName.isEmpty())) {
-                String key = (e.customSpriteName != null && !e.customSpriteName.isEmpty()) ? e.customSpriteName : "default";
+            String activeSp = e.getActiveSpriteName();
+            if ("CUSTOM_SPRITE".equals(prim) || !activeSp.isEmpty()) {
+                String key = !activeSp.isEmpty() ? activeSp : "default";
                 BufferedImage img = spriteCache.get(key);
                 if (img == null) {
                     String enc = p.customSprites.get(key);

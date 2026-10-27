@@ -446,8 +446,9 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         String prim = e.primitive == null ? "RECT" : e.primitive.toUpperCase();
         int vCount = 0;
 
-        if ("CUSTOM_SPRITE".equals(prim) || (e.customSpriteName != null && !e.customSpriteName.isEmpty())) {
-            String key = (e.customSpriteName != null && !e.customSpriteName.isEmpty()) ? e.customSpriteName : "default";
+        String activeSp = e.getActiveSpriteName();
+        if ("CUSTOM_SPRITE".equals(prim) || !activeSp.isEmpty()) {
+            String key = !activeSp.isEmpty() ? activeSp : "default";
             int[] px = decodedSpriteCache.get(key);
             if (px == null) {
                 String encoded = project.customSprites.get(key);

@@ -14,8 +14,10 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.render.VortexGLRenderer;
+import com.vortex.engine.core.storage.VortexSaveStore;
 import com.vortex.engine.core.ui.VortexGameSurfaceView;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -38,6 +40,7 @@ public class StandaloneGameActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN
                 | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         enableImmersiveFullscreen();
+        VortexSaveStore.setSaveRootDir(new File(getFilesDir(), "vortex_saves"));
 
         masterProject = loadGameProject();
         applyOrientation(masterProject.orientation);

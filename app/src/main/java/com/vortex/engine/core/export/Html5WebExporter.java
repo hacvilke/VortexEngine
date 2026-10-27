@@ -154,7 +154,8 @@ public class Html5WebExporter {
                 "    return v * 0.42;\n" +
                 "  }\n\n" +
                 "  // Game State, Tweening, Particles, Lua/VXS Script Transpiler\n" +
-                "  let proj, entities, byName, score=0, health=100, banner='', shakeT=0, shakeMag=0, particles=[], tweens=[], hooks={};\n" +
+                "  let proj, entities, byName, score=0, health=100, banner='', shakeT=0, shakeMag=0, particles=[], tweens=[], hooks={}, animClock=0;\n" +
+                "  const memStore = {};\n" +
                 "  let camX=0, camY=5, camZ=12, lookX=0, lookY=1, lookZ=0;\n" +
                 "  const spriteCanvasCache = new Map();\n\n" +
                 "  function findE(n) { return byName.get(n) || entities.find(e => e.alive && e.name === n); }\n" +
@@ -217,13 +218,21 @@ public class Html5WebExporter {
                 "    rand: (a,b) => a + Math.random()*(b-a),\n" +
                 "    clamp: (v,lo,hi) => Math.max(lo, Math.min(hi, v)),\n" +
                 "    time: () => performance.now()*0.001,\n" +
-                "    dist: (a,b) => vortex.distance(a,b)\n" +
+                "    dist: (a,b) => vortex.distance(a,b),\n" +
+                "    setSpriteAnim: (n,frames,fps) => { const e=findE(n); if(e){ e.spriteFrames=String(frames||''); e.animFps=+fps||6; } },\n" +
+                "    findNearestTag: (fromName,tag) => { const f=findE(fromName); if(!f) return ''; let best='', bd=1e18; for(const e of entities){ if(e.alive && e!==f && e.tag===tag){ const d=(e.x-f.x)**2+(e.y-f.y)**2+(e.z-f.z)**2; if(d<bd){bd=d;best=e.name;} } } return best; },\n" +
+                "    saveData: (k,v) => { memStore[k]=String(v??''); try{ localStorage.setItem('vx_'+(proj.id||'g')+'_'+k, memStore[k]); }catch(e){} return 0; },\n" +
+                "    loadData: (k,def) => { try{ const s=localStorage.getItem('vx_'+(proj.id||'g')+'_'+k); if(s!==null) return s; }catch(e){} return k in memStore ? memStore[k] : String(def??''); },\n" +
+                "    loadNum: (k,def) => { const v = parseFloat(vortex.loadData(k, String(def??0))); return Number.isFinite(v) ? v : (+def||0); }\n" +
                 "  };\n\n" +
                 "  function compileScript(code, lang) {\n" +
                 "    hooks = {};\n" +
                 "    try {\n" +
                 "      let js = code || '';\n" +
-                "      if ((lang||'').toUpperCase() === 'LUA') {\n" +
+                "      const L = (lang||'').toUpperCase();\n" +
+                "      if (L === 'JS' || L === 'JAVASCRIPT') {\n" +
+                "        // Native ES6+ JavaScript — zero transpilation, full V8 / Browser JIT speed!\n" +
+                "      } else if (L === 'LUA') {\n" +
                 "        js = js.replace(/--.*$/gm, '')\n" +
                 "               .replace(/\\blocal\\s+([a-zA-Z0-9_]+(?:\\s*,\\s*[a-zA-Z0-9_]+)+)\\s*=\\s*([^\\n;]+)/g, 'let [$1] = [$2]')\n" +
                 "               .replace(/\\blocal\\s+/g, 'let ')\n" +
@@ -260,6 +269,7 @@ public class Html5WebExporter {
                 "    startMusicLoop(proj);\n" +
                 "  }\n\n" +
                 "  function stepPhysics(dt) {\n" +
+                "    animClock += dt;\n" +
                 "    const is3D = proj.dimensionMode === '3D', grav = proj.gravityY ?? -22;\n" +
                 "    tweens.forEach(tw => {\n" +
                 "      tw.el += dt * tw.dir;\n" +
@@ -271,6 +281,7 @@ public class Html5WebExporter {
                 "    });\n" +
                 "    for (const e of entities) {\n" +
                 "      if (!e.alive) continue;\n" +
+                "      if (e.spriteFrames) { const fr = e.spriteFrames.split(','); if (fr.length) e.customSpriteName = fr[Math.floor(animClock * Math.max(0.5, e.animFps||6)) % fr.length].trim(); }\n" +
                 "      e.rotX += (e.spinX||0)*dt; e.rotY += (e.spinY||0)*dt; e.rotZ += (e.spinZ||0)*dt;\n" +
                 "      if (e.bodyType === 'DYNAMIC') {\n" +
                 "        e.vy += grav * (e.gravityScale ?? 1) * dt;\n" +

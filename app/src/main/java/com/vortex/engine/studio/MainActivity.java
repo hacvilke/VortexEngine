@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
         brandRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         TextView verChip = new TextView(this);
-        verChip.setText("v3.0 APEX");
+        verChip.setText("v4.0 HYPERION");
         verChip.setTextColor(Color.parseColor("#00E676"));
         verChip.setTextSize(10.5f);
         verChip.setTypeface(Typeface.DEFAULT_BOLD);
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         header.addView(brandRow);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("2D/3D Studio • Theta* AI • Tween Engine • Flow No-Code • Chiptune • APK + HTML5");
+        subtitle.setText("ES6 JS (Rhino) • Lua 5.2 • LRM P2P Sync • Forge AI • Theta* AI • APK/PC/Web");
         subtitle.setTextColor(Color.parseColor("#94A3B8"));
         subtitle.setTextSize(11.5f);
         subtitle.setPadding(0, dp(3), 0, dp(10));
@@ -255,11 +255,12 @@ public class MainActivity extends Activity {
                     is3D ? "#B388FF" : "#00E676");
             topRow.addView(dimBadge);
 
+            boolean isJs = "JS".equalsIgnoreCase(p.scriptLanguage);
             boolean isLua = "LUA".equalsIgnoreCase(p.scriptLanguage);
-            TextView langBadge = makeBadge(isLua ? "LUA 5.2" : "VXS",
-                    isLua ? "#10253A" : "#261C10",
-                    isLua ? "#00E5FF" : "#FFB300",
-                    isLua ? "#38BDF8" : "#FFD54F");
+            TextView langBadge = makeBadge(isJs ? "ES6 JS" : (isLua ? "LUA 5.2" : "VXS"),
+                    isJs ? "#26200B" : (isLua ? "#10253A" : "#261C10"),
+                    isJs ? "#FACC15" : (isLua ? "#00E5FF" : "#FFB300"),
+                    isJs ? "#FDE047" : (isLua ? "#38BDF8" : "#FFD54F"));
             LinearLayout.LayoutParams lbLp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             lbLp.leftMargin = dp(6);

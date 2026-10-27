@@ -37,31 +37,37 @@ public class ProjectRepository {
             }
         }
         if (list.isEmpty()) {
+            GameProject survivorsJs = ProjectTemplates.create("NEON_SURVIVORS_JS_2D", "Neon Survivors Swarm", "com.vortex.game.survivors");
+            GameProject starhullJs = ProjectTemplates.create("STARHULL_MECHA_JS_3D", "Starhull Mecha Raiders 3D", "com.vortex.game.starhull3d");
             GameProject cyberMaze = ProjectTemplates.create("CYBER_MAZE_AI_2D", "Cyber Hunters AI Maze", "com.vortex.game.cyberhunters");
             GameProject citadel3D = ProjectTemplates.create("CITADEL_TWEEN_3D", "Neon Citadel Siege 3D", "com.vortex.game.citadel3d");
             GameProject box2dLua = ProjectTemplates.create("ANGRY_BOX2D_LUA", "Angry Crates Siege", "com.vortex.game.angrycrates");
-            GameProject terrain3D = ProjectTemplates.create("FRONTIER_TERRAIN_3D_LUA", "Procedural Frontier 3D", "com.vortex.game.frontier3d");
-            saveProject(ctx, terrain3D);
             saveProject(ctx, box2dLua);
             saveProject(ctx, citadel3D);
             saveProject(ctx, cyberMaze);
+            saveProject(ctx, starhullJs);
+            saveProject(ctx, survivorsJs);
+            list.add(survivorsJs);
+            list.add(starhullJs);
             list.add(cyberMaze);
             list.add(citadel3D);
             list.add(box2dLua);
-            list.add(terrain3D);
-            try { new File(dir, "v3_seeded.flag").createNewFile(); } catch (Exception ignored) {}
+            try {
+                new File(dir, "v3_seeded.flag").createNewFile();
+                new File(dir, "v4_seeded.flag").createNewFile();
+            } catch (Exception ignored) {}
         } else {
-            File v3Flag = new File(dir, "v3_seeded.flag");
-            if (!v3Flag.exists()) {
+            File v4Flag = new File(dir, "v4_seeded.flag");
+            if (!v4Flag.exists()) {
                 try {
-                    v3Flag.createNewFile();
-                    GameProject citadel3D = ProjectTemplates.create("CITADEL_TWEEN_3D", "Neon Citadel Siege 3D", "com.vortex.game.citadel3d");
-                    GameProject cyberMaze = ProjectTemplates.create("CYBER_MAZE_AI_2D", "Cyber Hunters AI Maze", "com.vortex.game.cyberhunters");
-                    saveProject(ctx, citadel3D);
+                    v4Flag.createNewFile();
+                    GameProject starhullJs = ProjectTemplates.create("STARHULL_MECHA_JS_3D", "Starhull Mecha Raiders 3D", "com.vortex.game.starhull3d");
+                    GameProject survivorsJs = ProjectTemplates.create("NEON_SURVIVORS_JS_2D", "Neon Survivors Swarm", "com.vortex.game.survivors");
+                    saveProject(ctx, starhullJs);
                     Thread.sleep(5);
-                    saveProject(ctx, cyberMaze);
-                    list.add(citadel3D);
-                    list.add(cyberMaze);
+                    saveProject(ctx, survivorsJs);
+                    list.add(starhullJs);
+                    list.add(survivorsJs);
                 } catch (Exception ignored) {
                 }
             }

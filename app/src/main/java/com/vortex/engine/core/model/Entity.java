@@ -14,6 +14,9 @@ public class Entity {
     public String primitive;
     public String customObjName = "";
     public String customSpriteName = "";
+    // v4.0 Multi-frame Flipbook Sprite Animation (comma-separated sprite keys, e.g. "knight_1,knight_2")
+    public String spriteFrames = "";
+    public float animFps = 6.0f;
 
     // Transform
     public float x = 0f;
@@ -115,6 +118,15 @@ public class Entity {
         return hexToRgba(secondaryColorHex, alpha);
     }
 
+    public String getActiveSpriteName() {
+        if (customSpriteName != null && !customSpriteName.isEmpty()) return customSpriteName;
+        if (spriteFrames != null && !spriteFrames.isEmpty()) {
+            int comma = spriteFrames.indexOf(',');
+            return (comma > 0 ? spriteFrames.substring(0, comma) : spriteFrames).trim();
+        }
+        return "";
+    }
+
     /**
      * Pure-Java hex color parser (#RGB, #RRGGBB, #AARRGGBB) — works identically on Android & Desktop JVM.
      */
@@ -163,6 +175,8 @@ public class Entity {
         o.put("primitive", primitive);
         o.put("customObjName", customObjName);
         o.put("customSpriteName", customSpriteName);
+        o.put("spriteFrames", spriteFrames);
+        o.put("animFps", animFps);
         o.put("x", x);
         o.put("y", y);
         o.put("z", z);
@@ -206,6 +220,8 @@ public class Entity {
         e.primitive = o.optString("primitive", e.is3D ? "CUBE" : "RECT");
         e.customObjName = o.optString("customObjName", "");
         e.customSpriteName = o.optString("customSpriteName", "");
+        e.spriteFrames = o.optString("spriteFrames", "");
+        e.animFps = (float) o.optDouble("animFps", 6.0);
         e.x = (float) o.optDouble("x", 0.0);
         e.y = (float) o.optDouble("y", 0.0);
         e.z = (float) o.optDouble("z", 0.0);

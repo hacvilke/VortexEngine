@@ -8,8 +8,8 @@ android {
         applicationId "com.vortex.engine.studio"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0.0"
+        versionCode 4
+        versionName "4.0.0"
     }
 
     buildTypes {
@@ -28,5 +28,5 @@ android {
 }
 
 dependencies {
-    // Pure Android SDK + OpenGL ES 2.0/3.0 + AudioTrack + Termux IPC — zero external bloat!
+    implementation fileTree(dir: "libs", include: ["*.jar"])
 }
