@@ -137,7 +137,8 @@ public class TermuxBridge {
         scriptsDir.mkdirs();
         writeText(new File(assetsDir, "project.vortex.json"), project.toJsonString());
 
-        String ext = "JS".equalsIgnoreCase(project.scriptLanguage) ? "main.js"
+        String ext = "JAVA".equalsIgnoreCase(project.scriptLanguage) ? "main.java"
+                : "JS".equalsIgnoreCase(project.scriptLanguage) ? "main.js"
                 : ("LUA".equalsIgnoreCase(project.scriptLanguage) ? "main.lua" : "main.vxs");
         writeText(new File(scriptsDir, ext), project.scriptCode == null ? "" : project.scriptCode);
 
@@ -155,6 +156,7 @@ public class TermuxBridge {
         prebuiltDir.mkdirs();
         copyAssetIfPresent(ctx, "toolchain/vortex-runtime.dex", new File(prebuiltDir, "vortex-runtime.dex"));
         copyAssetIfPresent(ctx, "toolchain/vortex-runtime-2.dex", new File(prebuiltDir, "vortex-runtime-2.dex"));
+        copyAssetIfPresent(ctx, "toolchain/vortex-runtime-3.dex", new File(prebuiltDir, "vortex-runtime-3.dex"));
         copyAssetIfPresent(ctx, "toolchain/build_termux.sh", new File(stageRoot, "build_termux.sh"));
         copyAssetIfPresent(ctx, "toolchain/setup_termux.sh", new File(stageRoot, "setup_termux.sh"));
         unzipAssetIfPresent(ctx, "toolchain/vortex-runtime-src.zip", stageRoot);

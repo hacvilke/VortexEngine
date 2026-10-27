@@ -49,7 +49,7 @@ public class DesktopPixelArtDialog extends JDialog {
 
     public static JPanel createEmbeddedPanel(Supplier<GameProject> projectSupplier, OnSpriteSaved callback) {
         final int[] pixels = new int[PixelSpriteCodec.SIZE * PixelSpriteCodec.SIZE];
-        final int[] brushRef = {0xFF00E5FF};
+        final int[] brushRef = {0xFFFFFFFF};
         final boolean[] mirrorRef = {false};
 
         GameProject initProj = projectSupplier.get();
@@ -106,7 +106,7 @@ public class DesktopPixelArtDialog extends JDialog {
                         int x0 = Math.round(ox + x * cell);
                         int y0 = Math.round(oy + y * cell);
                         int cw = Math.max(1, Math.round(cell));
-                        g2.setColor(((x + y) % 2 == 0) ? new Color(17, 25, 40) : new Color(23, 33, 52));
+                        g2.setColor(((x + y) % 2 == 0) ? new Color(18, 18, 22) : new Color(26, 26, 31));
                         g2.fillRect(x0, y0, cw, cw);
 
                         int argb = pixels[y * PixelSpriteCodec.SIZE + x];
@@ -114,7 +114,7 @@ public class DesktopPixelArtDialog extends JDialog {
                             g2.setColor(new Color((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF));
                             g2.fillRect(x0, y0, cw, cw);
                         }
-                        g2.setColor(new Color(45, 62, 90, 95));
+                        g2.setColor(new Color(52, 52, 60, 95));
                         g2.drawRect(x0, y0, cw, cw);
                     }
                 }
@@ -170,9 +170,9 @@ public class DesktopPixelArtDialog extends JDialog {
         pal.setBackground(DesktopUiKit.C_PANEL);
         pal.setBorder(BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1));
         int[] cols = {
-                0xFF00E5FF, 0xFF00E676, 0xFFFFD740, 0xFFFF5252,
-                0xFFFF4081, 0xFF7C4DFF, 0xFFFF9100, 0xFF8D6E63,
-                0xFFFFFFFF, 0xFF94A3B8, 0xFF334155, 0xFF090D16, 0x00000000
+                0xFFFFFFFF, 0xFFD4D4D8, 0xFF71717A, 0xFF18181B,
+                0xFF22C55E, 0xFFFACC15, 0xFFEF4444, 0xFFF97316,
+                0xFFEC4899, 0xFFA855F7, 0xFF14B8A6, 0xFF8D6E63, 0x00000000
         };
         for (int c : cols) {
             JComponent sw = new JComponent() {

@@ -96,28 +96,28 @@ public class TouchControlsOverlay extends View {
             float pillH = 34f * density;
             float pillW = Math.min(w - pad * 2f, 290f * density);
             hpRect.set(pad, pad, pad + pillW, pad + pillH);
-            paintFill.setColor(Color.argb(195, 11, 16, 27));
+            paintFill.setColor(Color.argb(210, 14, 14, 17));
             canvas.drawRoundRect(hpRect, 10f * density, 10f * density, paintFill);
             paintStroke.setStrokeWidth(1.2f * density);
-            paintStroke.setColor(Color.argb(145, 36, 51, 77));
+            paintStroke.setColor(Color.argb(175, 64, 64, 72));
             canvas.drawRoundRect(hpRect, 10f * density, 10f * density, paintStroke);
 
             float baseline = pad + 21.5f * density;
             paintText.setTextSize(12.2f * density);
-            paintText.setColor(Color.rgb(0, 229, 255));
+            paintText.setColor(Color.rgb(255, 255, 255));
             canvas.drawText("SCORE " + score, pad + 11f * density, baseline, paintText);
 
-            paintText.setColor(health > 30 ? Color.rgb(226, 232, 240) : Color.rgb(253, 164, 175));
+            paintText.setColor(health > 30 ? Color.rgb(134, 239, 172) : Color.rgb(252, 165, 165));
             canvas.drawText("HP " + health, pad + pillW * 0.45f, baseline, paintText);
 
             paintText.setTextSize(11f * density);
-            paintText.setColor(Color.rgb(148, 163, 184));
+            paintText.setColor(Color.rgb(161, 161, 170));
             canvas.drawText(fps + " FPS", pad + pillW * 0.74f, baseline, paintText);
 
             if (banner != null && !banner.isEmpty()) {
                 float dynSize = Math.min(14f * density, Math.max(10f * density, (w * 0.88f) / Math.max(12, banner.length()) * 1.65f));
                 paintText.setTextSize(dynSize);
-                paintText.setColor(Color.rgb(0, 229, 255));
+                paintText.setColor(Color.rgb(255, 255, 255));
                 float tw = paintText.measureText(banner);
                 canvas.drawText(banner, Math.max(pad, (w - tw) * 0.5f), pad + pillH + 21f * density, paintText);
             }
@@ -125,16 +125,16 @@ public class TouchControlsOverlay extends View {
 
         paintStroke.setStrokeWidth(2.0f * density);
         if (showJoystick) {
-            paintFill.setColor(Color.argb(95, 14, 21, 36));
+            paintFill.setColor(Color.argb(110, 18, 18, 22));
             canvas.drawCircle(joyCenterX, joyCenterY, joyRadius, paintFill);
             paintStroke.setColor(joyPointerId != -1
-                    ? Color.argb(235, 0, 229, 255)
-                    : Color.argb(135, 0, 229, 255));
+                    ? Color.argb(245, 255, 255, 255)
+                    : Color.argb(150, 210, 210, 218));
             canvas.drawCircle(joyCenterX, joyCenterY, joyRadius, paintStroke);
 
             paintFill.setColor(joyPointerId != -1
-                    ? Color.argb(235, 0, 229, 255)
-                    : Color.argb(165, 0, 200, 230));
+                    ? Color.argb(245, 255, 255, 255)
+                    : Color.argb(185, 230, 230, 236));
             canvas.drawCircle(joyKnobX, joyKnobY, joyRadius * 0.40f, paintFill);
         }
 
@@ -153,14 +153,14 @@ public class TouchControlsOverlay extends View {
         float scale = down ? 0.93f : 1.0f;
         float rad = r * scale;
         if (pulse > 0.05f) {
-            paintStroke.setColor(Color.argb((int) (110 * pulse), 0, 229, 255));
+            paintStroke.setColor(Color.argb((int) (120 * pulse), 255, 255, 255));
             canvas.drawCircle(cx, cy, r * (1.0f + (1f - pulse) * 0.28f), paintStroke);
         }
-        paintFill.setColor(down ? Color.argb(225, 0, 229, 255) : Color.argb(150, 20, 30, 48));
+        paintFill.setColor(down ? Color.argb(240, 255, 255, 255) : Color.argb(165, 26, 26, 31));
         canvas.drawCircle(cx, cy, rad, paintFill);
-        paintStroke.setColor(down ? Color.rgb(185, 250, 255) : Color.argb(215, 0, 229, 255));
+        paintStroke.setColor(down ? Color.rgb(255, 255, 255) : Color.argb(215, 220, 220, 228));
         canvas.drawCircle(cx, cy, rad, paintStroke);
-        paintText.setColor(down ? Color.rgb(4, 19, 26) : Color.rgb(241, 245, 249));
+        paintText.setColor(down ? Color.rgb(10, 10, 12) : Color.rgb(250, 250, 250));
         paintText.setTextSize(15f * density);
         float tw = paintText.measureText(label);
         canvas.drawText(label, cx - tw * 0.5f, cy + 5.5f * density, paintText);

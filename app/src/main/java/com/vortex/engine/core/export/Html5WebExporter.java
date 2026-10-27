@@ -232,6 +232,19 @@ public class Html5WebExporter {
                 "      const L = (lang||'').toUpperCase();\n" +
                 "      if (L === 'JS' || L === 'JAVASCRIPT') {\n" +
                 "        // Native ES6+ JavaScript — zero transpilation, full V8 / Browser JIT speed!\n" +
+                "      } else if (L === 'JAVA') {\n" +
+                "        js = js.replace(/^\\s*(?:package|import)\\s+[^;]+;/gm, '')\n" +
+                "               .replace(/public\\s+class\\s+[A-Za-z0-9_$]+\\s*\\{([\\s\\S]*)\\}\\s*$/m, '$1')\n" +
+                "               .replace(/\\b(?:public|private|protected)?\\s*(?:static\\s+)?(?:void|int|float|double|boolean|long|String)\\s+([A-Za-z0-9_$]+)\\s*\\(([^)]*)\\)/g, (_, fn, params) => {\n" +
+                "                 const cp = params.split(',').map(p => p.trim().split(/\\s+/).pop() || '').filter(Boolean).join(', ');\n" +
+                "                 return 'function ' + fn + '(' + cp + ')';\n" +
+                "               })\n" +
+                "               .replace(/\\b(?:final\\s+)?(?:int|float|double|boolean|long|String)\\s+([A-Za-z0-9_$]+)/g, 'let $1')\n" +
+                "               .replace(/\\((?:float|double|int|long)\\)\\s*/g, '')\n" +
+                "               .replace(/(\\d+(?:\\.\\d+)?)[fFdDlL]\\b/g, '$1')\n" +
+                "               .replace(/(\"[^\"]*\")\\.equals\\(([^)]+)\\)/g, '($1 === $2)')\n" +
+                "               .replace(/([A-Za-z0-9_$.]+)\\.equals\\(([^)]+)\\)/g, '($1 === $2)')\n" +
+                "               .replace(/System\\.out\\.println\\s*\\(/g, 'console.log(');\n" +
                 "      } else if (L === 'LUA') {\n" +
                 "        js = js.replace(/--.*$/gm, '')\n" +
                 "               .replace(/\\blocal\\s+([a-zA-Z0-9_]+(?:\\s*,\\s*[a-zA-Z0-9_]+)+)\\s*=\\s*([^\\n;]+)/g, 'let [$1] = [$2]')\n" +

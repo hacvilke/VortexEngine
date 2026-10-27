@@ -1,26 +1,30 @@
-# Vortex Engine Studio — v4.1.0 ("Hyperion UI Edition")
+# Vortex Engine Studio — v4.2.0 ("Monolith White Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
 
-## What's New in v4.1.0 ("Hyperion UI Edition")
+## What's New in v4.2.0 ("Monolith White Edition")
 
-### 1. Unified Dark Obsidian + Electric Cyan Design System (Zero Rainbow Buttons, Zero Default OS Widgets)
-- **Single Cohesive Visual Language Across Android & Desktop**: Unified the entire Studio under a clean **Dark Obsidian (`#090D16` / `#0D1320` / `#141E30`) + Electric Cyan (`#00E5FF`)** theme with 4 semantic button variants (`PRIMARY` solid cyan, `ACCENT` cyan-outlined obsidian, `SECONDARY` slate-bordered obsidian, and `DANGER` muted rose).
+### 1. Zero-Blue Monochrome Carbon + Crisp White (`#FFFFFF`) Design System & Vector Icons
+- **Pure Neutral Carbon + Crisp White UI**: Unified every Desktop and Android Mobile screen, control, HUD pill, sprite default, and launcher icon under a zero-blue **Monochrome Carbon (`#09090B` / `#101013` / `#18181C`) + Crisp White (`#FFFFFF`)** aesthetic (`PRIMARY` solid white with carbon ink, `ACCENT` crisp white-outlined carbon, `SECONDARY` neutral zinc, `DANGER` crimson).
+- **Custom Vector Iconography & 60 FPS Micro-Animations**: Anti-aliased procedural vector icons (`PLAY`, `STOP`, `PLUS`, `FOLDER`, `SAVE`, `EXPORT`, `TERMINAL`, `CODE`, `FLOW`, `SPARKLE`, `SYNC`, `GRID`, `WAVE`, `CUBE`, `UNDO`, `REDO`) with smooth hover/press interpolation and sliding white active-tab underline pills.
+- **Smoothly Draggable 8px Splitters**: Fixed Desktop `JSplitPane` divider order and panel minimum sizes with custom 3-dot white grip handles and resize cursors so left Scene/Inspector, center Viewport/Terminal, and right Tools docks drag effortlessly across the entire window.
 
-### 2. Android Mobile Layout & Custom UI Overhaul (`VortexMobileUi`)
-- **Responsive Portrait & Landscape Ergonomics**:
-  - `fitsSystemWindows` + dark status/navigation bar integration (`#0D1320` / `#090D16`) so system bars and gesture insets never clip headers or bottom toolbars on Android 14/15/16.
-  - **Split-Preview Portrait Inspector**: In portrait mode, the Inspector opens as a **56% height bottom drawer** (`⤢ FULL HEIGHT` / `⤡ SPLIT VIEW` toggle) so you can see live 2D/3D viewport changes while editing transforms, physics, and flipbook animations!
-  - **Density-Scaled HUD & Arcade Touch Controls**: Converted raw-pixel HUD text/pills to `dp`/`sp` scaling so 1080p/1440p screens stay crisp and readable, and unified the `A` / `B` touch pads with spring-animated cyan pulse rings.
-- **Custom Dark Mobile Controls & Animations**:
-  - Replaced 100% of default white/gray Android `Spinner`s, `CheckBox`es, and `AlertDialog`s with custom **`VortexDropdown`** dark `PopupWindow` selectors (with `180°` animated chevrons), **`VortexToggle`** animated pill switches, glowing focus inputs, custom dark modals, tactile spring press feedback, and smooth tab auto-centering + entrance transitions.
+### 2. Native Java Game Scripting (`VM: Java`) + 5-Runtime Architecture
+- **Write Games Directly in Native Java (`public class GameScript`)**: Powered by embedded pure-Java **[BeanShell 2.0b6](https://github.com/beanshell/beanshell)** (`Apache-2.0`) alongside **ES6+ JavaScript (Mozilla Rhino)**, **Lua 5.2 (LuaJ)**, **Vortex Flow (`WHEN -> DO` compiling to Java, JS, or Lua)**, and **VortexScript (`VXS`)**.
+- **Full Cross-Platform Parity**: Native Java games (`IRON_SENTINEL_JAVA_2D` starter template + Forge AI Java generation) run identically on Desktop `.exe`/Linux, Android Studio & Termux standalone `.apk`s, and single-file **HTML5 Web (`.html`)** via automatic Java-to-ES6 web transpilation.
 
-### 3. Modern Custom-Painted Desktop Studio UI (`DesktopUiKit`)
-- **Zero Swing Metal Blue Gradients**: Replaced default Swing `JButton`, `JComboBox`, `JCheckBox`, `JOptionPane`, `JScrollBar`, and `JSplitPane` widgets with custom `Graphics2D` anti-aliased components:
-  - **60 FPS Sliding-Pill Workspace Dock (`VortexTabStrip`)**: All 7 Studio workspaces (**Code**, **Flow**, **Forge AI**, **LRM P2P**, **Pixel**, **Audio**, **Export**) live cleanly in the right dock with smooth animated tab indicators.
-  - **Custom `VortexDropdown` & `VortexToggle`**: 60 FPS rotating vector chevrons, custom dark popup lists, dynamic-width animated pill switches, sleek 7px dark scrollbars, and 1px hairline splitters.
+### 3. Built-In Interactive OS Shell Terminal & Hardened Run Commands
+- **Interactive Shell Dock (`DesktopTerminalPanel` + Mobile Shell Bar)**: Run `powershell.exe` (Windows) or POSIX `sh` (Linux/Android) commands interactively inside Studio with live streaming stdout/stderr, `cd <dir>` persistence, Up/Down command history, `Stop` process kill, and automatic `PATH`/`Path` enrichment for active JDK, Go (`~/go/bin`, `%USERPROFILE%\go\bin`), and LRM (`%LOCALAPPDATA%\Programs\lrm`, `~/.local/bin`) directories.
+- **UTF-8 Native Windows `.exe` Launcher**: Automatically prepends the resolved `javaw.exe` `bin\` folder to `PATH` and launches with `-Dfile.encoding=UTF-8`.
+
+### 4. Automatic System Prober & One-Click `hacvilke/lrm` Dependency Setup Wizard
+- **Startup Dependency Check & Auto-Installer**: Automatically inspects OS/arch, Java runtime, Go (`golang`) toolchain, PowerShell/curl, and `hacvilke/lrm` CLI status (filtering out unrelated `npm i -g lrm` shims). On Windows, offers one-click installation via official PowerShell `irm https://raw.githubusercontent.com/hacvilke/lrm/main/scripts/install.ps1 | iex` (with `go install github.com/hacvilke/lrm/cmd/lrm@latest` source-build fallback), verifies `lrm version`, initializes `~/.vortex-lrm-workspaces/<project>`, and manages background **`lrm daemon`**, **`lrm receive`**, and **`lrm dashboard`** processes directly from Studio!
+
+### 5. Fixed & Upgraded Vortex Forge AI (Groq + OpenRouter Free + Saved BYOK)
+- **Groq Reasoning & Live Model Discovery**: Replaced retired `llama-3.3-70b-versatile` (`HTTP 404`) with active **`openai/gpt-oss-120b`** (`max_completion_tokens >= 8192` reasoning budget + `<think>` block stripping) and live `/openai/v1/models` auto-fallback + `Fetch Models` dropdown.
+- **OpenRouter Zero-Cost Auto-Fallback**: Replaced high-reservation defaults (`HTTP 402`) with `$0` **`openrouter/free`** (`max_tokens: 2200`) and automatic `HTTP 402` retry on free tier, plus persistent API key & model preferences across sessions.
 
 ---
 

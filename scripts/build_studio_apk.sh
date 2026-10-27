@@ -27,7 +27,8 @@ JBOX2D_JAR="$ROOT_DIR/app/libs/jbox2d-library-2.2.1.1.jar"
 TWEEN_JAR="$ROOT_DIR/app/libs/universal-tween-engine-6.3.3.jar"
 PATHFINDING_JAR="$ROOT_DIR/app/libs/pathfinding-0.2.6.jar"
 RHINO_JAR="$ROOT_DIR/app/libs/rhino-1.7.15.1.jar"
-LIB_CP="$PLATFORM_JAR:$LUAJ_JAR:$JBOX2D_JAR:$TWEEN_JAR:$PATHFINDING_JAR:$RHINO_JAR"
+BSH_JAR="$ROOT_DIR/app/libs/bsh-2.0b6.jar"
+LIB_CP="$PLATFORM_JAR:$LUAJ_JAR:$JBOX2D_JAR:$TWEEN_JAR:$PATHFINDING_JAR:$RHINO_JAR:$BSH_JAR"
 
 BUILD_DIR="$ROOT_DIR/build_studio"
 DIST_DIR="$ROOT_DIR/dist"
@@ -54,9 +55,10 @@ find app/src/main/java/com/vortex/engine/core \
 (cd "$BUILD_DIR/runtime_classes" && zip -qr "$BUILD_DIR/runtime.jar" .)
 "$D8" --min-api 24 --lib "$PLATFORM_JAR" \
     --output "$BUILD_DIR/runtime_dex" \
-    "$BUILD_DIR/runtime.jar" "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR" "$RHINO_JAR"
+    "$BUILD_DIR/runtime.jar" "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR" "$RHINO_JAR" "$BSH_JAR"
 cp "$BUILD_DIR/runtime_dex/classes.dex" "$BUILD_DIR/assets/toolchain/vortex-runtime.dex"
 [ -f "$BUILD_DIR/runtime_dex/classes2.dex" ] && cp "$BUILD_DIR/runtime_dex/classes2.dex" "$BUILD_DIR/assets/toolchain/vortex-runtime-2.dex"
+[ -f "$BUILD_DIR/runtime_dex/classes3.dex" ] && cp "$BUILD_DIR/runtime_dex/classes3.dex" "$BUILD_DIR/assets/toolchain/vortex-runtime-3.dex"
 
 echo "=== [2/7] Packaging Termux Toolchain & Open-Source Runtime Bundle ==="
 cp scripts/termux/build_termux.sh "$BUILD_DIR/assets/toolchain/build_termux.sh"
@@ -68,7 +70,7 @@ cp scripts/termux/setup_termux.sh app/src/main/assets/toolchain/setup_termux.sh
 mkdir -p "$BUILD_DIR/src_bundle/src/main/java/com/vortex/engine" "$BUILD_DIR/src_bundle/libs"
 cp -R app/src/main/java/com/vortex/engine/core "$BUILD_DIR/src_bundle/src/main/java/com/vortex/engine/"
 cp -R app/src/main/java/com/vortex/engine/runtime "$BUILD_DIR/src_bundle/src/main/java/com/vortex/engine/"
-cp "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR" "$RHINO_JAR" "$BUILD_DIR/src_bundle/libs/"
+cp "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR" "$RHINO_JAR" "$BSH_JAR" "$BUILD_DIR/src_bundle/libs/"
 (cd "$BUILD_DIR/src_bundle" && zip -qr "$BUILD_DIR/assets/toolchain/vortex-runtime-src.zip" src libs)
 
 echo "=== [3/7] Generating Procedural Studio Launcher Icons ==="
@@ -90,9 +92,9 @@ public class GenStudioIcons {
             BufferedImage img = new BufferedImage(s, s, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g = img.createGraphics();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(new Color(9, 13, 22));
+            g.setColor(new Color(11, 11, 14));
             g.fill(new RoundRectangle2D.Float(0, 0, s, s, s * 0.22f, s * 0.22f));
-            g.setColor(new Color(0, 229, 255));
+            g.setColor(new Color(255, 255, 255));
             g.setStroke(new BasicStroke(Math.max(2f, s * 0.055f)));
             float pad = s * 0.1f;
             g.draw(new RoundRectangle2D.Float(pad, pad, s - pad * 2, s - pad * 2, s * 0.16f, s * 0.16f));
@@ -105,9 +107,9 @@ public class GenStudioIcons {
                 if (k == 0) hex.moveTo(px, py); else hex.lineTo(px, py);
             }
             hex.closePath();
-            g.setColor(new Color(0, 229, 255, 220));
+            g.setColor(new Color(255, 255, 255, 240));
             g.fill(hex);
-            g.setColor(Color.WHITE);
+            g.setColor(new Color(10, 10, 12));
             g.setFont(new Font("SansSerif", Font.BOLD, Math.max(9, Math.round(s * 0.22f))));
             FontMetrics fm = g.getFontMetrics();
             String lbl = "V4";
@@ -149,7 +151,7 @@ find app/src/main/java "$BUILD_DIR/studio_gen" -name "*.java" > "$BUILD_DIR/stud
 (cd "$BUILD_DIR/studio_classes" && zip -qr "$BUILD_DIR/studio.jar" .)
 "$D8" --min-api 24 --lib "$PLATFORM_JAR" \
     --output "$BUILD_DIR/studio_dex" \
-    "$BUILD_DIR/studio.jar" "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR" "$RHINO_JAR"
+    "$BUILD_DIR/studio.jar" "$LUAJ_JAR" "$JBOX2D_JAR" "$TWEEN_JAR" "$PATHFINDING_JAR" "$RHINO_JAR" "$BSH_JAR"
 
 echo "=== [6/7] Injecting DEX & Aligning APK ==="
 (cd "$BUILD_DIR/studio_dex" && zip -qj "$BUILD_DIR/studio-unaligned.apk" classes*.dex)
@@ -168,7 +170,7 @@ KEYSTORE="$BUILD_DIR/studio-release.keystore"
     -keypass vortex123 \
     -dname "CN=Vortex Engine Studio, OU=GameEngine, O=VortexEngine, L=Global, S=Mobile, C=US" >/dev/null 2>&1
 
-OUT_APK="$DIST_DIR/VortexEngine-Studio-v4.1.0.apk"
+OUT_APK="$DIST_DIR/VortexEngine-Studio-v4.2.0.apk"
 "$APKSIGNER" sign \
     --ks "$KEYSTORE" \
     --ks-pass pass:vortex123 \
@@ -181,4 +183,4 @@ OUT_APK="$DIST_DIR/VortexEngine-Studio-v4.1.0.apk"
 
 "$APKSIGNER" verify --verbose "$OUT_APK" | head -n 10
 ls -lh "$OUT_APK"
-echo "[SUCCESS] Vortex Engine Studio v4.1.0 APK ready at: $OUT_APK"
+echo "[SUCCESS] Vortex Engine Studio v4.2.0 APK ready at: $OUT_APK"

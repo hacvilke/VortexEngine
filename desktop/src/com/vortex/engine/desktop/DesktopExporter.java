@@ -145,7 +145,8 @@ public class DesktopExporter {
             }
 
             putUtf8(zos, "assets/project.vortex.json", p.toJsonString());
-            String scriptExt = "JS".equalsIgnoreCase(p.scriptLanguage) ? "main.js"
+            String scriptExt = "JAVA".equalsIgnoreCase(p.scriptLanguage) ? "main.java"
+                    : "JS".equalsIgnoreCase(p.scriptLanguage) ? "main.js"
                     : ("LUA".equalsIgnoreCase(p.scriptLanguage) ? "main.lua" : "main.vxs");
             putUtf8(zos, "assets/scripts/" + scriptExt, p.scriptCode == null ? "" : p.scriptCode);
 
@@ -157,6 +158,8 @@ public class DesktopExporter {
             if (dex != null) putBytes(zos, "prebuilt/vortex-runtime.dex", dex);
             byte[] dex2 = readResourceBytes("/toolchain/vortex-runtime-2.dex");
             if (dex2 != null) putBytes(zos, "prebuilt/vortex-runtime-2.dex", dex2);
+            byte[] dex3 = readResourceBytes("/toolchain/vortex-runtime-3.dex");
+            if (dex3 != null) putBytes(zos, "prebuilt/vortex-runtime-3.dex", dex3);
 
             byte[] buildSh = readResourceBytes("/toolchain/build_termux.sh");
             if (buildSh != null) putBytes(zos, "build_termux.sh", buildSh);
@@ -170,8 +173,8 @@ public class DesktopExporter {
         BufferedImage img = new BufferedImage(s, s, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        int bg = Entity.hexToArgbInt(p.iconBgHex, 0xFF090D16);
-        int ac = Entity.hexToArgbInt(p.iconAccentHex, 0xFF00E5FF);
+        int bg = Entity.hexToArgbInt(p.iconBgHex, 0xFF101013);
+        int ac = Entity.hexToArgbInt(p.iconAccentHex, 0xFFFFFFFF);
         g.setColor(new Color((bg >> 16) & 0xFF, (bg >> 8) & 0xFF, bg & 0xFF));
         g.fill(new RoundRectangle2D.Float(0, 0, s, s, s * 0.22f, s * 0.22f));
         g.setColor(new Color((ac >> 16) & 0xFF, (ac >> 8) & 0xFF, ac & 0xFF));

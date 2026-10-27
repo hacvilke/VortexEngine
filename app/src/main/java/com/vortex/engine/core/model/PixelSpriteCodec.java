@@ -19,7 +19,7 @@ public class PixelSpriteCodec {
             if (t.isEmpty() || ".".equals(t)) {
                 out[i] = 0x00000000;
             } else {
-                out[i] = Entity.hexToArgbInt(t, 0xFF00E5FF);
+                out[i] = Entity.hexToArgbInt(t, 0xFFFFFFFF);
             }
         }
         return out;
@@ -202,10 +202,10 @@ public class PixelSpriteCodec {
                 if (sb.length() > 0) sb.append(',');
                 char ch = x < row.length() ? row.charAt(x) : '.';
                 switch (ch) {
-                    case 'C': sb.append("#00E5FF"); break;
-                    case 'B': sb.append("#1E88E5"); break;
+                    case 'C': sb.append("#F4F4F5"); break;
+                    case 'B': sb.append("#71717A"); break;
                     case 'W': sb.append("#FFFFFF"); break;
-                    case 'K': sb.append("#0B0F17"); break;
+                    case 'K': sb.append("#09090B"); break;
                     case 'Y': sb.append("#FFD740"); break;
                     case 'O': sb.append("#8D5524"); break;
                     case 'R': sb.append("#FF5252"); break;

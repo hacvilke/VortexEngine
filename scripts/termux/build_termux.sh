@@ -141,9 +141,10 @@ if [ "$MODE" = "source" ] && [ "$CAN_COMPILE_JAVA" = "true" ]; then
     "$D8_BIN" --min-api 24 --lib "$ANDROID_JAR" --output build/dex build/classes.jar "${EXTRA_JARS[@]}"
     cp build/dex/classes*.dex "$WORK_DIR/"
 elif [ -f "prebuilt/vortex-runtime.dex" ]; then
-    echo "[4/6] Injecting prebuilt Vortex v4.0 Runtime DEX (GLES + Rhino ES6 + LuaJ + JBox2D + AI + Tween)..."
+    echo "[4/6] Injecting prebuilt Vortex v4.2 Runtime DEX (GLES + Java VM + Rhino ES6 + LuaJ + JBox2D)..."
     cp prebuilt/vortex-runtime.dex "$WORK_DIR/classes.dex"
     [ -f "prebuilt/vortex-runtime-2.dex" ] && cp prebuilt/vortex-runtime-2.dex "$WORK_DIR/classes2.dex"
+    [ -f "prebuilt/vortex-runtime-3.dex" ] && cp prebuilt/vortex-runtime-3.dex "$WORK_DIR/classes3.dex"
 elif [ "$CAN_COMPILE_JAVA" = "true" ]; then
     echo "[4/6] Compiling Engine Java sources..."
     find src/main/java build/gen -name "*.java" > build/sources.txt

@@ -11,6 +11,7 @@ public class ProjectTemplates {
 
     public static final String[] TEMPLATE_KEYS = {
             "NEON_SURVIVORS_JS_2D",
+            "IRON_SENTINEL_JAVA_2D",
             "STARHULL_MECHA_JS_3D",
             "CYBER_MAZE_AI_2D",
             "CITADEL_TWEEN_3D",
@@ -25,7 +26,8 @@ public class ProjectTemplates {
     };
 
     public static final String[] TEMPLATE_NAMES = {
-            "2D Rogue-Lite: Neon Survivors Swarm (ES6 JS • Rhino + Animated Sprites + Auto-Aim)",
+            "2D Rogue-Lite: Neon Survivors Swarm (ES6 JS • Rhino + Animated Sprites)",
+            "2D Java Arena: Iron Sentinel (Native Java VM + JBox2D + Auto-Turret)",
             "3D Mecha Combat: Starhull Raiders (ES6 JS • Rhino + 3D Terrain + Railgun)",
             "2D AI Maze: Cyber Hunters (Lua 5.2 + Theta* Pathfinding + Chiptune)",
             "3D Siege: Neon Citadel (Lua 5.2 + Universal Tween Engine + Raycast)",
@@ -35,13 +37,14 @@ public class ProjectTemplates {
             "3D Parkour: Sky Islands Adventure (3D Physics & Relics)",
             "2D Action: Starbound Cavern (Platformer + Slime AI)",
             "2D Arcade: Nova Blaster (Space Shooter + Plasma Lasers)",
-            "3D Sandbox: Blank 3D Project (Lua 5.2 / ES6 JS)",
-            "2D Sandbox: Blank 2D Project (Lua 5.2 / ES6 JS + JBox2D)"
+            "3D Sandbox: Blank 3D Project (Java / ES6 JS / Lua 5.2)",
+            "2D Sandbox: Blank 2D Project (Java / ES6 JS / Lua 5.2 + JBox2D)"
     };
 
     public static GameProject create(String templateKey, String title, String pkgName) {
         switch (templateKey) {
             case "NEON_SURVIVORS_JS_2D":    return buildNeonSurvivorsJs2D(title, pkgName);
+            case "IRON_SENTINEL_JAVA_2D":   return buildIronSentinelJava2D(title, pkgName);
             case "STARHULL_MECHA_JS_3D":    return buildStarhullMechaJs3D(title, pkgName);
             case "CYBER_MAZE_AI_2D":        return buildCyberMazeAI2D(title, pkgName);
             case "CITADEL_TWEEN_3D":        return buildCitadelTween3D(title, pkgName);
@@ -57,6 +60,136 @@ public class ProjectTemplates {
         }
     }
 
+    private static GameProject buildIronSentinelJava2D(String title, String pkgName) {
+        GameProject p = new GameProject();
+        p.title = title;
+        p.packageName = pkgName;
+        p.dimensionMode = "2D";
+        p.scriptLanguage = "JAVA";
+        p.useBox2D = true;
+        p.gravityY = 0f;
+        p.skyColorHex = "#0B0B0E";
+        p.cameraMode = "FOLLOW";
+        p.cameraTargetName = "Player";
+        p.musicEnabled = true;
+        p.musicBpm = 136;
+        p.musicPattern = ChiptuneGenerator.PRESET_BOSS;
+
+        p.customSprites.put("knight_1", PixelSpriteCodec.createDefaultKnightSprite());
+        p.customSprites.put("knight_2", PixelSpriteCodec.createKnightRunFrame2Sprite());
+        p.customSprites.put("drone_1", PixelSpriteCodec.createDroneFrame1Sprite());
+        p.customSprites.put("drone_2", PixelSpriteCodec.createDroneFrame2Sprite());
+        p.customSprites.put("gem", PixelSpriteCodec.createGemSprite());
+
+        Entity hero = Entity.create2D("Player", "player", "CUSTOM_SPRITE", 0f, 0f, 1.4f, 1.4f, "#FFFFFF", "DYNAMIC");
+        hero.customSpriteName = "knight_1";
+        hero.spriteFrames = "knight_1,knight_2";
+        hero.animFps = 7f;
+        hero.fixedRotation = true;
+        p.entities.add(hero);
+
+        for (int i = 0; i < 6; i++) {
+            double ang = i * Math.PI * 2.0 / 6.0;
+            Entity d = Entity.create2D("Drone_" + i, "enemy", "CUSTOM_SPRITE",
+                    (float) (Math.cos(ang) * 9.0), (float) (Math.sin(ang) * 7.0), 1.25f, 1.25f, "#EF4444", "DYNAMIC");
+            d.customSpriteName = "drone_1";
+            d.spriteFrames = "drone_1,drone_2";
+            d.animFps = 9f;
+            p.entities.add(d);
+
+            Entity g = Entity.create2D("Core_" + i, "coin", "CUSTOM_SPRITE",
+                    (float) (Math.cos(ang + 0.5) * 5.2), (float) (Math.sin(ang + 0.5) * 4.2), 0.9f, 0.9f, "#FACC15", "STATIC");
+            g.customSpriteName = "gem";
+            g.isTrigger = true;
+            p.entities.add(g);
+        }
+
+        p.scriptCode =
+                "// Iron Sentinel Arena — Written in Native Java (VM: Java)\n" +
+                "// Runs natively on Desktop (.exe / Linux), Android (.apk), and exports to HTML5!\n" +
+                "public class GameScript {\n" +
+                "    float fireTimer = 0.0f;\n" +
+                "    int boltSeq = 0;\n" +
+                "    int wave = 1;\n\n" +
+                "    public void onStart() {\n" +
+                "        vortex.setFixedRotation(\"Player\", true);\n" +
+                "        vortex.playMusic(\"BOSS\", 136);\n" +
+                "        int best = (int) vortex.loadNum(\"javaBest\", 0);\n" +
+                "        vortex.setBanner(\"IRON SENTINEL [JAVA VM] • WAVE 1 • BEST \" + best + \" (A=DASH, B=NOVA)\");\n" +
+                "    }\n\n" +
+                "    public void onUpdate(float dt) {\n" +
+                "        if (!vortex.exists(\"Player\")) return;\n" +
+                "        vortex.setVel(\"Player\", vortex.joyX() * 8.8f, vortex.joyY() * 8.8f);\n" +
+                "        vortex.chaseTagAI(\"enemy\", \"Player\", 3.8f + wave * 0.35f);\n\n" +
+                "        fireTimer += dt;\n" +
+                "        if (fireTimer >= 0.42f) {\n" +
+                "            fireTimer = 0.0f;\n" +
+                "            String target = vortex.findNearestTag(\"Player\", \"enemy\", 24.0);\n" +
+                "            if (target != null && target.length() > 0) {\n" +
+                "                float px = vortex.getX(\"Player\");\n" +
+                "                float py = vortex.getY(\"Player\");\n" +
+                "                float dx = vortex.getX(target) - px;\n" +
+                "                float dy = vortex.getY(target) - py;\n" +
+                "                float len = (float) Math.hypot(dx, dy);\n" +
+                "                if (len < 0.01f) len = 1.0f;\n" +
+                "                boltSeq++;\n" +
+                "                String bolt = \"Bolt_\" + boltSeq;\n" +
+                "                vortex.spawn2D(bolt, \"projectile\", \"CIRCLE\", px, py, 0.38, 0.38, \"#FFFFFF\", \"KINEMATIC\");\n" +
+                "                vortex.setVel(bolt, (dx / len) * 18.0f, (dy / len) * 18.0f);\n" +
+                "                vortex.playSound(\"laser\");\n" +
+                "            }\n" +
+                "        }\n\n" +
+                "        if (vortex.countByTag(\"enemy\") == 0) {\n" +
+                "            wave++;\n" +
+                "            for (int i = 0; i < 4 + wave; i++) {\n" +
+                "                double a = (Math.PI * 2.0 * i) / (4 + wave);\n" +
+                "                String en = \"WaveDrone_\" + wave + \"_\" + i;\n" +
+                "                vortex.spawn2D(en, \"enemy\", \"CIRCLE\", Math.cos(a) * 10.0, Math.sin(a) * 7.5, 1.15, 1.15, \"#EF4444\", \"DYNAMIC\");\n" +
+                "            }\n" +
+                "            vortex.setBanner(\"IRON SENTINEL [JAVA VM] • WAVE \" + wave + \" INCOMING!\");\n" +
+                "        }\n" +
+                "    }\n\n" +
+                "    public void onButton(String btn) {\n" +
+                "        if (!vortex.exists(\"Player\")) return;\n" +
+                "        if (\"A\".equals(btn)) {\n" +
+                "            vortex.applyImpulse(\"Player\", vortex.joyX() * 14.0, vortex.joyY() * 14.0);\n" +
+                "            vortex.particles(vortex.getX(\"Player\"), vortex.getY(\"Player\"), 0, 18, \"#FFFFFF\");\n" +
+                "            vortex.playSound(\"jump\");\n" +
+                "        } else if (\"B\".equals(btn)) {\n" +
+                "            String near = vortex.findNearestTag(\"Player\", \"enemy\", 12.0);\n" +
+                "            if (near != null && near.length() > 0) {\n" +
+                "                vortex.particles(vortex.getX(near), vortex.getY(near), 0, 26, \"#FACC15\");\n" +
+                "                vortex.destroy(near);\n" +
+                "                vortex.addScore(150);\n" +
+                "            }\n" +
+                "            vortex.shake(0.35, 0.2);\n" +
+                "            vortex.playSound(\"powerup\");\n" +
+                "        }\n" +
+                "    }\n\n" +
+                "    public void onCollide(String a, String b, String tagA, String tagB) {\n" +
+                "        if ((\"projectile\".equals(tagA) && \"enemy\".equals(tagB)) || (\"projectile\".equals(tagB) && \"enemy\".equals(tagA))) {\n" +
+                "            String en = \"enemy\".equals(tagA) ? a : b;\n" +
+                "            vortex.particles(vortex.getX(en), vortex.getY(en), 0, 22, \"#EF4444\");\n" +
+                "            vortex.destroy(a);\n" +
+                "            vortex.destroy(b);\n" +
+                "            int sc = vortex.addScore(100);\n" +
+                "            if (sc > vortex.loadNum(\"javaBest\", 0)) vortex.saveData(\"javaBest\", sc);\n" +
+                "            vortex.playSound(\"explosion\");\n" +
+                "        } else if ((\"player\".equals(tagA) && \"coin\".equals(tagB)) || (\"player\".equals(tagB) && \"coin\".equals(tagA))) {\n" +
+                "            String c = \"coin\".equals(tagA) ? a : b;\n" +
+                "            vortex.destroy(c);\n" +
+                "            vortex.addScore(50);\n" +
+                "            vortex.playSound(\"coin\");\n" +
+                "        } else if ((\"player\".equals(tagA) && \"enemy\".equals(tagB)) || (\"player\".equals(tagB) && \"enemy\".equals(tagA))) {\n" +
+                "            vortex.addHealth(-10);\n" +
+                "            vortex.shake(0.3, 0.18);\n" +
+                "            vortex.playSound(\"hit\");\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n";
+        return p;
+    }
+
     private static GameProject buildAngryCratesBox2D(String title, String pkgName) {
         GameProject p = new GameProject();
         p.title = title;
@@ -67,7 +200,7 @@ public class ProjectTemplates {
         p.iconBgHex = "#1A1025";
         p.iconAccentHex = "#FFB300";
         p.iconGlyph = "STAR";
-        p.skyColorHex = "#0D1322";
+        p.skyColorHex = "#0B0B0E";
         p.cameraMode = "FIXED";
         p.zoom2D = 18f;
         p.gravityY = -20f;
@@ -158,7 +291,7 @@ public class ProjectTemplates {
         p.iconBgHex = "#0B1E26";
         p.iconAccentHex = "#00E676";
         p.iconGlyph = "CUBE";
-        p.skyColorHex = "#10253A";
+        p.skyColorHex = "#0B0B0E";
         p.ambientColorHex = "#34546E";
         p.fogNear = 24f;
         p.fogFar = 85f;
@@ -234,7 +367,7 @@ public class ProjectTemplates {
         p.iconBgHex = "#090D18";
         p.iconAccentHex = "#00E5FF";
         p.iconGlyph = "ROCKET";
-        p.skyColorHex = "#080C1A";
+        p.skyColorHex = "#0B0B0E";
         p.ambientColorHex = "#1E3050";
         p.cameraDistance = 9.5f;
         p.cameraHeight = 4.6f;
@@ -290,7 +423,7 @@ public class ProjectTemplates {
     private static GameProject buildSkyIslands3D(String title, String pkgName) {
         GameProject p = new GameProject();
         p.title = title; p.packageName = pkgName; p.dimensionMode = "3D"; p.scriptLanguage = "VXS";
-        p.skyColorHex = "#12233E"; p.ambientColorHex = "#344E72"; p.cameraDistance = 11f; p.cameraHeight = 5.8f;
+        p.skyColorHex = "#0B0B0E"; p.ambientColorHex = "#2A2A30"; p.cameraDistance = 11f; p.cameraHeight = 5.8f;
         float[][] islands = {{0, -0.5f, 0, 7, 1, 7}, {0, 0.5f, -8, 4.5f, 1, 4.5f}, {5, 1.6f, -13, 4.5f, 1, 4.5f}, {0, 2.8f, -19, 4.5f, 1, 4.5f}, {0, 4.0f, -26, 6.5f, 1, 6.5f}};
         for (int i = 0; i < islands.length; i++) {
             float[] d = islands[i];
@@ -323,7 +456,7 @@ public class ProjectTemplates {
     private static GameProject buildPlatformer2D(String title, String pkgName) {
         GameProject p = new GameProject();
         p.title = title; p.packageName = pkgName; p.dimensionMode = "2D"; p.scriptLanguage = "VXS";
-        p.useBox2D = true; p.skyColorHex = "#0E1324"; p.zoom2D = 16f; p.gravityY = -26f;
+        p.useBox2D = true; p.skyColorHex = "#0B0B0E"; p.zoom2D = 16f; p.gravityY = -26f;
 
         p.customSprites.put("knight", PixelSpriteCodec.createDefaultKnightSprite());
 
@@ -403,7 +536,7 @@ public class ProjectTemplates {
         GameProject p = new GameProject();
         p.title = title; p.packageName = pkgName; p.dimensionMode = "2D"; p.scriptLanguage = "LUA";
         p.useBox2D = false; // Crisp arcade kinematic collision
-        p.skyColorHex = "#070913"; p.cameraMode = "FIXED"; p.zoom2D = 18f; p.gravityY = 0f;
+        p.skyColorHex = "#0B0B0E"; p.cameraMode = "FIXED"; p.zoom2D = 18f; p.gravityY = 0f;
         p.entities.add(Entity.create2D("Player", "player", "SPRITE_SHIP", 0f, -5.5f, 1.3f, 1.4f, "#00E5FF", "KINEMATIC"));
         for (int i = 0; i < 5; i++) {
             Entity ast = Entity.create2D("Meteor_" + i, "enemy", "CIRCLE", -6f + i * 3f, 5f + (i % 2) * 2.5f, 1.35f, 1.35f, "#FF7043", "KINEMATIC");
@@ -486,7 +619,7 @@ public class ProjectTemplates {
         p.cameraMode = "FOLLOW";
         p.cameraTargetName = "Player";
         p.zoom2D = 16.5f;
-        p.skyColorHex = "#060B16";
+        p.skyColorHex = "#0B0B0E";
         p.iconBgHex = "#0A1024";
         p.iconAccentHex = "#00E5FF";
         p.iconGlyph = "ROCKET";
@@ -623,7 +756,7 @@ public class ProjectTemplates {
         p.packageName = pkgName;
         p.dimensionMode = "3D";
         p.scriptLanguage = "LUA";
-        p.skyColorHex = "#080C1B";
+        p.skyColorHex = "#0B0B0E";
         p.ambientColorHex = "#2A3256";
         p.fogEnabled = true;
         p.fogNear = 20f;
@@ -746,7 +879,7 @@ public class ProjectTemplates {
         p.cameraMode = "FOLLOW";
         p.cameraTargetName = "Player";
         p.zoom2D = 16.0f;
-        p.skyColorHex = "#060913";
+        p.skyColorHex = "#0B0B0E";
         p.iconBgHex = "#091022";
         p.iconAccentHex = "#00E676";
         p.iconGlyph = "STAR";
@@ -917,7 +1050,7 @@ public class ProjectTemplates {
         p.scriptLanguage = "JS";
         p.terrainSeed = 4096;
         p.terrainFreq = 0.055f;
-        p.skyColorHex = "#070B18";
+        p.skyColorHex = "#0B0B0E";
         p.ambientColorHex = "#24345A";
         p.fogEnabled = true;
         p.fogNear = 22f;

@@ -372,7 +372,7 @@ public class EditorActivity extends Activity {
 
         boolean is3D = "3D".equalsIgnoreCase(project.dimensionMode);
         if (is3D) {
-            addToolBtn(row, "+ CUBE", () -> spawnPrimitive("CUBE", "#00E5FF"));
+            addToolBtn(row, "+ CUBE", () -> spawnPrimitive("CUBE", "#FFFFFF"));
             addToolBtn(row, "+ SPHERE", () -> spawnPrimitive("SPHERE", "#FFD740"));
             addToolBtn(row, "+ PYRAMID", () -> spawnPrimitive("PYRAMID", "#FF4081"));
             addToolBtn(row, "+ CYLINDER", () -> spawnPrimitive("CYLINDER", "#7C4DFF"));
@@ -380,7 +380,7 @@ public class EditorActivity extends Activity {
             addToolBtn(row, "+ .OBJ", () -> spawnPrimitive("CUSTOM_OBJ", "#00E676"));
         } else {
             addToolBtn(row, "+ PLATFORM", () -> spawnPrimitive("RECT", "#2E4F6E"));
-            addToolBtn(row, "+ HERO", () -> spawnPrimitive("SPRITE_HERO", "#00E5FF"));
+            addToolBtn(row, "+ HERO", () -> spawnPrimitive("SPRITE_HERO", "#FFFFFF"));
             addToolBtn(row, "+ PIXEL SPRITE", () -> spawnPrimitive("CUSTOM_SPRITE", "#FFFFFF"));
             addToolBtn(row, "+ CRATE (BOX2D)", this::spawnBox2DCrate);
             addToolBtn(row, "+ COIN", () -> spawnPrimitive("SPRITE_COIN", "#FFD740"));
@@ -776,7 +776,7 @@ public class EditorActivity extends Activity {
     private LinearLayout buildPixelArtPanel() {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackgroundColor(Color.parseColor("#0B0F17"));
+        panel.setBackgroundColor(Color.parseColor("#09090B"));
         panel.setPadding(dp(12), dp(8), dp(12), dp(10));
 
         // Top Bar: Sprite Name + Mirror-X + Presets + Save & Spawn
@@ -817,9 +817,9 @@ public class EditorActivity extends Activity {
         palRow.setPadding(0, dp(6), 0, dp(6));
 
         int[] colors = {
-                0xFF00E5FF, 0xFF00E676, 0xFFFFD740, 0xFFFF5252,
+                0xFFFFFFFF, 0xFF00E676, 0xFFFFD740, 0xFFFF5252,
                 0xFFFF4081, 0xFF7C4DFF, 0xFFFF9100, 0xFF8D6E63,
-                0xFFFFFFFF, 0xFF94A3B8, 0xFF334155, 0xFF090D16,
+                0xFFFFFFFF, 0xFF94A3B8, 0xFF3F3F46, 0xFF09090B,
                 0x00000000 // Eraser
         };
         for (int col : colors) {
@@ -829,7 +829,7 @@ public class EditorActivity extends Activity {
             swatch.setTextSize(10.5f);
             swatch.setPadding(dp(12), dp(8), dp(12), dp(8));
             GradientDrawable g = new GradientDrawable();
-            g.setColor(col == 0 ? Color.parseColor("#1E293B") : col);
+            g.setColor(col == 0 ? Color.parseColor("#1E1E22") : col);
             g.setCornerRadius(dp(6));
             g.setStroke(dp(1), Color.WHITE);
             swatch.setBackground(g);
@@ -905,7 +905,7 @@ public class EditorActivity extends Activity {
     private LinearLayout buildScriptEditorPanel() {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackgroundColor(Color.parseColor("#0B0F17"));
+        panel.setBackgroundColor(Color.parseColor("#09090B"));
 
         // Row 1: Unified Action Toolbar + Custom VM Dropdown!
         HorizontalScrollView toolsScroll = new HorizontalScrollView(this);
@@ -917,10 +917,11 @@ public class EditorActivity extends Activity {
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
         toolbar.setPadding(dp(10), dp(7), dp(10), dp(7));
 
-        String[] vmLabels = {"VM: ES6 JS", "VM: LUA 5.2", "VM: VXS"};
-        String[] vmCodes = {"JS", "LUA", "VXS"};
-        String initVmLabel = "JS".equalsIgnoreCase(project.scriptLanguage) ? vmLabels[0]
-                : ("LUA".equalsIgnoreCase(project.scriptLanguage) ? vmLabels[1] : vmLabels[2]);
+        String[] vmLabels = {"VM: ES6 JS", "VM: JAVA", "VM: LUA 5.2", "VM: VXS"};
+        String[] vmCodes = {"JS", "JAVA", "LUA", "VXS"};
+        String initVmLabel = "JAVA".equalsIgnoreCase(project.scriptLanguage) ? vmLabels[1]
+                : "JS".equalsIgnoreCase(project.scriptLanguage) ? vmLabels[0]
+                : ("LUA".equalsIgnoreCase(project.scriptLanguage) ? vmLabels[2] : vmLabels[3]);
         langDropdown = new VortexMobileUi.VortexDropdown(this, vmLabels, initVmLabel);
         langDropdown.setMinimumHeight(dp(34));
         langDropdown.setPadding(dp(10), dp(6), dp(10), dp(6));
@@ -957,7 +958,7 @@ public class EditorActivity extends Activity {
         scriptStatusTv = new TextView(this);
         scriptStatusTv.setText("✓ Syntax Ready (" + describeVm(project.scriptLanguage) + ")");
         scriptStatusTv.setTextColor(Color.parseColor("#00E676"));
-        scriptStatusTv.setBackgroundColor(Color.parseColor("#0D1524"));
+        scriptStatusTv.setBackgroundColor(Color.parseColor("#101013"));
         scriptStatusTv.setTextSize(12f);
         scriptStatusTv.setPadding(dp(12), dp(6), dp(12), dp(6));
         panel.addView(scriptStatusTv);
@@ -965,7 +966,7 @@ public class EditorActivity extends Activity {
         // Row 3: Dynamic Quick-Insert Snippet Bar
         HorizontalScrollView snipScroll = new HorizontalScrollView(this);
         snipScroll.setHorizontalScrollBarEnabled(false);
-        snipScroll.setBackgroundColor(Color.parseColor("#0F172A"));
+        snipScroll.setBackgroundColor(Color.parseColor("#151518"));
         snippetBar = new LinearLayout(this);
         snippetBar.setOrientation(LinearLayout.HORIZONTAL);
         snippetBar.setPadding(dp(8), dp(5), dp(8), dp(5));
@@ -980,7 +981,7 @@ public class EditorActivity extends Activity {
         scriptEditor.setTextColor(Color.parseColor("#E2E8F0"));
         scriptEditor.setTextSize(13.5f);
         scriptEditor.setGravity(Gravity.TOP | Gravity.START);
-        scriptEditor.setBackgroundColor(Color.parseColor("#090D16"));
+        scriptEditor.setBackgroundColor(Color.parseColor("#09090B"));
         scriptEditor.setPadding(dp(14), dp(12), dp(14), dp(24));
         scriptEditor.setInputType(InputType.TYPE_CLASS_TEXT
                 | InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -995,6 +996,7 @@ public class EditorActivity extends Activity {
     }
 
     private String describeVm(String lang) {
+        if ("JAVA".equalsIgnoreCase(lang)) return "Native Java • BeanShell JVM";
         if ("JS".equalsIgnoreCase(lang)) return "ES6+ JavaScript • Mozilla Rhino VM";
         if ("LUA".equalsIgnoreCase(lang)) return "Lua 5.2 • LuaJ VM";
         return "VortexScript (.vxs) VM";
@@ -1003,9 +1005,19 @@ public class EditorActivity extends Activity {
     private void rebuildSnippetBar() {
         if (snippetBar == null) return;
         snippetBar.removeAllViews();
+        boolean isJava = "JAVA".equalsIgnoreCase(project.scriptLanguage);
         boolean isJs = "JS".equalsIgnoreCase(project.scriptLanguage);
         boolean isLua = "LUA".equalsIgnoreCase(project.scriptLanguage);
-        String[] snippets = isJs
+        String[] snippets = isJava
+                ? new String[]{
+                        "String t = vortex.findNearestTag(\"Player\", \"enemy\");",
+                        "vortex.chaseTagAI(\"enemy\", \"Player\", 4.5);",
+                        "vortex.setVel(\"Player\", vortex.joyX() * 8.5, vortex.getVY(\"Player\"));",
+                        "vortex.jump(\"Player\", 13.0);",
+                        "vortex.particles(0, 1, 0, 22, \"#FFFFFF\");",
+                        "vortex.playMusic(\"CYBERPUNK\", 136);",
+                        "public void onUpdate(float dt) {\n}"}
+                : isJs
                 ? new String[]{
                         "const t = vortex.findNearestTag('Player', 'enemy');",
                         "vortex.chaseTagAI('enemy', 'Player', 4.5);",
@@ -1013,7 +1025,7 @@ public class EditorActivity extends Activity {
                         "vortex.tweenTagYoyo('coin', 0.35, 0.9, 'SINE');",
                         "vortex.saveData('best', vortex.getScore());",
                         "vortex.playMusic('CYBERPUNK', 136);",
-                        "vortex.particles(0, 1, 0, 22, '#00E5FF');",
+                        "vortex.particles(0, 1, 0, 22, '#FFFFFF');",
                         "class WaveDirector {\n  constructor() {}\n}"}
                 : isLua
                 ? new String[]{
@@ -1022,10 +1034,10 @@ public class EditorActivity extends Activity {
                         "vortex.tweenTagYoyo('coin', 0.4, 0.9, 'SINE')",
                         "vortex.playMusic('CYBERPUNK', 132)",
                         "vortex.raycast(x, y, z, 0, 0, -1, 35)",
-                        "vortex.jump('Player', 12)", "vortex.particles(0, 1, 0, 20, '#00E5FF')"}
+                        "vortex.jump('Player', 12)", "vortex.particles(0, 1, 0, 20, '#FFFFFF')"}
                 : new String[]{
                         "joyX()", "jump('Player', 12.0);", "setVel('Player', 0, 0, 0);",
-                        "particles(0, 1, 0, 20, '#00E5FF');", "playSound('coin');",
+                        "particles(0, 1, 0, 20, '#FFFFFF');", "playSound('coin');",
                         "addScore(100);", "fn onCollide(a, b, tagA, tagB) {\n}"};
         for (String s : snippets) {
             TextView sb = VortexMobileUi.makeButton(this, s.replace("\n", " "), VortexMobileUi.ButtonVariant.SECONDARY, true);
@@ -1044,8 +1056,9 @@ public class EditorActivity extends Activity {
 
     private void syncLangDropdownUi() {
         if (langDropdown == null || project == null) return;
-        int idx = "JS".equalsIgnoreCase(project.scriptLanguage) ? 0
-                : ("LUA".equalsIgnoreCase(project.scriptLanguage) ? 1 : 2);
+        int idx = "JAVA".equalsIgnoreCase(project.scriptLanguage) ? 1
+                : "JS".equalsIgnoreCase(project.scriptLanguage) ? 0
+                : ("LUA".equalsIgnoreCase(project.scriptLanguage) ? 2 : 3);
         langDropdown.setSelectedIndex(idx, false);
         rebuildSnippetBar();
     }
@@ -1069,29 +1082,36 @@ public class EditorActivity extends Activity {
         form.setOrientation(LinearLayout.VERTICAL);
 
         TextView info = new TextView(this);
-        info.setText("Inspired by hacvilke/roforge: local-first BYOK + instant Offline Generator. Automatically creates an Undo checkpoint before modifying your scene.");
+        info.setText("Local-first BYOK Studio Agent (Groq `openai/gpt-oss-120b` • OpenRouter `$0` `openrouter/free` • Offline Generator). Saves Undo checkpoint automatically.");
         info.setTextColor(VortexMobileUi.C_TEXT_MUTED);
         info.setTextSize(11.5f);
         form.addView(info);
 
-        VortexMobileUi.VortexDropdown provSpin = addLabeledSpinner(form, "AI Engine Mode", VortexForgeAgent.PROVIDERS, VortexForgeAgent.PROVIDERS[0]);
-        EditText keyEt = addLabeledEdit(form, "Optional API Key (blank = Offline Generator)", "", false);
+        int initProv = Math.max(0, Math.min(VortexForgeAgent.PROVIDERS.length - 1, VortexForgeAgent.loadSavedProviderIdx()));
+        VortexMobileUi.VortexDropdown provSpin = addLabeledSpinner(form, "AI Engine Mode", VortexForgeAgent.PROVIDERS, VortexForgeAgent.PROVIDERS[initProv]);
+        final EditText keyEt = addLabeledEdit(form, "API Key (saved locally; blank = Offline)", VortexForgeAgent.loadSavedApiKey(initProv), false);
+        final EditText modelEt = addLabeledEdit(form, "Model ID (auto-falls back on 404/402)", VortexForgeAgent.loadSavedModel(initProv), false);
+        provSpin.setOnSelectionListener((idx, val) -> {
+            keyEt.setText(VortexForgeAgent.loadSavedApiKey(idx));
+            modelEt.setText(VortexForgeAgent.loadSavedModel(idx));
+        });
         EditText promptEt = addLabeledEdit(form, "What should Forge AI build?", "2D cyber swarm arena with animated drones and auto-aim blaster", false);
 
         VortexMobileUi.showModal(
                 this,
-                "🤖 Vortex Forge AI Agent",
+                "Vortex Forge AI Agent",
                 form,
-                "⚡ Generate (+ Undo)",
+                "Generate (+ Undo)",
                 () -> {
                     pushUndoSnapshot();
                     final int pIdx = provSpin.getSelectedItemPosition();
                     final String apiKey = keyEt.getText().toString().trim();
+                    final String modelId = modelEt.getText().toString().trim();
                     final String prompt = promptEt.getText().toString().trim();
                     new Thread(() -> {
                         try {
-                            final String summary = VortexForgeAgent.applyPromptToProject(project, prompt, pIdx, apiKey);
-                            runOnUiThread(() -> applyRestoredProject("🤖 " + summary));
+                            final String summary = VortexForgeAgent.applyPromptToProject(project, prompt, pIdx, modelId, apiKey, true);
+                            runOnUiThread(() -> applyRestoredProject("Forge AI: " + summary));
                         } catch (Exception ex) {
                             runOnUiThread(() -> Toast.makeText(EditorActivity.this, "Forge AI error: " + ex.getMessage(), Toast.LENGTH_LONG).show());
                         }
@@ -1164,7 +1184,7 @@ public class EditorActivity extends Activity {
     // =========================================================================
     private ScrollView buildFlowPanel() {
         ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(Color.parseColor("#0B0F17"));
+        sv.setBackgroundColor(Color.parseColor("#09090B"));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -1172,7 +1192,7 @@ public class EditorActivity extends Activity {
 
         TextView head = new TextView(this);
         head.setText("⚡ VORTEX FLOW — NO-CODE VISUAL LOGIC");
-        head.setTextColor(Color.parseColor("#00E5FF"));
+        head.setTextColor(Color.parseColor("#FFFFFF"));
         head.setTextSize(15.5f);
         head.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(head);
@@ -1207,7 +1227,26 @@ public class EditorActivity extends Activity {
         cjLp.rightMargin = dp(6);
         compileRow.addView(compileJsBtn, cjLp);
 
-        TextView compileBtn = VortexMobileUi.makeButton(this, "⚡ COMPILE ➔ LUA 5.2", VortexMobileUi.ButtonVariant.SECONDARY, false);
+        TextView compileJavaBtn = VortexMobileUi.makeButton(this, "COMPILE -> JAVA", VortexMobileUi.ButtonVariant.ACCENT, false);
+        compileJavaBtn.setOnClickListener(v -> {
+            if (project.flowRules.isEmpty()) {
+                Toast.makeText(this, "Add at least 1 Flow rule below first!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            pushUndoSnapshot();
+            String jv = VortexFlowCompiler.compileToJava(project);
+            project.scriptLanguage = "JAVA";
+            project.scriptCode = jv;
+            if (scriptEditor != null) scriptEditor.setText(jv);
+            syncLangDropdownUi();
+            saveProjectQuiet();
+            Toast.makeText(this, "✓ Compiled " + project.flowRules.size() + " Flow rules into Native Java!", Toast.LENGTH_LONG).show();
+        });
+        LinearLayout.LayoutParams cJvLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        cJvLp.rightMargin = dp(6);
+        compileRow.addView(compileJavaBtn, cJvLp);
+
+        TextView compileBtn = VortexMobileUi.makeButton(this, "COMPILE -> LUA", VortexMobileUi.ButtonVariant.SECONDARY, false);
         compileBtn.setOnClickListener(v -> {
             if (project.flowRules.isEmpty()) {
                 Toast.makeText(this, "Add at least 1 Flow rule below first!", Toast.LENGTH_SHORT).show();
@@ -1334,9 +1373,9 @@ public class EditorActivity extends Activity {
             card.setGravity(Gravity.CENTER_VERTICAL);
             card.setPadding(dp(10), dp(8), dp(10), dp(8));
             GradientDrawable gd = new GradientDrawable();
-            gd.setColor(Color.parseColor("#131C2E"));
+            gd.setColor(Color.parseColor("#1A1A1E"));
             gd.setCornerRadius(dp(8));
-            gd.setStroke(dp(1), Color.parseColor("#2A3B59"));
+            gd.setStroke(dp(1), Color.parseColor("#303037"));
             card.setBackground(gd);
 
             TextView tv = new TextView(this);
@@ -1367,7 +1406,7 @@ public class EditorActivity extends Activity {
     // =========================================================================
     private ScrollView buildLrmSyncPanel() {
         ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(Color.parseColor("#0B0F17"));
+        sv.setBackgroundColor(Color.parseColor("#09090B"));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -1375,7 +1414,7 @@ public class EditorActivity extends Activity {
 
         TextView head = new TextView(this);
         head.setText("🔄 LRM P2P LIVE SYNC & VERSION CONTROL");
-        head.setTextColor(Color.parseColor("#00E5FF"));
+        head.setTextColor(Color.parseColor("#FFFFFF"));
         head.setTextSize(15.5f);
         head.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(head);
@@ -1475,7 +1514,7 @@ public class EditorActivity extends Activity {
         lrmLogTv.setTypeface(Typeface.MONOSPACE);
         lrmLogTv.setTextSize(11.5f);
         lrmLogTv.setTextColor(Color.parseColor("#A7F3D0"));
-        lrmLogTv.setBackgroundColor(Color.parseColor("#06090F"));
+        lrmLogTv.setBackgroundColor(Color.parseColor("#09090B"));
         lrmLogTv.setPadding(dp(12), dp(12), dp(12), dp(12));
         lrmLogTv.setText("LRM Console Ready (hacvilke/lrm-mobile).\n"
                 + "• Unpacks your game into diffable files: vortex.manifest.json, scene/entities.json, scripts/main.js, flow/rules.json, assets/* & inbox/.\n"
@@ -1530,7 +1569,7 @@ public class EditorActivity extends Activity {
     // =========================================================================
     private ScrollView buildSfxLabPanel() {
         ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(Color.parseColor("#0B0F17"));
+        sv.setBackgroundColor(Color.parseColor("#09090B"));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -1733,7 +1772,7 @@ public class EditorActivity extends Activity {
     // =========================================================================
     private ScrollView buildApkExportPanel() {
         ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(Color.parseColor("#0B0F17"));
+        sv.setBackgroundColor(Color.parseColor("#09090B"));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -1741,7 +1780,7 @@ public class EditorActivity extends Activity {
 
         TextView head = new TextView(this);
         head.setText("📦 MULTI-PLATFORM EXPORT (ANDROID APK + HTML5 WEB)");
-        head.setTextColor(Color.parseColor("#00E5FF"));
+        head.setTextColor(Color.parseColor("#FFFFFF"));
         head.setTextSize(15.5f);
         head.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(head);
@@ -1830,11 +1869,53 @@ public class EditorActivity extends Activity {
         row3.addView(installBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         box.addView(row3);
 
+        // Built-In Interactive Shell / Termux Command Bar
+        LinearLayout termBar = new LinearLayout(this);
+        termBar.setOrientation(LinearLayout.HORIZONTAL);
+        termBar.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams tbLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        tbLp.topMargin = dp(10);
+        final EditText cmdInput = VortexMobileUi.createInput(this, "", false, false);
+        cmdInput.setHint("$ shell / termux command (ls, lrm, uname -a)");
+        cmdInput.setTypeface(Typeface.MONOSPACE);
+        LinearLayout.LayoutParams ciLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        ciLp.rightMargin = dp(6);
+        termBar.addView(cmdInput, ciLp);
+
+        TextView runShellBtn = VortexMobileUi.makeButton(this, ">_ RUN", VortexMobileUi.ButtonVariant.PRIMARY, true);
+        runShellBtn.setOnClickListener(v -> {
+            final String cmd = cmdInput.getText().toString().trim();
+            if (cmd.isEmpty()) return;
+            cmdInput.setText("");
+            appendBuildLog("\n$ " + cmd);
+            new Thread(() -> {
+                try {
+                    Process p = new ProcessBuilder("/system/bin/sh", "-c", cmd)
+                            .directory(getFilesDir())
+                            .redirectErrorStream(true)
+                            .start();
+                    java.io.BufferedReader br = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(p.getInputStream()));
+                    StringBuilder out = new StringBuilder();
+                    String ln;
+                    while ((ln = br.readLine()) != null) out.append(ln).append('\n');
+                    p.waitFor();
+                    final String res = out.toString().trim();
+                    runOnUiThread(() -> appendBuildLog(res.isEmpty() ? "[done]" : res));
+                } catch (Exception ex) {
+                    runOnUiThread(() -> appendBuildLog("[shell] " + ex.getMessage()));
+                }
+            }).start();
+        });
+        termBar.addView(runShellBtn);
+        box.addView(termBar, tbLp);
+
         buildLogTv = new TextView(this);
         buildLogTv.setTypeface(Typeface.MONOSPACE);
         buildLogTv.setTextSize(11.5f);
-        buildLogTv.setTextColor(Color.parseColor("#A7F3D0"));
-        buildLogTv.setBackgroundColor(Color.parseColor("#06090F"));
+        buildLogTv.setTextColor(Color.parseColor("#FAFAFA"));
+        buildLogTv.setBackgroundColor(Color.parseColor("#09090B"));
         buildLogTv.setPadding(dp(12), dp(12), dp(12), dp(12));
         buildLogTv.setText(
                 "Build Console Ready.\n" +

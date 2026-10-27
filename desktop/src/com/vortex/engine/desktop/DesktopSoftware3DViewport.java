@@ -106,7 +106,7 @@ public class DesktopSoftware3DViewport extends JPanel {
     private final Timer frameTimer;
 
     public DesktopSoftware3DViewport() {
-        setBackground(new Color(9, 13, 22));
+        setBackground(new Color(9, 9, 11));
         setFocusable(true);
         setupInputs();
 
@@ -481,7 +481,7 @@ public class DesktopSoftware3DViewport extends JPanel {
         if (!playing || p.showGrid) {
             g2.setStroke(new BasicStroke(1f));
             for (int i = -20; i <= 20; i += 2) {
-                g2.setColor(i == 0 ? new Color(0, 190, 230, 120) : new Color(55, 75, 105, 75));
+                g2.setColor(i == 0 ? new Color(235, 235, 240, 125) : new Color(62, 62, 70, 75));
                 draw3DLine(g2, i, 0f, -20, i, 0f, 20, camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH);
                 draw3DLine(g2, -20, 0f, i, 20, 0f, i, camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH);
             }
@@ -522,7 +522,7 @@ public class DesktopSoftware3DViewport extends JPanel {
                 draw3DLine(g2, sel.x, sel.y, sel.z, sel.x + 2.2f, sel.y, sel.z, camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH);
                 g2.setColor(new Color(50, 240, 120));
                 draw3DLine(g2, sel.x, sel.y, sel.z, sel.x, sel.y + 2.2f, sel.z, camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH);
-                g2.setColor(new Color(70, 160, 255));
+                g2.setColor(new Color(235, 235, 242));
                 draw3DLine(g2, sel.x, sel.y, sel.z, sel.x, sel.y, sel.z + 2.2f, camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH);
             }
         }
@@ -583,7 +583,7 @@ public class DesktopSoftware3DViewport extends JPanel {
         float cy = (float) Math.cos(radY), sy = (float) Math.sin(radY);
         float cz = (float) Math.cos(radZ), sz = (float) Math.sin(radZ);
         boolean isSel = !playing && e.id.equals(selectedEntityId);
-        Color selEdge = isSel ? new Color(0, 229, 255, 220) : new Color(0, 0, 0, 35);
+        Color selEdge = isSel ? new Color(255, 255, 255, 235) : new Color(0, 0, 0, 40);
 
         for (int i = 0; i < tris.length; i++) {
             float[] t = tris[i];
@@ -764,12 +764,12 @@ public class DesktopSoftware3DViewport extends JPanel {
             float halfW = (w * 0.5f) / ppu, halfH = (h * 0.5f) / ppu;
             for (int gx = (int) (cx - halfW) - 1; gx <= (int) (cx + halfW) + 1; gx += 2) {
                 int sx = Math.round(w * 0.5f + (gx - cx) * ppu);
-                g2.setColor(gx == 0 ? new Color(0, 200, 240, 110) : new Color(50, 70, 95, 70));
+                g2.setColor(gx == 0 ? new Color(235, 235, 240, 115) : new Color(56, 56, 64, 72));
                 g2.drawLine(sx, 0, sx, h);
             }
             for (int gy = (int) (cy - halfH) - 1; gy <= (int) (cy + halfH) + 1; gy += 2) {
                 int sy = Math.round(h * 0.5f - (gy - cy) * ppu);
-                g2.setColor(gy == 0 ? new Color(200, 90, 240, 110) : new Color(50, 70, 95, 70));
+                g2.setColor(gy == 0 ? new Color(235, 235, 240, 115) : new Color(56, 56, 64, 72));
                 g2.drawLine(0, sy, w, sy);
             }
         }
@@ -825,7 +825,7 @@ public class DesktopSoftware3DViewport extends JPanel {
             }
 
             if (!playing && e.id.equals(selectedEntityId)) {
-                g2.setColor(new Color(0, 229, 255));
+                g2.setColor(new Color(255, 255, 255));
                 g2.setStroke(new BasicStroke(2.2f));
                 g2.drawRect(-pw / 2 - 3, -ph / 2 - 3, pw + 6, ph + 6);
             }
@@ -841,32 +841,35 @@ public class DesktopSoftware3DViewport extends JPanel {
     }
 
     private void paintHudOverlay(Graphics2D g2, GameProject p, int w, int h) {
-        g2.setColor(new Color(11, 15, 23, 185));
-        g2.fill(new RoundRectangle2D.Float(14, 12, 410, 38, 12, 12));
+        g2.setColor(new Color(14, 14, 17, 210));
+        g2.fill(new RoundRectangle2D.Float(14, 12, 418, 38, 10, 10));
+        g2.setColor(new Color(58, 58, 66, 200));
+        g2.setStroke(new BasicStroke(1f));
+        g2.draw(new RoundRectangle2D.Float(14, 12, 418, 38, 10, 10));
 
         g2.setFont(new Font("SansSerif", Font.BOLD, 13));
         if (playing) {
-            g2.setColor(new Color(0, 229, 255));
+            g2.setColor(new Color(255, 255, 255));
             g2.drawString("SCORE " + scriptEngine.score, 26, 36);
-            g2.setColor(scriptEngine.health > 30 ? new Color(0, 230, 118) : new Color(255, 82, 82));
+            g2.setColor(scriptEngine.health > 30 ? new Color(134, 239, 172) : new Color(252, 165, 165));
             g2.drawString("HP " + scriptEngine.health, 145, 36);
-            g2.setColor(new Color(180, 200, 225));
+            g2.setColor(new Color(175, 175, 184));
             g2.drawString(currentFps + " FPS • WASD + Space(A) / Shift(B)", 225, 36);
 
             if (scriptEngine.hudBanner != null && !scriptEngine.hudBanner.isEmpty()) {
                 g2.setFont(new Font("SansSerif", Font.BOLD, 18));
                 FontMetrics fm = g2.getFontMetrics();
                 int bw = fm.stringWidth(scriptEngine.hudBanner);
-                g2.setColor(new Color(11, 15, 23, 180));
-                g2.fillRoundRect((w - bw) / 2 - 14, 58, bw + 28, 32, 10, 10);
-                g2.setColor(new Color(255, 213, 79));
+                g2.setColor(new Color(14, 14, 17, 215));
+                g2.fillRoundRect((w - bw) / 2 - 14, 58, bw + 28, 32, 8, 8);
+                g2.setColor(new Color(255, 255, 255));
                 g2.drawString(scriptEngine.hudBanner, (w - bw) / 2, 80);
             }
         } else {
-            g2.setColor(new Color(0, 229, 255));
+            g2.setColor(new Color(255, 255, 255));
             g2.drawString("EDITOR (" + p.dimensionMode + " • " + p.scriptLanguage + ")", 26, 36);
-            g2.setColor(new Color(165, 185, 210));
-            g2.drawString("Left-Drag: Move • Right-Drag: Orbit/Pan • Wheel: Zoom", 185, 36);
+            g2.setColor(new Color(175, 175, 184));
+            g2.drawString("Left-Drag: Move • Right-Drag: Orbit/Pan • Wheel: Zoom", 190, 36);
         }
     }
 
@@ -915,7 +918,7 @@ public class DesktopSoftware3DViewport extends JPanel {
     }
 
     public static Color toAwtColor(String hex, int alpha) {
-        int argb = Entity.hexToArgbInt(hex, 0xFF00E5FF);
+        int argb = Entity.hexToArgbInt(hex, 0xFFFFFFFF);
         return new Color((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, Math.max(0, Math.min(255, alpha)));
     }
 

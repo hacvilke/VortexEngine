@@ -29,7 +29,7 @@ public class IconGenerator {
         };
 
         int bgCol = safeColor(bgHex, Color.rgb(13, 19, 33));
-        int accCol = safeColor(accentHex, Color.rgb(0, 229, 255));
+        int accCol = safeColor(accentHex, Color.rgb(255, 255, 255));
 
         for (int i = 0; i < folders.length; i++) {
             int sz = specs[i][0];

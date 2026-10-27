@@ -73,4 +73,18 @@ public class VortexSaveStore {
         JSONObject bucket = getBucket(slug);
         return bucket.has(key) ? bucket.optString(key, defaultValue) : defaultValue;
     }
+
+    public static String loadString(String projectSlug, String key, String defaultValue) {
+        return load(projectSlug, key, defaultValue);
+    }
+
+    public static double loadNumber(String projectSlug, String key, double defaultValue) {
+        String s = load(projectSlug, key, null);
+        if (s == null || s.trim().isEmpty()) return defaultValue;
+        try {
+            return Double.parseDouble(s.trim());
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
 }

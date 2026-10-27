@@ -90,7 +90,7 @@ public class PixelArtEditorView extends View {
         // Border frame
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(3f);
-        paint.setColor(Color.parseColor("#00E5FF"));
+        paint.setColor(Color.parseColor("#FFFFFF"));
         canvas.drawRect(ox, oy, ox + board, oy + board, paint);
     }
 

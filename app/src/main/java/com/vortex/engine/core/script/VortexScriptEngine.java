@@ -10,6 +10,8 @@ import com.vortex.engine.core.noise.TerrainGenerator;
 import com.vortex.engine.core.physics.PhysicsWorld;
 import com.vortex.engine.core.storage.VortexSaveStore;
 import com.vortex.engine.core.tween.VortexTweenSystem;
+import bsh.EvalError;
+import bsh.Interpreter;
 import org.luaj.vm2.Globals;
 import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaValue;
@@ -69,11 +71,13 @@ public class VortexScriptEngine {
     private FastNoiseLite fastNoise = TerrainGenerator.createConfiguredNoise(1337, 0.065f);
     private final Random rng = new Random();
 
-    // Active VM mode: "JS" (Mozilla Rhino ES6+), "LUA" (LuaJ 5.2), or "VXS" (VortexScript)
+    // Active VM mode: "JS" (Mozilla Rhino ES6+), "JAVA" (Java VM via BeanShell), "LUA" (LuaJ 5.2), or "VXS" (VortexScript)
     private String activeVmMode = "JS";
     private boolean usingLua = false;
     private Globals luaGlobals;
     private Scriptable rhinoScope;
+    private Interpreter javaInterpreter;
+    private Object javaScriptInstance;
 
     private static final int MAX_RHINO_OPS_PER_CALL = 250_000;
     private static final ThreadLocal<Integer> rhinoOpsCounter = new ThreadLocal<>();
@@ -136,6 +140,9 @@ public class VortexScriptEngine {
     }
 
     public static String detectRuntimeMode(String langSetting, String code) {
+        if ("JAVA".equalsIgnoreCase(langSetting)) {
+            return "JAVA";
+        }
         if ("JS".equalsIgnoreCase(langSetting) || "JAVASCRIPT".equalsIgnoreCase(langSetting)) {
             return "JS";
         }
@@ -145,6 +152,9 @@ public class VortexScriptEngine {
         }
         if (code != null) {
             String trimmed = code.trim();
+            if (trimmed.contains("public void on") || trimmed.contains("void onUpdate(") || trimmed.contains("public class ")) {
+                return "JAVA";
+            }
             if (trimmed.contains("const ") || trimmed.contains("class ") || trimmed.contains("=>") || trimmed.contains("console.log")) {
                 return "JS";
             }
@@ -153,6 +163,26 @@ public class VortexScriptEngine {
             }
         }
         return "VXS";
+    }
+
+    /**
+     * Normalizes modern Java 8/11/17 syntax (generic type arguments `<...>` & `@Override` annotations)
+     * so standard Java game scripts execute identically on Desktop JRE/JDK and Android ART/DEX!
+     */
+    public static String normalizeJavaForInterpreter(String src) {
+        if (src == null || src.isEmpty()) return "";
+        String out = src.replaceAll("@Override\\b", "");
+        // Strip diamond & simple generic angle brackets in type declarations (e.g., List<String>, ArrayList<>())
+        out = out.replaceAll("new\\s+([A-Za-z0-9_$.]+)\\s*<[^>]*>\\s*\\(", "new $1(");
+        out = out.replaceAll("\\b(List|ArrayList|Map|HashMap|Set|HashSet)\\s*<[^>;=(){]+>", "$1");
+        return out;
+    }
+
+    public static String detectJavaEntryClassName(String src) {
+        if (src == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "(?m)\\b(?:public\\s+)?class\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\b").matcher(src);
+        return m.find() ? m.group(1) : null;
     }
 
     public static boolean detectLuaMode(String langSetting, String code) {
@@ -283,6 +313,24 @@ public class VortexScriptEngine {
 
     public static String validateSyntax(String langSetting, String code) {
         String mode = detectRuntimeMode(langSetting, code);
+        if ("JAVA".equals(mode)) {
+            try {
+                Interpreter checkInterp = new Interpreter();
+                String javaSrc = normalizeJavaForInterpreter(code == null ? "" : code);
+                // Wrap inside an inert method parser check so top-level code doesn't execute side-effects during check
+                String entryCls = detectJavaEntryClassName(javaSrc);
+                if (entryCls != null) {
+                    checkInterp.eval(javaSrc);
+                } else {
+                    checkInterp.eval("class __SyntaxCheckWrap {\n" + javaSrc + "\n}");
+                }
+                return "OK (Java • Native Vortex Java VM)";
+            } catch (EvalError ee) {
+                return "Java Syntax Error (Line " + ee.getErrorLineNumber() + "): " + ee.getMessage();
+            } catch (Exception ex) {
+                return "Java Syntax Error: " + ex.getMessage();
+            }
+        }
         if ("JS".equals(mode)) {
             Context cx = SANDBOXED_RHINO_FACTORY.enterContext();
             try {
@@ -319,6 +367,8 @@ public class VortexScriptEngine {
         functions.clear();
         luaGlobals = null;
         rhinoScope = null;
+        javaInterpreter = null;
+        javaScriptInstance = null;
         score = 0;
         health = 100;
         hudBanner = "";
@@ -336,7 +386,40 @@ public class VortexScriptEngine {
         activeVmMode = detectRuntimeMode(lang, sourceCode);
         usingLua = "LUA".equals(activeVmMode);
 
-        if ("JS".equals(activeVmMode)) {
+        if ("JAVA".equals(activeVmMode)) {
+            try {
+                javaInterpreter = new Interpreter();
+                VortexJavaBridge api = new VortexJavaBridge();
+                javaInterpreter.set("vortex", api);
+                String javaSrc = normalizeJavaForInterpreter(sourceCode == null ? "" : sourceCode);
+                String entryCls = detectJavaEntryClassName(javaSrc);
+                javaInterpreter.eval(
+                        "void print(Object o) { vortex.log(String.valueOf(o)); }\n" +
+                        "void println(Object o) { vortex.log(String.valueOf(o)); }\n");
+                javaInterpreter.eval(javaSrc);
+                if (entryCls != null) {
+                    // Instantiate user's Java game class and bind vortex if field exists
+                    try {
+                        javaScriptInstance = javaInterpreter.eval("new " + entryCls + "(vortex)");
+                    } catch (Throwable ignored) {
+                        javaScriptInstance = javaInterpreter.eval("new " + entryCls + "()");
+                    }
+                    javaInterpreter.set("__gameInstance", javaScriptInstance);
+                    try { javaInterpreter.eval("__gameInstance.vortex = vortex;"); } catch (Throwable ignored) {}
+                }
+                compiledOk = true;
+                callHook("onStart");
+                return true;
+            } catch (EvalError ee) {
+                lastError = "Line " + ee.getErrorLineNumber() + ": " + ee.getMessage();
+                log("[Java Error] " + lastError);
+                return false;
+            } catch (Throwable t) {
+                lastError = t.getMessage();
+                log("[Java Error] " + lastError);
+                return false;
+            }
+        } else if ("JS".equals(activeVmMode)) {
             Context cx = SANDBOXED_RHINO_FACTORY.enterContext();
             try {
                 rhinoOpsCounter.set(0);
@@ -485,6 +568,81 @@ public class VortexScriptEngine {
 
     public String getLastError() { return lastError; }
 
+    /**
+     * Strongly-typed Java Game Scripting API exposed as `vortex` inside `VM: Java`.
+     */
+    public final class VortexJavaBridge {
+        public float joyX() { return inputJoyX; }
+        public float joyY() { return inputJoyY; }
+        public boolean btnA() { return inputBtnA; }
+        public boolean btnB() { return inputBtnB; }
+        public boolean isDown(String k) { return "A".equalsIgnoreCase(k) ? inputBtnA : inputBtnB; }
+        public boolean exists(String name) { return Boolean.TRUE.equals(callBuiltIn("exists", new Object[]{name}, 0)); }
+        public float getX(String n) { return ((Number) callBuiltIn("getX", new Object[]{n}, 0)).floatValue(); }
+        public float getY(String n) { return ((Number) callBuiltIn("getY", new Object[]{n}, 0)).floatValue(); }
+        public float getZ(String n) { return ((Number) callBuiltIn("getZ", new Object[]{n}, 0)).floatValue(); }
+        public float getVX(String n) { return ((Number) callBuiltIn("getVX", new Object[]{n}, 0)).floatValue(); }
+        public float getVY(String n) { return ((Number) callBuiltIn("getVY", new Object[]{n}, 0)).floatValue(); }
+        public float getVZ(String n) { return ((Number) callBuiltIn("getVZ", new Object[]{n}, 0)).floatValue(); }
+        public String getTag(String n) { return String.valueOf(callBuiltIn("getTag", new Object[]{n}, 0)); }
+        public boolean isGrounded(String n) { return Boolean.TRUE.equals(callBuiltIn("isGrounded", new Object[]{n}, 0)); }
+        public float dist(String a, String b) { return ((Number) callBuiltIn("dist", new Object[]{a, b}, 0)).floatValue(); }
+        public int countByTag(String tag) { return ((Number) callBuiltIn("countByTag", new Object[]{tag}, 0)).intValue(); }
+        public String findNearestTag(String from, String tag) { return String.valueOf(callBuiltIn("findNearestTag", new Object[]{from, tag}, 0)); }
+        public String findNearestTag(String from, String tag, double maxRange) { return String.valueOf(callBuiltIn("findNearestTag", new Object[]{from, tag, maxRange}, 0)); }
+
+        public void setPos(String n, double x, double y) { callBuiltIn("setPos", new Object[]{n, x, y}, 0); }
+        public void setPos(String n, double x, double y, double z) { callBuiltIn("setPos", new Object[]{n, x, y, z}, 0); }
+        public void setVel(String n, double vx, double vy) { callBuiltIn("setVel", new Object[]{n, vx, vy}, 0); }
+        public void setVel(String n, double vx, double vy, double vz) { callBuiltIn("setVel", new Object[]{n, vx, vy, vz}, 0); }
+        public void applyImpulse(String n, double ix, double iy) { callBuiltIn("applyImpulse", new Object[]{n, ix, iy}, 0); }
+        public void setFixedRotation(String n, boolean fixed) { callBuiltIn("setFixedRotation", new Object[]{n, fixed}, 0); }
+        public void jump(String n, double vy) { callBuiltIn("jump", new Object[]{n, vy}, 0); }
+        public void setRot(String n, double rx, double ry, double rz) { callBuiltIn("setRot", new Object[]{n, rx, ry, rz}, 0); }
+        public void setScale(String n, double sx, double sy, double sz) { callBuiltIn("setScale", new Object[]{n, sx, sy, sz}, 0); }
+        public void setColor(String n, String hex) { callBuiltIn("setColor", new Object[]{n, hex}, 0); }
+        public void setSpriteAnim(String n, String frames, double fps) { callBuiltIn("setSpriteAnim", new Object[]{n, frames, fps}, 0); }
+        public void destroy(String n) { callBuiltIn("destroy", new Object[]{n}, 0); }
+
+        public void spawn2D(String n, String tag, String prim, double x, double y, double sx, double sy, String hex, String body) {
+            callBuiltIn("spawn2D", new Object[]{n, tag, prim, x, y, sx, sy, hex, body}, 0);
+        }
+        public void spawn3D(String n, String tag, String prim, double x, double y, double z, double sx, double sy, double sz, String hex, String body) {
+            callBuiltIn("spawn3D", new Object[]{n, tag, prim, x, y, z, sx, sy, sz, hex, body}, 0);
+        }
+        public void particles(double x, double y, double z, int count, String hex) {
+            callBuiltIn("particles", new Object[]{x, y, z, (double) count, hex}, 0);
+        }
+        public void playSound(String sfx) { callBuiltIn("playSound", new Object[]{sfx}, 0); }
+        public void playMusic(String preset, int bpm) { callBuiltIn("playMusic", new Object[]{preset, (double) bpm}, 0); }
+        public void stopMusic() { callBuiltIn("stopMusic", new Object[0], 0); }
+        public void shake(double intensity, double dur) { callBuiltIn("shake", new Object[]{intensity, dur}, 0); }
+
+        public void chaseAI(String src, String target, double spd) { callBuiltIn("chaseAI", new Object[]{src, target, spd}, 0); }
+        public void chaseTagAI(String tag, String target, double spd) { callBuiltIn("chaseTagAI", new Object[]{tag, target, spd}, 0); }
+        public String raycast(double ox, double oy, double oz, double dx, double dy, double dz, double maxD) {
+            return String.valueOf(callBuiltIn("raycast", new Object[]{ox, oy, oz, dx, dy, dz, maxD}, 0));
+        }
+        public void tweenTagYoyo(String tag, double dy, double dur, String ease) {
+            callBuiltIn("tweenTagYoyo", new Object[]{tag, dy, dur, ease}, 0);
+        }
+        public void tweenScale(String n, double sx, double sy, double sz, double dur, String ease, int yoyo) {
+            callBuiltIn("tweenScale", new Object[]{n, sx, sy, sz, dur, ease, (double) yoyo}, 0);
+        }
+
+        public int addScore(int delta) { return ((Number) callBuiltIn("addScore", new Object[]{(double) delta}, 0)).intValue(); }
+        public int getScore() { return score; }
+        public int addHealth(int delta) { return ((Number) callBuiltIn("addHealth", new Object[]{(double) delta}, 0)).intValue(); }
+        public int getHealth() { return health; }
+        public void saveData(String k, Object v) { callBuiltIn("saveData", new Object[]{k, String.valueOf(v)}, 0); }
+        public String loadData(String k, String def) { return String.valueOf(callBuiltIn("loadData", new Object[]{k, def}, 0)); }
+        public float loadNum(String k, double def) { return ((Number) callBuiltIn("loadNum", new Object[]{k, def}, 0)).floatValue(); }
+        public void setBanner(String text) { callBuiltIn("setBanner", new Object[]{text}, 0); }
+        public void log(Object msg) { VortexScriptEngine.this.log(String.valueOf(msg)); }
+        public float rand(double lo, double hi) { return ((Number) callBuiltIn("rand", new Object[]{lo, hi}, 0)).floatValue(); }
+        public float time() { return elapsedTime; }
+    }
+
     public synchronized void update(float dt) {
         elapsedTime += dt;
         aiEngine.onFrameTick();
@@ -504,6 +662,54 @@ public class VortexScriptEngine {
     }
 
     public synchronized Object callHook(String fnName, Object... args) {
+        if ("JAVA".equals(activeVmMode)) {
+            if (javaInterpreter == null) return null;
+            try {
+                String targetPrefix = javaScriptInstance != null ? "__gameInstance." : "";
+                if ("onStart".equals(fnName)) {
+                    try { javaInterpreter.eval(targetPrefix + "onStart();"); } catch (EvalError ignored) {}
+                } else if ("onUpdate".equals(fnName)) {
+                    float dtVal = (args != null && args.length > 0 && args[0] instanceof Number)
+                            ? ((Number) args[0]).floatValue() : 0.016f;
+                    javaInterpreter.set("__dt", dtVal);
+                    try {
+                        javaInterpreter.eval(targetPrefix + "onUpdate(__dt);");
+                    } catch (EvalError ee) {
+                        if (ee.getMessage() != null && ee.getMessage().contains("Method onUpdate")) return null;
+                        throw ee;
+                    }
+                } else if ("onButton".equals(fnName)) {
+                    String btn = (args != null && args.length > 0) ? String.valueOf(args[0]) : "";
+                    javaInterpreter.set("__btn", btn);
+                    try {
+                        javaInterpreter.eval(targetPrefix + "onButton(__btn);");
+                    } catch (EvalError ee) {
+                        if (ee.getMessage() != null && ee.getMessage().contains("Method onButton")) return null;
+                        throw ee;
+                    }
+                } else if ("onCollide".equals(fnName) && args != null && args.length >= 4) {
+                    javaInterpreter.set("__ca", String.valueOf(args[0]));
+                    javaInterpreter.set("__cb", String.valueOf(args[1]));
+                    javaInterpreter.set("__ta", String.valueOf(args[2]));
+                    javaInterpreter.set("__tb", String.valueOf(args[3]));
+                    try {
+                        javaInterpreter.eval(targetPrefix + "onCollide(__ca, __cb, __ta, __tb);");
+                    } catch (EvalError ee) {
+                        if (ee.getMessage() != null && ee.getMessage().contains("Method onCollide")) return null;
+                        throw ee;
+                    }
+                }
+            } catch (EvalError ee) {
+                lastError = "Line " + ee.getErrorLineNumber() + ": " + ee.getMessage();
+                log("[Java Runtime Error in " + fnName + "] " + lastError);
+                compiledOk = false;
+            } catch (Throwable t) {
+                lastError = t.getMessage();
+                log("[Java Error in " + fnName + "] " + lastError);
+                compiledOk = false;
+            }
+            return null;
+        }
         if ("JS".equals(activeVmMode)) {
             if (rhinoScope == null) return null;
             Object prop = ScriptableObject.getProperty(rhinoScope, fnName);

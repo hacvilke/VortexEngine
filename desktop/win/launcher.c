@@ -1,5 +1,9 @@
+#ifndef UNICODE
 #define UNICODE
+#endif
+#ifndef _UNICODE
 #define _UNICODE
+#endif
 #include <windows.h>
 #include <shellapi.h>
 #include <wchar.h>
@@ -97,11 +101,29 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     javaw[0] = L'\0';
     resolve_javaw(exeDir, javaw, MAX_PATH);
 
+    // Prepend resolved JDK/JRE bin directory to PATH so child shells & tools find java/javac immediately
+    wchar_t javaBinDir[MAX_PATH];
+    wcsncpy(javaBinDir, javaw, MAX_PATH - 1);
+    javaBinDir[MAX_PATH - 1] = L'\0';
+    wchar_t *binSlash = wcsrchr(javaBinDir, L'\\');
+    if (binSlash) {
+        *binSlash = L'\0';
+        wchar_t oldPath[16384];
+        DWORD pLen = GetEnvironmentVariableW(L"PATH", oldPath, 16384);
+        wchar_t newPath[18000];
+        if (pLen > 0 && pLen < 16384) {
+            wsprintfW(newPath, L"%s;%s", javaBinDir, oldPath);
+        } else {
+            wsprintfW(newPath, L"%s", javaBinDir);
+        }
+        SetEnvironmentVariableW(L"PATH", newPath);
+    }
+
     wchar_t cmdLine[4096];
     if (pCmdLine && pCmdLine[0] != L'\0') {
-        wsprintfW(cmdLine, L"\"%s\" -Xmx1024m -Dsun.java2d.d3d=true -jar \"%s\" %s", javaw, selfPath, pCmdLine);
+        wsprintfW(cmdLine, L"\"%s\" -Xmx1024m -Dfile.encoding=UTF-8 -Dsun.java2d.d3d=true -jar \"%s\" %s", javaw, selfPath, pCmdLine);
     } else {
-        wsprintfW(cmdLine, L"\"%s\" -Xmx1024m -Dsun.java2d.d3d=true -jar \"%s\"", javaw, selfPath);
+        wsprintfW(cmdLine, L"\"%s\" -Xmx1024m -Dfile.encoding=UTF-8 -Dsun.java2d.d3d=true -jar \"%s\"", javaw, selfPath);
     }
 
     STARTUPINFOW si;
@@ -116,7 +138,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             L"Vortex Engine Studio requires Java 11+ (64-bit) to run on Windows.\n\n"
             L"Tip: You can either install Eclipse Temurin JRE/JDK OR place a portable 'jre' folder next to this .exe.\n\n"
             L"Would you like to open https://adoptium.net to download Java now?",
-            L"Vortex Engine Studio v2.0.0 — Java Runtime Needed",
+            L"Vortex Engine Studio v4.2.0 — Java Runtime Needed",
             MB_ICONINFORMATION | MB_YESNO
         );
         if (resp == IDYES) {

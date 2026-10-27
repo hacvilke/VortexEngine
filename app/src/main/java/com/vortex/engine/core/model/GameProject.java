@@ -36,13 +36,13 @@ public class GameProject {
     public final List<VortexFlowCompiler.FlowRule> flowRules = new ArrayList<>();
 
     // Custom Icon Theme
-    public String iconBgHex = "#0D1321";
-    public String iconAccentHex = "#00E5FF";
+    public String iconBgHex = "#101013";
+    public String iconAccentHex = "#FFFFFF";
     public String iconGlyph = "CUBE"; // CUBE, ROCKET, SWORD, STAR
 
     // Environment & Camera
-    public String skyColorHex = "#0B1020";
-    public String ambientColorHex = "#24344D";
+    public String skyColorHex = "#0B0B0E";
+    public String ambientColorHex = "#2A2A30";
     public boolean fogEnabled = true;
     public float fogNear = 18f;
     public float fogFar = 68f;

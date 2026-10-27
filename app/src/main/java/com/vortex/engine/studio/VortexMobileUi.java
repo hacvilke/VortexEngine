@@ -39,24 +39,24 @@ import android.widget.TextView;
  */
 public final class VortexMobileUi {
 
-    // Unified Vortex Obsidian + Signature Cyan Palette (ONE cohesive theme!)
-    public static final int C_VOID         = Color.parseColor("#090D16");
-    public static final int C_HEADER       = Color.parseColor("#0D1320");
-    public static final int C_PANEL        = Color.parseColor("#0F1726");
-    public static final int C_SURFACE      = Color.parseColor("#141E30");
-    public static final int C_SURFACE_HI   = Color.parseColor("#1B2840");
-    public static final int C_INPUT_BG     = Color.parseColor("#0B101C");
-    public static final int C_BORDER       = Color.parseColor("#24334D");
-    public static final int C_CYAN         = Color.parseColor("#00E5FF");
-    public static final int C_CYAN_TINT    = Color.parseColor("#0D2838");
-    public static final int C_CYAN_DARK_TX = Color.parseColor("#04131A");
-    public static final int C_TEXT         = Color.parseColor("#F1F5F9");
-    public static final int C_TEXT_MUTED   = Color.parseColor("#94A3B8");
-    public static final int C_TEXT_DIM     = Color.parseColor("#64748B");
-    public static final int C_DANGER_BG    = Color.parseColor("#1F131C");
-    public static final int C_DANGER_BDR   = Color.parseColor("#5C2434");
-    public static final int C_DANGER_TX    = Color.parseColor("#FDA4AF");
-    public static final int C_OK_TX        = Color.parseColor("#34D399");
+    // Pure Neutral Monochrome Dark + Crisp White Palette (ZERO BLUE!)
+    public static final int C_VOID         = Color.parseColor("#09090B");
+    public static final int C_HEADER       = Color.parseColor("#101013");
+    public static final int C_PANEL        = Color.parseColor("#151518");
+    public static final int C_SURFACE      = Color.parseColor("#1E1E22");
+    public static final int C_SURFACE_HI   = Color.parseColor("#2A2A30");
+    public static final int C_INPUT_BG     = Color.parseColor("#0D0D10");
+    public static final int C_BORDER       = Color.parseColor("#303037");
+    public static final int C_CYAN         = Color.parseColor("#FFFFFF");
+    public static final int C_CYAN_TINT    = Color.parseColor("#28282E");
+    public static final int C_CYAN_DARK_TX = Color.parseColor("#0A0A0C");
+    public static final int C_TEXT         = Color.parseColor("#FAFAFA");
+    public static final int C_TEXT_MUTED   = Color.parseColor("#A1A1AA");
+    public static final int C_TEXT_DIM     = Color.parseColor("#71717A");
+    public static final int C_DANGER_BG    = Color.parseColor("#2A1418");
+    public static final int C_DANGER_BDR   = Color.parseColor("#78303A");
+    public static final int C_DANGER_TX    = Color.parseColor("#FCA5A5");
+    public static final int C_OK_TX        = Color.parseColor("#86EFAC");
 
     public enum ButtonVariant {
         PRIMARY,   // Solid #00E5FF fill, dark bold text (1-2 main CTAs per screen)

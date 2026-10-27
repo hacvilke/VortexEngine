@@ -64,12 +64,12 @@ public class MainActivity extends Activity {
         title.setSingleLine(true);
         brandRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView verChip = VortexMobileUi.makeBadge(this, "v4.1 HYPERION", true);
+        TextView verChip = VortexMobileUi.makeBadge(this, "v4.2 STUDIO", true);
         brandRow.addView(verChip);
         header.addView(brandRow);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("ES6 JS (Rhino) • Lua 5.2 • LRM P2P Sync • Forge AI • 2D/3D Studio");
+        subtitle.setText("Native Java • ES6 JS • Lua 5.2 • LRM P2P • Forge AI • 2D/3D Studio");
         subtitle.setTextColor(VortexMobileUi.C_TEXT_MUTED);
         subtitle.setTextSize(11.5f);
         subtitle.setSingleLine(true);

@@ -22,6 +22,7 @@ JBOX2D_JAR="$ROOT_DIR/app/libs/jbox2d-library-2.2.1.1.jar"
 TWEEN_JAR="$ROOT_DIR/app/libs/universal-tween-engine-6.3.3.jar"
 PATHFINDING_JAR="$ROOT_DIR/app/libs/pathfinding-0.2.6.jar"
 RHINO_JAR="$ROOT_DIR/app/libs/rhino-1.7.15.1.jar"
+BSH_JAR="$ROOT_DIR/app/libs/bsh-2.0b6.jar"
 JSON_JAR="$ROOT_DIR/desktop/libs/json-20240303.jar"
 
 BUILD_DESK="$ROOT_DIR/build_desktop"
@@ -46,9 +47,9 @@ public class GenWinIco {
             BufferedImage img = new BufferedImage(s, s, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g = img.createGraphics();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(new Color(9, 13, 22));
+            g.setColor(new Color(11, 11, 14));
             g.fill(new RoundRectangle2D.Float(0, 0, s, s, s * 0.22f, s * 0.22f));
-            g.setColor(new Color(0, 229, 255));
+            g.setColor(new Color(255, 255, 255));
             g.setStroke(new BasicStroke(Math.max(1.5f, s * 0.06f)));
             float pad = s * 0.09f;
             g.draw(new RoundRectangle2D.Float(pad, pad, s - pad * 2, s - pad * 2, s * 0.16f, s * 0.16f));
@@ -61,7 +62,7 @@ public class GenWinIco {
                 if (k == 0) hex.moveTo(px, py); else hex.lineTo(px, py);
             }
             hex.closePath();
-            g.setColor(new Color(0, 229, 255, 225));
+            g.setColor(new Color(255, 255, 255, 240));
             g.fill(hex);
             g.dispose();
 
@@ -129,12 +130,12 @@ find app/src/main/java/com/vortex/engine/core/ai \
 echo "app/src/main/java/com/vortex/engine/core/audio/ChiptuneGenerator.java" >> "$BUILD_DESK/sources.txt"
 
 "$JAVAC" --release 11 -encoding UTF-8 \
-    -cp "$LUAJ_JAR:$JBOX2D_JAR:$TWEEN_JAR:$PATHFINDING_JAR:$RHINO_JAR:$JSON_JAR" \
+    -cp "$LUAJ_JAR:$JBOX2D_JAR:$TWEEN_JAR:$PATHFINDING_JAR:$RHINO_JAR:$BSH_JAR:$JSON_JAR" \
     -d "$BUILD_DESK/classes" \
     @"$BUILD_DESK/sources.txt"
 
-echo "=== [3/5] Assembling All-in-One Desktop Fat JAR (Core + Rhino ES6 + LuaJ + JBox2D + Tween + Pathfinding + org.json) ==="
-(cd "$BUILD_DESK/fatjar" && unzip -qo "$LUAJ_JAR" && unzip -qo "$JBOX2D_JAR" && unzip -qo "$TWEEN_JAR" && unzip -qo "$PATHFINDING_JAR" && unzip -qo "$RHINO_JAR" && unzip -qo "$JSON_JAR")
+echo "=== [3/5] Assembling All-in-One Desktop Fat JAR (Core + Java VM + Rhino ES6 + LuaJ + JBox2D + Tween + Pathfinding + org.json) ==="
+(cd "$BUILD_DESK/fatjar" && unzip -qo "$LUAJ_JAR" && unzip -qo "$JBOX2D_JAR" && unzip -qo "$TWEEN_JAR" && unzip -qo "$PATHFINDING_JAR" && unzip -qo "$RHINO_JAR" && unzip -qo "$BSH_JAR" && unzip -qo "$JSON_JAR")
 rm -rf "$BUILD_DESK/fatjar/META-INF"
 cp -R "$BUILD_DESK/classes"/* "$BUILD_DESK/fatjar/"
 
@@ -148,13 +149,16 @@ fi
 if [ -f "build_studio/assets/toolchain/vortex-runtime-2.dex" ]; then
     cp "build_studio/assets/toolchain/vortex-runtime-2.dex" "$BUILD_DESK/fatjar/toolchain/vortex-runtime-2.dex"
 fi
+if [ -f "build_studio/assets/toolchain/vortex-runtime-3.dex" ]; then
+    cp "build_studio/assets/toolchain/vortex-runtime-3.dex" "$BUILD_DESK/fatjar/toolchain/vortex-runtime-3.dex"
+fi
 
 cat > "$BUILD_DESK/manifest.mf" <<'EOF'
 Manifest-Version: 1.0
 Main-Class: com.vortex.engine.desktop.VortexDesktopStudio
 EOF
 
-FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.1.0.jar"
+FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.2.0.jar"
 "$JAR" cfm "$FAT_JAR" "$BUILD_DESK/manifest.mf" -C "$BUILD_DESK/fatjar" .
 
 echo "=== [4/5] Building Self-Contained Windows x64 .EXE & Linux x86_64 Binary ==="
@@ -162,7 +166,7 @@ WIN_EXE="$DIST_DIR/VortexEngine-Studio-Windows-x64.exe"
 cat "$BUILD_DESK/win/win-launcher-stub.exe" "$FAT_JAR" > "$WIN_EXE"
 
 LINUX_BIN="$DIST_DIR/VortexEngine-Studio-Linux-x86_64"
-printf '#!/usr/bin/env sh\nexec java -Xmx1024m -jar "$0" "$@"\n' > "$LINUX_BIN"
+printf '#!/usr/bin/env sh\nexec java -Xmx1024m -Dfile.encoding=UTF-8 -jar "$0" "$@"\n' > "$LINUX_BIN"
 cat "$FAT_JAR" >> "$LINUX_BIN"
 chmod +x "$LINUX_BIN"
 
