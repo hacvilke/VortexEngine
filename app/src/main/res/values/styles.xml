@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="VortexTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">#00E5FF</item>
+        <item name="android:colorPrimaryDark">#0B0F17</item>
+        <item name="android:colorAccent">#00E5FF</item>
+        <item name="android:windowBackground">@color/bg_obsidian</item>
+        <item name="android:statusBarColor">#0B0F17</item>
+        <item name="android:navigationBarColor">#0B0F17</item>
+    </style>
+</resources>

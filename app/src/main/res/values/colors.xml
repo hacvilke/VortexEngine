@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_obsidian">#0B0F17</color>
+    <color name="bg_panel">#141B26</color>
+    <color name="bg_card">#1C2535</color>
+    <color name="accent_cyan">#00E5FF</color>
+    <color name="accent_violet">#7C4DFF</color>
+    <color name="accent_emerald">#00E676</color>
+    <color name="accent_amber">#FFB300</color>
+    <color name="accent_coral">#FF5252</color>
+    <color name="text_primary">#ECF2F8</color>
+    <color name="text_secondary">#8B9BB4</color>
+</resources>

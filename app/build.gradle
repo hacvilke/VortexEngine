@@ -1,0 +1,32 @@
+apply plugin: "com.android.application"
+
+android {
+    namespace "com.vortex.engine.studio"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.vortex.engine.studio"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    // Pure Android SDK + OpenGL ES 2.0/3.0 + AudioTrack + Termux IPC — zero external bloat!
+}

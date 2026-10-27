@@ -1,0 +1,9 @@
+.gradle/
+build/
+app/build/
+local.properties
+*.idsig
+*.keystore
+*.p12
+*.jks
+.DS_Store
