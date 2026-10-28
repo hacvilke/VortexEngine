@@ -1,8 +1,28 @@
-# Vortex Engine Studio — v4.6.0 ("Monolith White Edition")
+# Vortex Engine Studio — v4.7.0 ("Tile & Material Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
+
+## What's New in v4.7.0 (Tile Maps, Prefabs & Procedural Materials)
+
+### 1. Tiled `.tmx` import — and a painter so you never need Tiled
+- **Import Tiled Map (.tmx)** in the File menu reads orthogonal maps with embedded **or external `.tsx`** tilesets, `CSV` and `base64` (raw / **zlib** / **gzip**) layer data, flip/rotation flags and object groups. Tile colours are sampled from the real tileset PNG (with corner probing for sprites with transparent centres and a deliberate zero-blue palette fallback when the image is missing).
+- The import lands in the scene tree as a **`TileWorld_<map>`** node: one child per layer, horizontally merged tile runs (a 6×4 test map becomes 29 entities instead of 54), `Collision`/`Solid`/`Wall`/`Block` layers become static colliders, and `<object>` entries become props, solid static bodies or the playable **Hero** when named `spawn`/`player`/`start`.
+- **Built-in tile brush** (Tools ▸ Tile Paint Mode): pick a swatch from the strip at the bottom of the viewport, drag to paint, right-drag to erase, toggle **solid** cells for walls, name the layer, and **Merge Tile Runs** to compact a layer into horizontal runs. Every painted cell is an ordinary scene-tree entity, so it is selectable, tintable and scriptable.
+- The **phone** gets the same painter: `🧱 TILES` on the 2D toolbar opens the swatch grid, then tapping/dragging on the canvas paints into the chosen layer (`Merge Runs` included).
+
+### 2. Scene-tree prefabs
+- Select any node → **Tools ▸ Create Prefab from Selection** stores the whole subtree (root + children + local transforms). **Tools ▸ Prefab Palette** instantiates a copy under the selected node with fresh ids and rewired parent links, so a `Turret/Barrel/Muzzle` assembly drops in with one line of UI.
+- Seven built-ins ship with every project (Player Starter, Enemy Walker, Pickup Coin, Platform Block, Light Marker, Crate, Pillar). Prefabs travel inside the `.vortex` project JSON — no extra asset files, no storage bloat.
+
+### 3. Procedural materials & surface patterns (no texture files)
+- **Material presets** per entity: `MATTE`, `METAL`, `GLASS`, `EMISSIVE`, `UNLIT` drive specular strength, shininess, ambient response and emissive shading. Emissive objects bloom in the 2D viewport too.
+- **Surface patterns** derived from world position: `CHECKER`, `STRIPES`, `GRID`, `BRICK`, `NOISE`. Deterministic, resolution independent, zero assets — stone floors, brushed metal and tiled walls without downloading a single PNG.
+- **Sky & atmosphere pass**: vertical sky gradient from the light rig, warm horizon band that widens as the sun drops, sun disc with multi-ring bloom, and stars once the sky is genuinely dark.
+
+### 4. Engine research dossier
+- `ENGINE_RESEARCH.md` now documents all **21 subsystems** a custom mobile+PC engine needs, Vortex's honest status per row, a table of **permissively licensed** projects worth adopting (bgfx/wgpu/raylib/Filament/SDL2/LWJGL/libGDX/KTX2/Jolt/Bullet/dyn4j/Box2D/miniaudio/SoLoud/glTF/ufbx/DragonBones/Artemis…), per-subsystem performance targets, and the ranked gap list (glTF import → point lights + shadow maps → atlas packer → frame-graph profiler → gamepad/safe-area → string tables).
 
 ## What's New in v4.6.0 (Honest Forge AI, Real Lighting Rig & Compact Chat)
 

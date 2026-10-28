@@ -36,6 +36,10 @@ public class Entity {
     public boolean checkerTexture = false;
     public boolean emissive = false;
     public boolean visible = true;
+    // v4.7.0 material preset: MATTE (default), METAL, GLASS, EMISSIVE, UNLIT
+    public String material = "MATTE";
+    // v4.7.0 procedural surface pattern: NONE, CHECKER, STRIPES, NOISE, GRID, BRICK
+    public String texture = "NONE";
 
     // Physics & Motion (JBox2D + Unreal-Inspired Substepped 3D Rigid-Body Solver)
     public String bodyType = "STATIC"; // STATIC, DYNAMIC, KINEMATIC, NONE
@@ -214,6 +218,8 @@ public class Entity {
         o.put("checkerTexture", checkerTexture);
         o.put("emissive", emissive);
         o.put("visible", visible);
+        o.put("material", material);
+        o.put("texture", texture);
         o.put("bodyType", bodyType);
         o.put("collider", collider);
         o.put("isTrigger", isTrigger);
@@ -273,6 +279,8 @@ public class Entity {
         e.checkerTexture = o.optBoolean("checkerTexture", false);
         e.emissive = o.optBoolean("emissive", false);
         e.visible = o.optBoolean("visible", true);
+        e.material = o.optString("material", "MATTE");
+        e.texture = o.optString("texture", "NONE");
         e.bodyType = o.optString("bodyType", "STATIC");
         e.collider = o.optString("collider", "BOX");
         e.isTrigger = o.optBoolean("isTrigger", false);

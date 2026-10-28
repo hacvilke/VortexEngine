@@ -1483,6 +1483,49 @@ public final class DesktopUiKit {
         dlg.setVisible(true);
     }
 
+    /** Single-line text prompt. Returns null when cancelled. */
+    public static String showInputModal(Component owner, String title, String label, String initial) {
+        java.awt.Window win = owner instanceof java.awt.Window
+                ? (java.awt.Window) owner
+                : (owner != null ? SwingUtilities.getWindowAncestor(owner) : null);
+        final JDialog dlg = new JDialog(win, title, java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        final String[] result = {null};
+        JPanel root = new JPanel(new BorderLayout(0, 10));
+        root.setBackground(C_HEADER);
+        root.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(C_BORDER, 1),
+                BorderFactory.createEmptyBorder(14, 16, 12, 16)));
+        JLabel head = new JLabel(title);
+        head.setFont(FONT_TITLE);
+        head.setForeground(C_WHITE);
+        root.add(head, BorderLayout.NORTH);
+        JPanel mid = new JPanel(new BorderLayout(0, 6));
+        mid.setOpaque(false);
+        JLabel lbl = new JLabel(label);
+        lbl.setFont(FONT_SMALL);
+        lbl.setForeground(C_TEXT_MUTED);
+        final JTextField field = createField(initial == null ? "" : initial);
+        mid.add(lbl, BorderLayout.NORTH);
+        mid.add(field, BorderLayout.CENTER);
+        root.add(mid, BorderLayout.CENTER);
+        JPanel foot = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        foot.setOpaque(false);
+        VortexButton cancel = new VortexButton("Cancel", Variant.SECONDARY, Icon.CLOSE);
+        cancel.addActionListener(e -> dlg.dispose());
+        VortexButton ok = new VortexButton("OK", Variant.PRIMARY, Icon.CHECK);
+        ok.addActionListener(e -> { result[0] = field.getText(); dlg.dispose(); });
+        field.addActionListener(e -> { result[0] = field.getText(); dlg.dispose(); });
+        foot.add(cancel);
+        foot.add(ok);
+        root.add(foot, BorderLayout.SOUTH);
+        dlg.setContentPane(root);
+        dlg.setSize(scaled(420), scaled(170));
+        dlg.setLocationRelativeTo(owner);
+        SwingUtilities.invokeLater(field::requestFocusInWindow);
+        dlg.setVisible(true);
+        return result[0];
+    }
+
     public static DefaultListCellRenderer createDarkListRenderer() {
         return new DefaultListCellRenderer() {
             @Override

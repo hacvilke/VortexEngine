@@ -75,6 +75,21 @@ public class DesktopSoftware3DViewport extends JPanel {
     public final DesktopAudioEngine audioEngine = new DesktopAudioEngine();
 
     private GameProject activeProject;
+    // Material preset of the entity currently being submitted (set in appendEntity3DTriangles).
+    private float matSpec = 1f, matShineMul = 1f, matAmbMul = 1f;
+    private String currentMatName = "MATTE";
+    // v4.7.0 tile painter state
+    private boolean tilePaintMode = false;
+    private String tilePaintColor = "#6E7B5B";
+    private String tilePaintLayer = "Ground";
+    private boolean tilePaintSolid = false;
+    public static final String[] TILE_PALETTE = {
+            "#6E7B5B", "#4F5A44", "#8C7A5B", "#3F4650", "#A88D6A", "#5B6B7A",
+            "#2E3138", "#C9A227", "#B04A4A", "#DDD8CE", "#7A6B8C", "#46695C"
+    };
+    private int hoverCellX = Integer.MIN_VALUE, hoverCellY = Integer.MIN_VALUE;
+    /** Set by the studio so tile painting can refresh the hierarchy + inspector. */
+    private Runnable onSceneChanged;
     private boolean playing = false;
     private String selectedEntityId = null;
     private ViewportListener listener;
@@ -224,6 +239,16 @@ public class DesktopSoftware3DViewport extends JPanel {
     public void setGizmoMode(String mode) { this.gizmoMode = mode == null ? "MOVE" : mode.toUpperCase(); repaint(); }
     public boolean isGridSnap() { return gridSnap; }
     public void setGridSnap(boolean snap) { this.gridSnap = snap; repaint(); }
+    public boolean isTilePaintMode() { return tilePaintMode; }
+    public void setTilePaintMode(boolean on) { this.tilePaintMode = on; repaint(); }
+    public String getTilePaintColor() { return tilePaintColor; }
+    public void setTilePaintColor(String hex) { if (hex != null && hex.startsWith("#")) this.tilePaintColor = hex; repaint(); }
+    public void setOnSceneChanged(Runnable r) { this.onSceneChanged = r; }
+    private void notifySceneChanged() { if (onSceneChanged != null) onSceneChanged.run(); }
+    public String getTilePaintLayer() { return tilePaintLayer; }
+    public void setTilePaintLayer(String layer) { if (layer != null && !layer.trim().isEmpty()) this.tilePaintLayer = layer.trim(); }
+    public boolean isTilePaintSolid() { return tilePaintSolid; }
+    public void setTilePaintSolid(boolean solid) { this.tilePaintSolid = solid; repaint(); }
     public boolean isShowColliders() { return showColliders; }
     public void setShowColliders(boolean show) { this.showColliders = show; repaint(); }
 
@@ -250,6 +275,11 @@ public class DesktopSoftware3DViewport extends JPanel {
                     }
                     return;
                 }
+                if (tilePaintMode && activeProject != null && "2D".equalsIgnoreCase(activeProject.dimensionMode)) {
+                    if (handleTilePaletteClick(e.getX(), e.getY())) return;
+                    if (SwingUtilities.isLeftMouseButton(e)) { paintTileAt(e.getX(), e.getY(), false); return; }
+                    if (SwingUtilities.isRightMouseButton(e)) { paintTileAt(e.getX(), e.getY(), true); return; }
+                }
                 if (SwingUtilities.isLeftMouseButton(e) && activeProject != null) {
                     Entity hit = pickEntity(e.getX(), e.getY());
                     if (hit != null) {
@@ -275,8 +305,24 @@ public class DesktopSoftware3DViewport extends JPanel {
 
         addMouseMotionListener(new MouseMotionAdapter() {
             @Override
+            public void mouseMoved(MouseEvent e) {
+                if (tilePaintMode && activeProject != null && !playing
+                        && "2D".equalsIgnoreCase(activeProject.dimensionMode)) {
+                    updateTileHover(e.getX(), e.getY());
+                    repaint();
+                }
+            }
+
+            @Override
             public void mouseDragged(MouseEvent e) {
                 if (lastMouse == null || activeProject == null || playing) return;
+                if (tilePaintMode && "2D".equalsIgnoreCase(activeProject.dimensionMode)) {
+                    hoverCellX = cellX(e.getX());
+                    hoverCellY = cellY(e.getY());
+                    if (SwingUtilities.isLeftMouseButton(e)) paintTileAt(e.getX(), e.getY(), false);
+                    else if (SwingUtilities.isRightMouseButton(e)) paintTileAt(e.getX(), e.getY(), true);
+                    return;
+                }
                 int dx = e.getX() - lastMouse.x;
                 int dy = e.getY() - lastMouse.y;
                 lastMouse = e.getPoint();
@@ -457,13 +503,19 @@ public class DesktopSoftware3DViewport extends JPanel {
         // Scene tree: moving a parent in the editor immediately drags its children.
         if (!playing) com.vortex.engine.core.model.SceneHierarchy.propagate(p.entities);
 
-        g2.setColor(toAwtColor(p.skyColorHex, 255));
-        g2.fillRect(0, 0, w, h);
+        boolean mode3D = "3D".equalsIgnoreCase(p.dimensionMode);
+        if (mode3D) {
+            paintSky(g2, p, w, h);
+        } else {
+            g2.setColor(toAwtColor(p.skyColorHex, 255));
+            g2.fillRect(0, 0, w, h);
+        }
 
-        if ("3D".equalsIgnoreCase(p.dimensionMode)) {
+        if (mode3D) {
             paint3DScene(g2, p, w, h);
         } else {
             paint2DScene(g2, p, w, h);
+            if (tilePaintMode && !playing) paintTileOverlay(g2, p, w, h);
         }
 
         paintHudOverlay(g2, p, w, h);
@@ -473,6 +525,128 @@ public class DesktopSoftware3DViewport extends JPanel {
     // =========================================================================
     // 3D Perspective Camera + Sunlit Triangle Painter
     // =========================================================================
+    /**
+     * Sky + atmosphere (v4.7.0): vertical sky gradient from the light rig, warm horizon band, sun
+     * disc with bloom, and stars when the sun is low. Cheap, resolution independent, no textures.
+     */
+    private void paintSky(Graphics2D g2, GameProject p, int w, int h) {
+        Color base = toAwtColor(p.skyColorHex, 255);
+        float lum = (base.getRed() * 0.2126f + base.getGreen() * 0.7152f + base.getBlue() * 0.0722f) / 255f;
+        float sunElev = Math.max(0f, Math.min(1f, p.sunPitchDeg / 90f));
+        Color sunCol = toAwtColor(p.sunColorHex, 255);
+
+        // horizon colour = sky tinted toward the sun colour, brightness follows sun elevation
+        float horizonMix = 0.20f + 0.42f * (1f - sunElev);
+        Color horizon = new Color(
+                clampRGB(base.getRed() * (1f - horizonMix) + sunCol.getRed() * horizonMix * 0.75f),
+                clampRGB(base.getGreen() * (1f - horizonMix) + sunCol.getGreen() * horizonMix * 0.75f),
+                clampRGB(base.getBlue() * (1f - horizonMix) + sunCol.getBlue() * horizonMix * 0.75f));
+        Color zenith = new Color(clampRGB(base.getRed() * 0.55f), clampRGB(base.getGreen() * 0.58f), clampRGB(base.getBlue() * 0.68f));
+
+        g2.setPaint(new java.awt.GradientPaint(0, 0, zenith, 0, h, horizon));
+        g2.fillRect(0, 0, w, h);
+
+        // stars: deterministic, only when the sky is genuinely dark
+        if (lum < 0.16f) {
+            java.util.Random rng = new java.util.Random(1337);
+            int starCount = 90;
+            g2.setColor(new Color(255, 255, 255, 90));
+            for (int i = 0; i < starCount; i++) {
+                int sx = rng.nextInt(Math.max(1, w));
+                int sy = rng.nextInt(Math.max(1, (int) (h * 0.72f)));
+                int size = rng.nextInt(10) == 0 ? 2 : 1;
+                g2.fillRect(sx, sy, size, size);
+            }
+        }
+
+        // sun disc: project a point far along the light direction from the camera target
+        float[] camBasis = editorCameraBasis();
+        if (camBasis != null) {
+            float yaw = (float) Math.toRadians(p.sunYawDeg);
+            float pitch = (float) Math.toRadians(Math.max(4f, p.sunPitchDeg));
+            float lx = (float) (Math.sin(yaw) * Math.cos(pitch));
+            float ly = (float) Math.sin(pitch);
+            float lz = (float) (Math.cos(yaw) * Math.cos(pitch));
+            float cx = camBasis[0] + lx * 600f, cyy = camBasis[1] + ly * 600f, cz = camBasis[2] + lz * 600f;
+            float[] s = project3D(cx, cyy, cz, camBasis[0], camBasis[1], camBasis[2],
+                    camBasis[3], camBasis[4], camBasis[5], camBasis[6], camBasis[7], camBasis[8],
+                    camBasis[9], camBasis[10], camBasis[11], camBasis[12], w * 0.5f, h * 0.5f);
+            if (s != null && s[0] > -200 && s[0] < w + 200 && s[1] > -200 && s[1] < h + 200) {
+                float radius = 26f + 22f * sunElev;
+                for (int i = 4; i >= 1; i--) {
+                    float r = radius * i * 0.85f;
+                    int alpha = Math.max(6, 26 / i);
+                    g2.setColor(new Color(sunCol.getRed(), sunCol.getGreen(), sunCol.getBlue(), alpha));
+                    g2.fillOval(Math.round(s[0] - r), Math.round(s[1] - r), Math.round(r * 2), Math.round(r * 2));
+                }
+                g2.setColor(new Color(clampRGB(sunCol.getRed() * 1.05f), clampRGB(sunCol.getGreen() * 1.02f), clampRGB(sunCol.getBlue() * 0.95f)));
+                g2.fillOval(Math.round(s[0] - radius * 0.55f), Math.round(s[1] - radius * 0.55f),
+                        Math.round(radius * 1.1f), Math.round(radius * 1.1f));
+            }
+        }
+    }
+
+    private static int clampRGB(float v) { return Math.max(0, Math.min(255, Math.round(v))); }
+
+    /** {camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale} for the editor camera. */
+    private float[] editorCameraBasis() {
+        double yaw = Math.toRadians(editorYawDeg);
+        double pitch = Math.toRadians(editorPitchDeg);
+        float horiz = (float) (Math.cos(pitch) * editorDist);
+        float camX = (float) (Math.sin(yaw) * horiz);
+        float camY = 0.5f + (float) (Math.sin(pitch) * editorDist);
+        float camZ = (float) (Math.cos(yaw) * horiz);
+        float lookX = 0f, lookY = 0.5f, lookZ = 0f;
+        float fx = lookX - camX, fy = lookY - camY, fz = lookZ - camZ;
+        float fl = (float) Math.sqrt(fx * fx + fy * fy + fz * fz);
+        if (fl < 1e-4f) fl = 1f;
+        fx /= fl; fy /= fl; fz /= fl;
+        float rx = -fz, rz = fx;
+        float rl = (float) Math.sqrt(rx * rx + rz * rz);
+        if (rl < 1e-4f) { rx = 1f; rz = 0f; rl = 1f; }
+        rx /= rl; rz /= rl;
+        float ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
+        float fovScale = (float) (1.0 / Math.tan(Math.toRadians(60) * 0.5));
+        GameProject p = activeProject;
+        if (p != null) fovScale = (float) (1.0 / Math.tan(Math.toRadians(Math.max(35f, p.cameraFov) * 0.5)));
+        return new float[]{camX, camY, camZ, rx, 0f, rz, ux, uy, uz, fx, fy, fz, fovScale};
+    }
+
+    /** Tile-mode HUD: cell hover ring, palette strip, layer + solid readout. */
+    private void paintTileOverlay(Graphics2D g2, GameProject p, int w, int h) {
+        if (hoverCellX != Integer.MIN_VALUE) {
+            int[] r = cellRect(hoverCellX, hoverCellY);
+            g2.setColor(new Color(255, 255, 255, 170));
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawRect(r[0], r[1], r[2], r[3]);
+            g2.setColor(toAwtColor(tilePaintColor, 70));
+            g2.fillRect(r[0], r[1], r[2], r[3]);
+        }
+        int size = 26, gap = 6, top = h - size - 10;
+        g2.setColor(new Color(18, 18, 20, 210));
+        g2.fillRoundRect(6, top - 8, TILE_PALETTE.length * (size + gap) + 12, size + 16, 8, 8);
+        g2.setStroke(new BasicStroke(1f));
+        g2.setColor(new Color(120, 120, 128, 160));
+        g2.drawRoundRect(6, top - 8, TILE_PALETTE.length * (size + gap) + 12, size + 16, 8, 8);
+        for (int i = 0; i < TILE_PALETTE.length; i++) {
+            int x = 12 + i * (size + gap);
+            g2.setColor(toAwtColor(TILE_PALETTE[i], 255));
+            g2.fillRoundRect(x, top, size, size, 5, 5);
+            g2.setColor(TILE_PALETTE[i].equalsIgnoreCase(tilePaintColor)
+                    ? Color.WHITE : new Color(0, 0, 0, 90));
+            g2.setStroke(new BasicStroke(TILE_PALETTE[i].equalsIgnoreCase(tilePaintColor) ? 2f : 1f));
+            g2.drawRoundRect(x, top, size, size, 5, 5);
+        }
+        String hud = "TILE  •  layer " + tilePaintLayer + (tilePaintSolid ? "  •  SOLID" : "  •  decor")
+                + "  •  LMB paint  RMB erase";
+        g2.setFont(getFont() == null ? new Font("SansSerif", Font.PLAIN, 11) : getFont().deriveFont(Font.PLAIN, 11f));
+        int tw = g2.getFontMetrics().stringWidth(hud);
+        g2.setColor(new Color(18, 18, 20, 200));
+        g2.fillRoundRect(6, top - 34, tw + 16, 22, 7, 7);
+        g2.setColor(new Color(230, 230, 235));
+        g2.drawString(hud, 14, top - 19);
+    }
+
     private void paint3DScene(Graphics2D g2, GameProject p, int w, int h) {
         float camX, camY, camZ, lookX, lookY, lookZ;
         if (!playing) {
@@ -632,6 +806,7 @@ public class DesktopSoftware3DViewport extends JPanel {
             float fovScale, float halfW, float halfH, Color skyCol
     ) {
         String prim = e.primitive == null ? "CUBE" : e.primitive.toUpperCase();
+        applyMaterial(e);
         Color baseCol = toAwtColor(e.colorHex, Math.round(e.alpha * 255));
         Color secCol = toAwtColor(e.secondaryColorHex, Math.round(e.alpha * 255));
 
@@ -657,6 +832,7 @@ public class DesktopSoftware3DViewport extends JPanel {
                 float z2 = e.z + cachedTerrainVerts[b + 18] * e.scaleZ;
 
                 Color c = (e.checkerTexture && ((t / 2) % 2 == 0)) ? baseCol : (e.checkerTexture ? secCol : baseCol);
+                c = proceduralTint(e, c, (x0 + x1 + x2) / 3f, (y0 + y1 + y2) / 3f, (z0 + z1 + z2) / 3f);
                 // Edge stroke matches the fill so adjacent terrain triangles stitch without cracks.
                 Color seam = new Color(Math.round(c.getRed() * 0.93f), Math.round(c.getGreen() * 0.93f),
                         Math.round(c.getBlue() * 0.93f), 255);
@@ -690,10 +866,72 @@ public class DesktopSoftware3DViewport extends JPanel {
             if (nl > 1e-5f) { nx /= nl; ny /= nl; nz /= nl; }
 
             Color c = (e.checkerTexture && (i % 2 == 1)) ? secCol : baseCol;
+            c = proceduralTint(e, c, (p0[0] + p1[0] + p2[0]) / 3f, (p0[1] + p1[1] + p2[1]) / 3f, (p0[2] + p1[2] + p2[2]) / 3f);
             pushProjectedTri(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], p2[0], p2[1], p2[2],
                     nx, ny, nz, c, e.emissive, selEdge,
                     camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH, skyCol, p.fogNear, p.fogFar);
         }
+    }
+
+    /** Maps the material preset to specular strength / shininess / ambient response. */
+    private void applyMaterial(Entity e) {
+        String m = e.material == null ? "MATTE" : e.material.toUpperCase(java.util.Locale.US);
+        currentMatName = m;
+        switch (m) {
+            case "METAL":    matSpec = 2.6f; matShineMul = 1.35f; matAmbMul = 0.72f; break;
+            case "GLASS":    matSpec = 3.2f; matShineMul = 1.7f;  matAmbMul = 1.18f; break;
+            case "EMISSIVE": matSpec = 0.0f; matShineMul = 1f;    matAmbMul = 1.0f;  break;
+            case "UNLIT":    matSpec = 0.0f; matShineMul = 1f;    matAmbMul = 0f;    break;
+            default:         matSpec = 1.0f; matShineMul = 1f;    matAmbMul = 1f;    break;
+        }
+    }
+
+    /**
+     * Procedural surface pattern (v4.7.0) — modulates a triangle's colour from its world position so
+     * surfaces read as checker plate, brushed stripes, stone noise, grid panels or brick without any
+     * texture files. Deterministic: same world point always yields the same tint.
+     */
+    private static Color proceduralTint(Entity e, Color base, float wx, float wy, float wz) {
+        String tex = e.texture == null ? "NONE" : e.texture.toUpperCase(java.util.Locale.US);
+        if ("NONE".equals(tex)) return base;
+        float f;
+        switch (tex) {
+            case "CHECKER": {
+                int cx = (int) Math.floor(wx * 2f), cy = (int) Math.floor(wy * 2f), cz = (int) Math.floor(wz * 2f);
+                f = ((cx + cy + cz) & 1) == 0 ? 1.0f : 0.84f;
+                break;
+            }
+            case "STRIPES":
+                f = 0.88f + 0.12f * (float) Math.abs(Math.sin(wy * 9.0));
+                break;
+            case "GRID": {
+                float gx = Math.abs(wx * 4f - Math.round(wx * 4f));
+                float gy = Math.abs(wy * 4f - Math.round(wy * 4f));
+                f = (gx < 0.06f || gy < 0.06f) ? 0.80f : 1.0f;
+                break;
+            }
+            case "BRICK": {
+                int row = (int) Math.floor(wy * 4f);
+                float offset = (row & 1) == 0 ? 0f : 0.5f;
+                float bx = Math.abs((wx * 2f + offset) - Math.round(wx * 2f + offset));
+                float by = Math.abs(wy * 4f - Math.round(wy * 4f));
+                f = (bx < 0.05f || by < 0.07f) ? 0.78f : 1.0f;
+                break;
+            }
+            case "NOISE": {
+                int h = Float.floatToIntBits(wx * 31.7f) ^ Float.floatToIntBits(wy * 57.3f) ^ Float.floatToIntBits(wz * 13.1f);
+                h ^= (h >>> 16);
+                f = 0.90f + ((h & 0xFF) / 255f) * 0.18f;
+                break;
+            }
+            default:
+                return base;
+        }
+        return new Color(
+                Math.max(0, Math.min(255, Math.round(base.getRed() * f))),
+                Math.max(0, Math.min(255, Math.round(base.getGreen() * f))),
+                Math.max(0, Math.min(255, Math.round(base.getBlue() * f))),
+                base.getAlpha());
     }
 
     private float[] xform(float lx, float ly, float lz, Entity e, float cy, float sy, float cz, float sz) {
@@ -762,14 +1000,19 @@ public class DesktopSoftware3DViewport extends JPanel {
             float hl = (float) Math.sqrt(hx1 * hx1 + hy1 * hy1 + hz1 * hz1);
             if (hl > 1e-4f) {
                 float nh = Math.max(0f, (nx * hx1 + ny * hy1 + nz * hz1) / hl);
-                spec = (float) Math.pow(nh, 26.0) * 0.45f * sunI;
+                spec = (float) Math.pow(nh, 26.0 * matShineMul) * 0.45f * sunI * matSpec;
             }
         }
         float rim = emissive ? 0f : (float) Math.pow(1f - Math.max(0f, Math.abs(ndl)), 3.0) * 0.10f;
 
-        float shade = emissive
-                ? (1.02f + wrap * 0.18f)
-                : (amb * (0.72f + 0.28f * skyFill) + wrap * sunI * 0.86f + spec + rim);
+        float shade;
+        if (emissive || "EMISSIVE".equalsIgnoreCase(String.valueOf(currentMatName))) {
+            shade = 1.02f + wrap * 0.18f;
+        } else if ("UNLIT".equalsIgnoreCase(String.valueOf(currentMatName))) {
+            shade = 1f;
+        } else {
+            shade = amb * matAmbMul * (0.72f + 0.28f * skyFill) + wrap * sunI * 0.86f + spec + rim;
+        }
         shade = Math.max(0.06f, Math.min(2.4f, shade));
 
         int r = Math.min(255, Math.round(col.getRed() * shade));
@@ -902,6 +1145,67 @@ public class DesktopSoftware3DViewport extends JPanel {
     // =========================================================================
     // 2D Orthographic Scene + JBox2D Rotation + 16x16 Pixel Art Sprites
     // =========================================================================
+    // ------------------------------------------------------------------ tile painter (v4.7.0)
+
+    /** Grid cell X for a screen X in 2D editor view. */
+    private int cellX(int sx) {
+        float zoom = editor2DZoom;
+        float ppu = getHeight() / Math.max(4f, zoom);
+        float world = (sx - getWidth() * 0.5f) / ppu + editor2DCamX;
+        return (int) Math.floor(world / com.vortex.engine.core.asset.TileBrush.CELL);
+    }
+
+    /** Grid cell Y for a screen Y in 2D editor view (world Y is up). */
+    private int cellY(int sy) {
+        float zoom = editor2DZoom;
+        float ppu = getHeight() / Math.max(4f, zoom);
+        float world = (getHeight() * 0.5f - sy) / ppu + editor2DCamY;
+        return (int) Math.floor(world / com.vortex.engine.core.asset.TileBrush.CELL);
+    }
+
+    /** Screen rect of a grid cell: {x, y, w, h}. */
+    private int[] cellRect(int gx, int gy) {
+        float ppu = getHeight() / Math.max(4f, editor2DZoom);
+        float x = getWidth() * 0.5f + (gx * com.vortex.engine.core.asset.TileBrush.CELL - editor2DCamX) * ppu;
+        float y = getHeight() * 0.5f - ((gy + 1) * com.vortex.engine.core.asset.TileBrush.CELL - editor2DCamY) * ppu;
+        return new int[]{Math.round(x), Math.round(y),
+                Math.max(1, Math.round(ppu * com.vortex.engine.core.asset.TileBrush.CELL)),
+                Math.max(1, Math.round(ppu * com.vortex.engine.core.asset.TileBrush.CELL))};
+    }
+
+    private void paintTileAt(int sx, int sy, boolean erase) {
+        if (activeProject == null || playing) return;
+        int gx = cellX(sx), gy = cellY(sy);
+        hoverCellX = gx; hoverCellY = gy;
+        boolean changed = erase
+                ? com.vortex.engine.core.asset.TileBrush.erase(activeProject, tilePaintLayer, gx, gy)
+                : com.vortex.engine.core.asset.TileBrush.paint(activeProject, tilePaintLayer, gx, gy,
+                        tilePaintColor, tilePaintSolid) != null;
+        if (changed) notifySceneChanged();
+        repaint();
+    }
+
+    /** Palette hit test at the bottom of the viewport; returns true when a swatch was clicked. */
+    private boolean handleTilePaletteClick(int sx, int sy) {
+        int size = 26, gap = 6, top = getHeight() - size - 10;
+        if (sy < top - 4 || sy > top + size + 4) return false;
+        for (int i = 0; i < TILE_PALETTE.length; i++) {
+            int x = 12 + i * (size + gap);
+            if (sx >= x && sx <= x + size) {
+                tilePaintColor = TILE_PALETTE[i];
+                repaint();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Hover ring in tile mode (called from the motion listener). */
+    void updateTileHover(int sx, int sy) {
+        hoverCellX = cellX(sx);
+        hoverCellY = cellY(sy);
+    }
+
     private void paint2DScene(Graphics2D g2, GameProject p, int w, int h) {
         float zoom = playing ? p.zoom2D : editor2DZoom;
         float ppu = h / Math.max(4f, zoom);
@@ -942,6 +1246,16 @@ public class DesktopSoftware3DViewport extends JPanel {
             float sy = h * 0.5f - (e.y - cy) * ppu;
             int pw = Math.max(4, Math.round(Math.abs(e.scaleX) * ppu));
             int ph = Math.max(4, Math.round(Math.abs(e.scaleY) * ppu));
+
+            // v4.7.0 — emissive material blooms in 2D so lights read at a glance.
+            if (e.material != null && e.material.equalsIgnoreCase("EMISSIVE")) {
+                Color glowBase = toAwtColor(e.colorHex, 255);
+                for (int ring = 3; ring >= 1; ring--) {
+                    int pad = Math.round(Math.max(pw, ph) * 0.22f * ring);
+                    g2.setColor(new Color(glowBase.getRed(), glowBase.getGreen(), glowBase.getBlue(), 16 + 8 * (3 - ring)));
+                    g2.fillOval(Math.round(sx) - pw / 2 - pad, Math.round(sy) - ph / 2 - pad, pw + pad * 2, ph + pad * 2);
+                }
+            }
 
             AffineTransform old = g2.getTransform();
             g2.translate(sx, sy);

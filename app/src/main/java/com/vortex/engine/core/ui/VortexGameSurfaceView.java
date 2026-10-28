@@ -25,6 +25,12 @@ public class VortexGameSurfaceView extends FrameLayout {
     public final TouchControlsOverlay controlsOverlay;
 
     private SelectionListener selectionListener;
+    // v4.7.0 mobile tile painter: when on, taps paint 1x1 cells into the active tile layer.
+    public String tilePaintColor = null;
+    public String tilePaintLayer = "Ground";
+    public boolean tilePaintSolid = false;
+    public Runnable onTilesChanged;
+    private boolean tilePaintedThisTouch = false;
     private boolean gridSnap = true;
     private boolean draggingEntity = false;
     private float prevTouchX, prevTouchY;
@@ -154,6 +160,11 @@ public class VortexGameSurfaceView extends FrameLayout {
             case MotionEvent.ACTION_DOWN: {
                 prevTouchX = tx;
                 prevTouchY = ty;
+                if (paintTile(tx, ty)) {
+                    tilePaintedThisTouch = true;
+                    return true;
+                }
+                tilePaintedThisTouch = false;
                 Entity hit = renderer.pickEntityAtScreen(tx, ty);
                 if (hit != null) {
                     boolean alreadySelected = hit.id.equals(renderer.getSelectedEntityId());
@@ -169,6 +180,11 @@ public class VortexGameSurfaceView extends FrameLayout {
             case MotionEvent.ACTION_MOVE: {
                 float dx = tx - prevTouchX;
                 float dy = ty - prevTouchY;
+                if (tilePaintColor != null && paintTile(tx, ty)) {
+                    prevTouchX = tx;
+                    prevTouchY = ty;
+                    return true;
+                }
                 if (draggingEntity && renderer.getSelectedEntityId() != null) {
                     renderer.dragSelectedEntityToScreen(tx, ty, gridSnap);
                     GameProject p = renderer.getActiveProject();
@@ -195,6 +211,9 @@ public class VortexGameSurfaceView extends FrameLayout {
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL: {
                 draggingEntity = false;
+                boolean painted = tilePaintedThisTouch;
+                tilePaintedThisTouch = false;
+                if (painted && onTilesChanged != null) onTilesChanged.run();
                 return true;
             }
         }
@@ -218,5 +237,18 @@ public class VortexGameSurfaceView extends FrameLayout {
 
     public void onDestroy() {
         renderer.shutdown();
+    }
+
+    /** Paints the grid cell under a touch. Returns true when tile mode consumed the event. */
+    private boolean paintTile(float tx, float ty) {
+        if (tilePaintColor == null) return false;
+        GameProject p = renderer.getActiveProject();
+        if (p == null || renderer.isPlaying() || !"2D".equalsIgnoreCase(p.dimensionMode)) return false;
+        Vec2 w = renderer.screenToWorld2D(tx, ty);
+        int gx = (int) Math.floor(w.x / com.vortex.engine.core.asset.TileBrush.CELL);
+        int gy = (int) Math.floor(w.y / com.vortex.engine.core.asset.TileBrush.CELL);
+        com.vortex.engine.core.asset.TileBrush.paint(p, tilePaintLayer, gx, gy, tilePaintColor, tilePaintSolid);
+        glView.requestRender();
+        return true;
     }
 }

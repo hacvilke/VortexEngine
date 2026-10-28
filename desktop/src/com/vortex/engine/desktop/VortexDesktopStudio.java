@@ -199,7 +199,7 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio(boolean checkStartupDependencies) {
-        super("Vortex Engine Studio v4.6.0 — Multi-File IDE • Blueprint GUI • Forge AI Chat • Native Java / JS / Lua");
+        super("Vortex Engine Studio v4.7.0 — Multi-File IDE • Tile Maps • Prefabs • Forge AI Chat • Native Java / JS / Lua");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         // Laptop-aware sizing: fit cleanly inside 1280x720 / 1366x768 / 1536x864 / 1440x900 screens!
@@ -625,6 +625,8 @@ public class VortexDesktopStudio extends JFrame {
         items.add(new DesktopUiKit.MenuAction("Open Project…", this::openProjectJson));
         items.add(new DesktopUiKit.MenuAction("Save Project", this::saveProjectJson));
         items.add(new DesktopUiKit.MenuAction("---", null));
+        items.add(new DesktopUiKit.MenuAction("Import Tiled Map (.tmx)…", this::importTiledMap));
+        items.add(new DesktopUiKit.MenuAction("---", null));
         items.add(new DesktopUiKit.MenuAction("Build & Export…", () -> rightTabs.selectTabByKey("BUILD", true)));
         items.add(new DesktopUiKit.MenuAction("---", null));
         items.add(new DesktopUiKit.MenuAction("Exit", () -> System.exit(0)));
@@ -699,6 +701,18 @@ public class VortexDesktopStudio extends JFrame {
             terminalPanel.focusInput();
         }));
         items.add(new DesktopUiKit.MenuAction("---", null));
+        items.add(new DesktopUiKit.MenuAction("Tile Paint Mode", this::toggleTilePaint));
+        items.add(new DesktopUiKit.MenuAction("Tile Layer Name…", this::askTileLayerName));
+        items.add(new DesktopUiKit.MenuAction("Tile Brush: Solid / Decor", () -> {
+            viewport.setTilePaintSolid(!viewport.isTilePaintSolid());
+            globalStatusPill.setStatus(viewport.isTilePaintSolid() ? "Tile brush: SOLID" : "Tile brush: decor",
+                    DesktopUiKit.StatusPill.State.NEUTRAL);
+        }));
+        items.add(new DesktopUiKit.MenuAction("Merge Tile Runs", this::mergeTileRuns));
+        items.add(new DesktopUiKit.MenuAction("---", null));
+        items.add(new DesktopUiKit.MenuAction("Prefab Palette…", this::showPrefabPalette));
+        items.add(new DesktopUiKit.MenuAction("Create Prefab from Selection…", this::createPrefabFromSelection));
+        items.add(new DesktopUiKit.MenuAction("---", null));
         items.add(new DesktopUiKit.MenuAction("Forge AI Chat", () -> rightTabs.selectTabByKey("AI", true)));
         items.add(new DesktopUiKit.MenuAction("LRM Version Control", () -> rightTabs.selectTabByKey("AI", true)));
         items.add(new DesktopUiKit.MenuAction("---", null));
@@ -733,8 +747,8 @@ public class VortexDesktopStudio extends JFrame {
                 "Physics",
                 "2D: JBox2D rigid bodies (CCD bullets)\n3D: substepped impulse solver + terrain\nLayers: collisionLayer / collisionMask")));
         items.add(new DesktopUiKit.MenuAction("---", null));
-        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.6.0", () -> DesktopUiKit.showInfoModal(this,
-                "Vortex Engine Studio v4.6.0",
+        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.7.0", () -> DesktopUiKit.showInfoModal(this,
+                "Vortex Engine Studio v4.7.0",
                 "Free & open-source 2D/3D game engine\nWindows • Linux • Android • Web")));
         return items;
     }
@@ -1161,7 +1175,7 @@ public class VortexDesktopStudio extends JFrame {
         headerBar.add(rightBar, BorderLayout.EAST);
         bottomWrapperPanel.add(headerBar, BorderLayout.NORTH);
 
-        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.6.0 Desktop Studio Ready.");
+        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.7.0 Desktop Studio Ready.");
 
         JScrollPane consoleScroll = DesktopUiKit.createScrollPane(consoleArea);
         bottomDeck.addCard("CONSOLE", consoleScroll, 0);
@@ -3003,6 +3017,126 @@ public class VortexDesktopStudio extends JFrame {
         sceneTree.selectEntity(viewport.getSelectedEntityId());
     }
 
+    // =====================================================================
+    // v4.7.0 — Tile painter + prefab palette
+    // =====================================================================
+
+    private void toggleTilePaint() {
+        boolean on = !viewport.isTilePaintMode();
+        if (on && !"2D".equalsIgnoreCase(project.dimensionMode)) {
+            project.dimensionMode = "2D";
+            project.ensureScriptFilesInitialized();
+        }
+        viewport.setTilePaintMode(on);
+        viewport.setOnSceneChanged(this::refreshHierarchyList);
+        globalStatusPill.setStatus(on ? "Tile paint ON"
+                : "Tile paint off", on ? DesktopUiKit.StatusPill.State.NEUTRAL : DesktopUiKit.StatusPill.State.NEUTRAL);
+        if (on) log("\u25B8 Tile paint: layer '" + viewport.getTilePaintLayer()
+                + "'. LMB paint, RMB erase, palette at the bottom of the viewport.");
+    }
+
+    private void askTileLayerName() {
+        String name = DesktopUiKit.showInputModal(this, "Tile Layer", "Layer name", viewport.getTilePaintLayer());
+        if (name == null || name.trim().isEmpty()) return;
+        viewport.setTilePaintLayer(name.trim());
+        globalStatusPill.setStatus("Tile layer: " + name.trim(), DesktopUiKit.StatusPill.State.NEUTRAL);
+    }
+
+    private void mergeTileRuns() {
+        pushUndo();
+        int saved = com.vortex.engine.core.asset.TileBrush.mergeRuns(project, viewport.getTilePaintLayer());
+        refreshHierarchyList();
+        viewport.repaint();
+        log(saved > 0 ? "\u2713 Merged tile runs — " + saved + " entities saved" : "Nothing to merge on this layer");
+        globalStatusPill.setStatus(saved > 0 ? "\u2713 Merged " + saved + " tiles" : "Nothing to merge",
+                saved > 0 ? DesktopUiKit.StatusPill.State.SUCCESS : DesktopUiKit.StatusPill.State.WARNING);
+    }
+
+    private void showPrefabPalette() {
+        project.ensurePrefabsInitialized();
+        final javax.swing.JDialog dlg = new javax.swing.JDialog(this, "Prefab Palette", true);
+        JPanel root = new JPanel(new BorderLayout(10, 10));
+        root.setBackground(DesktopUiKit.C_PANEL);
+        root.setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
+
+        JLabel title = new JLabel("Prefabs  •  " + project.prefabs.size());
+        title.setFont(DesktopUiKit.FONT_UI_BOLD);
+        title.setForeground(DesktopUiKit.C_WHITE);
+        root.add(title, BorderLayout.NORTH);
+
+        JPanel list = new JPanel();
+        list.setOpaque(false);
+        list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
+        for (final com.vortex.engine.core.model.Prefab pf : new ArrayList<>(project.prefabs)) {
+            JPanel row = new JPanel(new BorderLayout(8, 0));
+            row.setOpaque(false);
+            row.setBorder(BorderFactory.createEmptyBorder(3, 0, 3, 0));
+            row.setMaximumSize(new Dimension(Integer.MAX_VALUE, DesktopUiKit.scaled(30)));
+            JLabel name = new JLabel(pf.name);
+            name.setFont(DesktopUiKit.FONT_UI);
+            name.setForeground(DesktopUiKit.C_WHITE);
+            JLabel meta = new JLabel(pf.category + "  •  " + pf.nodeCount() + (pf.nodeCount() == 1 ? " node" : " nodes"));
+            meta.setFont(DesktopUiKit.FONT_SMALL);
+            meta.setForeground(DesktopUiKit.C_TEXT_MUTED);
+            JPanel left = new JPanel(new BorderLayout(8, 0));
+            left.setOpaque(false);
+            left.add(name, BorderLayout.WEST);
+            left.add(meta, BorderLayout.CENTER);
+            row.add(left, BorderLayout.CENTER);
+            DesktopUiKit.VortexButton add = new DesktopUiKit.VortexButton("Add", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.PLUS);
+            add.addActionListener(ev -> {
+                pushUndo();
+                Entity parent = project.findById(viewport.getSelectedEntityId());
+                Entity created = pf.instantiate(project, parent, 0f, 0f, 0f);
+                refreshHierarchyList();
+                populateInspector();
+                viewport.repaint();
+                log(created != null ? "\u2713 Prefab '" + pf.name + "' added" + (parent != null ? " under " + parent.name : "")
+                        : "\u2715 Could not instantiate '" + pf.name + "'");
+                dlg.dispose();
+            });
+            row.add(add, BorderLayout.EAST);
+            list.add(row);
+        }
+        JScrollPane sp = new JScrollPane(list);
+        sp.setBorder(BorderFactory.createEmptyBorder());
+        sp.getViewport().setBackground(DesktopUiKit.C_PANEL);
+        root.add(sp, BorderLayout.CENTER);
+
+        DesktopUiKit.VortexButton close = new DesktopUiKit.VortexButton("Close", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.CLOSE);
+        close.addActionListener(ev -> dlg.dispose());
+        JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        south.setOpaque(false);
+        south.add(close);
+        root.add(south, BorderLayout.SOUTH);
+        dlg.setContentPane(root);
+        dlg.setSize(DesktopUiKit.scaled(420), DesktopUiKit.scaled(460));
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    private void createPrefabFromSelection() {
+        Entity sel = project.findById(viewport.getSelectedEntityId());
+        if (sel == null) {
+            DesktopUiKit.showInfoModal(this, "Create Prefab", "Select a node in the Hierarchy first.\nThe node and all of its children become the prefab.");
+            return;
+        }
+        String name = DesktopUiKit.showInputModal(this, "Create Prefab", "Prefab name", sel.name + " Prefab");
+        if (name == null || name.trim().isEmpty()) return;
+        String finalName = name.trim();
+        if (project.hasPrefab(finalName)) finalName = finalName + " 2";
+        com.vortex.engine.core.model.Prefab pf = com.vortex.engine.core.model.Prefab.capture(
+                project.entities, sel, finalName, "Custom");
+        project.prefabs.add(pf);
+        log("\u2713 Prefab '" + finalName + "' saved (" + pf.nodeCount() + " nodes)");
+        globalStatusPill.setStatus("\u2713 Prefab saved", DesktopUiKit.StatusPill.State.SUCCESS);
+    }
+
+    /** v4.7.0 procedural material presets (shading response only — no textures needed). */
+    static final String[] MATERIAL_PRESETS = {"MATTE", "METAL", "GLASS", "EMISSIVE", "UNLIT"};
+    /** v4.7.0 procedural surface patterns drawn from world position (no texture files). */
+    static final String[] TEXTURE_PATTERNS = {"NONE", "CHECKER", "STRIPES", "GRID", "BRICK", "NOISE"};
+
     private void populateInspector() {
         inspectorForm.removeAll();
 
@@ -3165,6 +3299,21 @@ public class VortexDesktopStudio extends JFrame {
         fpsNum.setAlignmentX(Component.LEFT_ALIGNMENT);
         fpsNum.setOnChange(v -> { e.animFps = (float) v; viewport.repaint(); });
         rBody.add(fpsNum);
+        rBody.add(Box.createVerticalStrut(6));
+        DesktopUiKit.VortexDropdown matBox = addDropdownTo(rBody, "Material Preset", MATERIAL_PRESETS,
+                e.material == null ? "MATTE" : e.material);
+        matBox.setOnSelect((idx, val) -> {
+            e.material = val;
+            // EMISSIVE preset implies the emissive shading path, keep them in sync.
+            if ("EMISSIVE".equals(val)) e.emissive = true;
+            viewport.repaint();
+        });
+
+        rBody.add(Box.createVerticalStrut(6));
+        DesktopUiKit.VortexDropdown texBox = addDropdownTo(rBody, "Surface Pattern", TEXTURE_PATTERNS,
+                e.texture == null || e.texture.isEmpty() ? "NONE" : e.texture);
+        texBox.setOnSelect((idx, val) -> { e.texture = val; viewport.repaint(); });
+
         rBody.add(Box.createVerticalStrut(5));
         DesktopUiKit.VortexToggle chkCb = addToggleTo(rBody, "Checkerboard Surface", e.checkerTexture);
         chkCb.setOnChange(() -> { e.checkerTexture = chkCb.isSelected(); viewport.repaint(); });
@@ -3605,6 +3754,38 @@ public class VortexDesktopStudio extends JFrame {
         }
     }
 
+    /**
+     * v4.7.0 — Tiled import. Builds the map straight into the scene tree as a TileWorld node
+     * (merged tile runs + solid colliders + spawn points), sampling the tileset PNG for colours.
+     */
+    private void importTiledMap() {
+        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+        chooser.setDialogTitle("Import Tiled Map");
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Tiled map (*.tmx)", "tmx"));
+        if (chooser.showOpenDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) return;
+        final java.io.File f = chooser.getSelectedFile();
+        pushUndo();
+        try {
+            DesktopTmxImporter.ImportOutcome out = DesktopTmxImporter.importInto(project, f);
+            if (!"2D".equalsIgnoreCase(project.dimensionMode)) {
+                project.dimensionMode = "2D";
+                project.ensureScriptFilesInitialized();
+            }
+            refreshHierarchyList();
+            populateInspector();
+            viewport.invalidateAssetCaches();
+            viewport.repaint();
+            log("\u2713 " + out.result.summary);
+            if (!out.warning.isEmpty()) log("\u26a0 " + out.warning);
+            globalStatusPill.setStatus("\u2713 Imported " + f.getName(), DesktopUiKit.StatusPill.State.SUCCESS);
+        } catch (Exception ex) {
+            log("\u2715 Tiled import failed: " + ex.getMessage());
+            DesktopUiKit.showInfoModal(this, "Tiled import failed",
+                    "Could not read " + f.getName() + ":\n" + ex.getMessage()
+                    + "\n\nSupported: orthogonal maps, embedded or external tilesets, CSV or base64 (raw/zlib/gzip) layers.");
+        }
+    }
+
     private void saveProjectJson() {
         syncCode();
         if (currentProjectFile == null) {
@@ -3841,7 +4022,7 @@ public class VortexDesktopStudio extends JFrame {
     // Headless Verification Suite (Java VM + ES6 JS + Lua + LRM + Forge + UI)
     // =========================================================================
     private static void runHeadlessSelfTests() throws Exception {
-        System.out.println("=== Vortex Engine v4.6.0 Headless Verification Suite ===");
+        System.out.println("=== Vortex Engine v4.7.0 Headless Verification Suite ===");
 
         // 1) Zero-Blue Monochrome Palette + Laptop UI Scale Verification
         Color[] uiColors = {
@@ -4173,6 +4354,65 @@ public class VortexDesktopStudio extends JFrame {
             g2.dispose();
             System.out.println("  [PASS] Unreal-style Lighting Rig (sun yaw/elev/power, ambient fill, contact shadows, JSON round-trip) Verified!");
         }
+
+            // 7.10) Tiled import + in-editor tile brush + prefabs
+            {
+                String tmx = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                        + "<map version=\"1.10\" orientation=\"orthogonal\" width=\"4\" height=\"3\" tilewidth=\"16\" tileheight=\"16\">"
+                        + "<tileset firstgid=\"1\" name=\"t\" tilewidth=\"16\" tileheight=\"16\" tilecount=\"16\" columns=\"4\">"
+                        + "<image source=\"missing.png\" width=\"64\" height=\"64\"/></tileset>"
+                        + "<layer id=\"1\" name=\"Ground\" width=\"4\" height=\"3\"><data encoding=\"csv\">"
+                        + "1,1,1,1,1,1,1,1,1,1,1,1</data></layer>"
+                        + "<layer id=\"2\" name=\"Collision\" width=\"4\" height=\"3\"><data encoding=\"csv\">"
+                        + "2,2,2,2,0,0,0,0,0,0,0,0</data></layer>"
+                        + "<objectgroup id=\"3\" name=\"Objects\">"
+                        + "<object id=\"1\" name=\"spawn\" x=\"16\" y=\"16\" width=\"16\" height=\"16\"/>"
+                        + "<object id=\"2\" name=\"wall\" x=\"0\" y=\"32\" width=\"16\" height=\"16\">"
+                        + "<properties><property name=\"solid\" value=\"true\"/></properties></object>"
+                        + "</objectgroup></map>";
+                GameProject tiledProj = new GameProject();
+                com.vortex.engine.core.asset.TmxMap map = com.vortex.engine.core.asset.TmxMap.parseText(tmx);
+                com.vortex.engine.core.asset.TileWorldBuilder.Result built =
+                        com.vortex.engine.core.asset.TileWorldBuilder.build(tiledProj, map, null, "selftest");
+                if (map.layers.size() != 2 || built.mergedFromTiles != 16 || built.spawns != 1
+                        || built.solidObjects != 1 || tiledProj.findByName("Hero") == null) {
+                    throw new RuntimeException("Tiled import produced unexpected scene (" + built.summary + ")");
+                }
+                // Tile brush: paint, dedupe, merge runs, erase.
+                GameProject brushProj = new GameProject();
+                for (int gx = 0; gx < 5; gx++) {
+                    com.vortex.engine.core.asset.TileBrush.paint(brushProj, "Ground", gx, 0, "#6E7B5B", false);
+                }
+                boolean noDup = com.vortex.engine.core.asset.TileBrush.paint(brushProj, "Ground", 0, 0, "#6E7B5B", false) == null;
+                int before = brushProj.entities.size();
+                int savedRuns = com.vortex.engine.core.asset.TileBrush.mergeRuns(brushProj, "Ground");
+                if (!noDup || brushProj.entities.size() != before - savedRuns || savedRuns < 4) {
+                    throw new RuntimeException("tile brush merge did not compact runs (saved=" + savedRuns + ")");
+                }
+                if (!com.vortex.engine.core.asset.TileBrush.erase(brushProj, "Ground", 2, 0)) {
+                    throw new RuntimeException("tile brush erase failed");
+                }
+                // Prefabs: capture a subtree, instantiate elsewhere, survive save/load.
+                Entity pRoot = Entity.create2D("Turret", "prop", "CUBE", 1f, 1f, 1f, 1f, "#C9A227", "STATIC");
+                Entity pChild = Entity.create2D("Barrel", "prop", "CUBE", 1f, 1f, 1f, 1f, "#DDD8CE", "NONE");
+                brushProj.entities.add(pRoot);
+                brushProj.entities.add(pChild);
+                com.vortex.engine.core.model.SceneHierarchy.reparent(brushProj.entities, pChild, pRoot);
+                com.vortex.engine.core.model.Prefab prefab = com.vortex.engine.core.model.Prefab.capture(
+                        brushProj.entities, pRoot, "Turret", "Custom");
+                brushProj.prefabs.add(prefab);
+                int n0 = brushProj.entities.size();
+                Entity inst = prefab.instantiate(brushProj, null, 10f, 0f, 0f);
+                GameProject brushReloaded = GameProject.fromJsonString(brushProj.toJsonString());
+                if (prefab.nodeCount() != 2 || inst == null || brushProj.entities.size() != n0 + 2
+                        || com.vortex.engine.core.model.SceneHierarchy.childrenOf(brushProj.entities, inst).size() != 1
+                        || brushReloaded.findPrefab("Turret") == null
+                        || brushReloaded.findPrefab("Turret").nodeCount() != 2) {
+                    throw new RuntimeException("prefab capture/instantiate/save round-trip failed");
+                }
+                System.out.println("  [PASS] Tiled .tmx import (" + built.summary
+                        + "), in-editor Tile Brush (merge/erase) and Scene-Tree Prefabs Verified!");
+            }
         }
 
         // 8) Standalone Exporters (.exe & Termux .zip)
@@ -4189,6 +4429,6 @@ public class VortexDesktopStudio extends JFrame {
         tmpExe.delete();
         tmpZip.delete();
 
-        System.out.println("=== ALL VORTEX v4.6.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
+        System.out.println("=== ALL VORTEX v4.7.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
     }
 }

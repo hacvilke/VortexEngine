@@ -114,6 +114,7 @@ echo "=== [2/5] Compiling Pure-Java Core Engine + Desktop Studio IDE ==="
 # Note: Compile ONLY pure-Java core packages + ChiptuneGenerator + desktop/*
 # Zero Android SDK classes required!
 find app/src/main/java/com/vortex/engine/core/ai \
+     app/src/main/java/com/vortex/engine/core/asset \
      app/src/main/java/com/vortex/engine/core/export \
      app/src/main/java/com/vortex/engine/core/flow \
      app/src/main/java/com/vortex/engine/core/forge \
@@ -166,7 +167,7 @@ Manifest-Version: 1.0
 Main-Class: com.vortex.engine.desktop.VortexDesktopStudio
 EOF
 
-FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.6.0.jar"
+FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.7.0.jar"
 "$JAR" cfm "$FAT_JAR" "$BUILD_DESK/manifest.mf" -C "$BUILD_DESK/fatjar" .
 
 echo "=== [4/5] Building Self-Contained Windows x64 .EXE & Linux x86_64 Binary ==="

@@ -408,7 +408,9 @@ public class EditorActivity extends Activity {
             addToolBtn(row, "+ CRATE (BOX2D)", this::spawnBox2DCrate);
             addToolBtn(row, "+ COIN", () -> spawnPrimitive("SPRITE_COIN", "#FFD740"));
             addToolBtn(row, "+ SLIME", () -> spawnPrimitive("SPRITE_SLIME", "#FF5252"));
+            addToolBtn(row, "\uD83E\uDDF1 TILES", this::toggleMobileTileBrush);
         }
+        addToolBtn(row, "\uD83D\uDCE6 PREFABS", this::showMobilePrefabPicker);
 
         boolean snapOn = viewportSurface == null || viewportSurface.isGridSnap();
         TextView snapBtn = VortexMobileUi.makeButton(
@@ -622,6 +624,117 @@ public class EditorActivity extends Activity {
         sb.append(depth > 0 ? "\u2514\u2500 " : "\u25aa ").append(e.name);
         sb.append("  [").append(e.primitive).append("]");
         return sb.toString();
+    }
+
+    // =====================================================================
+    // v4.7.0 — mobile tile brush + prefab palette
+    // =====================================================================
+
+    private void toggleMobileTileBrush() {
+        if (viewportSurface.tilePaintColor != null) {
+            viewportSurface.tilePaintColor = null;
+            rebuildSceneToolbarButtons();
+            toast("Tile brush off");
+            return;
+        }
+        showMobileTileBrushDialog();
+    }
+
+    private void showMobileTileBrushDialog() {
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(14), dp(6), dp(14), dp(6));
+
+        TextView hint = new TextView(this);
+        hint.setText("Tap or drag on the canvas to paint 1x1 tiles into the layer.");
+        hint.setTextColor(VortexMobileUi.C_TEXT_DIM);
+        hint.setTextSize(12f);
+        body.addView(hint);
+
+        final android.widget.EditText layerField = new android.widget.EditText(this);
+        layerField.setText(viewportSurface.tilePaintLayer);
+        layerField.setTextColor(VortexMobileUi.C_TEXT);
+        layerField.setTextSize(14f);
+        layerField.setSingleLine(true);
+        layerField.setHint("Layer name");
+        body.addView(layerField, rightMarginLp(6));
+
+        LinearLayout palette = new LinearLayout(this);
+        palette.setOrientation(LinearLayout.VERTICAL);
+        String[] colors = DesktopLikePalette.TILE_COLORS;
+        for (int r = 0; r < colors.length; r += 6) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (int c = r; c < Math.min(colors.length, r + 6); c++) {
+                final String hex = colors[c];
+                View sw = new View(this);
+                GradientDrawable bg = new GradientDrawable();
+                bg.setColor(Color.parseColor(hex));
+                bg.setCornerRadius(dp(6));
+                bg.setStroke(dp(1), VortexMobileUi.C_BORDER);
+                sw.setBackground(bg);
+                sw.setOnClickListener(v -> {
+                    viewportSurface.tilePaintColor = hex;
+                    viewportSurface.tilePaintLayer = layerField.getText().toString().trim().isEmpty()
+                            ? "Ground" : layerField.getText().toString().trim();
+                    viewportSurface.onTilesChanged = () -> {
+                        populateInspector();
+                        rebuildSceneToolbarButtons();
+                    };
+                    rebuildSceneToolbarButtons();
+                    toast("Painting " + hex + " on " + viewportSurface.tilePaintLayer);
+                });
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(38), 1f);
+                lp.setMargins(dp(3), dp(4), dp(3), dp(4));
+                row.addView(sw, lp);
+            }
+            palette.addView(row);
+        }
+        body.addView(palette);
+
+        final android.widget.CheckBox solid = new android.widget.CheckBox(this);
+        solid.setText("Solid collider (walls / platforms)");
+        solid.setTextColor(VortexMobileUi.C_TEXT);
+        solid.setChecked(viewportSurface.tilePaintSolid);
+        solid.setOnCheckedChangeListener((b, checked) -> viewportSurface.tilePaintSolid = checked);
+        body.addView(solid);
+
+        VortexMobileUi.showModal(this, "Tile Brush", body, "Done", () -> { },
+                "Merge Runs", () -> {
+                    int saved = com.vortex.engine.core.asset.TileBrush.mergeRuns(project,
+                            viewportSurface.tilePaintLayer);
+                    populateInspector();
+                    toast(saved > 0 ? "Merged " + saved + " tiles" : "Nothing to merge");
+                }, "Close");
+    }
+
+    private void showMobilePrefabPicker() {
+        project.ensurePrefabsInitialized();
+        final java.util.List<com.vortex.engine.core.model.Prefab> list =
+                new java.util.ArrayList<>(project.prefabs);
+        String[] names = new String[list.size()];
+        for (int i = 0; i < list.size(); i++) {
+            com.vortex.engine.core.model.Prefab pf = list.get(i);
+            names[i] = pf.name + "  \u2022  " + pf.category + "  \u2022  " + pf.nodeCount() + " nodes";
+        }
+        VortexMobileUi.showPickerModal(this, "Prefabs (" + names.length + ")", names, 0, (which, val) -> {
+            if (which < 0 || which >= list.size()) return;
+            com.vortex.engine.core.model.Prefab pf = list.get(which);
+            Entity parent = project.findById(viewportSurface.renderer.getSelectedEntityId());
+            Entity created = pf.instantiate(project, parent, 0f, 0f, 0f);
+            if (created != null) {
+                viewportSurface.renderer.setSelectedEntityId(created.id);
+                populateInspector();
+                rebuildSceneToolbarButtons();
+                toast("Added '" + pf.name + "'");
+            } else {
+                toast("Could not add prefab");
+            }
+        });
+    }
+
+    private void toast(String msg) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
     }
 
     private void showEntityPickerDialog() {
@@ -2454,5 +2567,13 @@ public class EditorActivity extends Activity {
         sfxPreview.shutdown();
         if (viewportSurface != null) viewportSurface.onDestroy();
         super.onDestroy();
+    }
+
+    /** Zero-blue tile palette shared with the desktop editor. */
+    private static final class DesktopLikePalette {
+        static final String[] TILE_COLORS = {
+                "#6E7B5B", "#4F5A44", "#8C7A5B", "#3F4650", "#A88D6A", "#5B6B7A",
+                "#2E3138", "#C9A227", "#B04A4A", "#DDD8CE", "#7A6B8C", "#46695C"
+        };
     }
 }

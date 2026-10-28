@@ -88,9 +88,12 @@ public class GameProject {
     public final Map<String, String> customObjMeshes = new LinkedHashMap<>();
     // 16x16 pixel-art sprites encoded as 256 comma-separated #RRGGBB or '.' transparent tokens
     public final Map<String, String> customSprites = new LinkedHashMap<>();
+    /** v4.7.0 — reusable scene-tree prefabs (custom + seeded built-ins). */
+    public final List<Prefab> prefabs = new ArrayList<>();
 
     public GameProject() {
         this.id = UUID.randomUUID().toString().substring(0, 8);
+        ensurePrefabsInitialized();
     }
 
     public String getScriptExtension() {
@@ -321,6 +324,14 @@ public class GameProject {
                 sprites.put(entry.getKey(), entry.getValue());
             }
             o.put("customSprites", sprites);
+
+            JSONArray prefabArr = new JSONArray();
+            for (Prefab pf : prefabs) {
+                try {
+                    prefabArr.put(pf.toJson());
+                } catch (Exception ignored) { }
+            }
+            o.put("prefabs", prefabArr);
             return o.toString(2);
         } catch (JSONException ex) {
             return "{}";
@@ -419,6 +430,34 @@ public class GameProject {
                 p.customSprites.put(k, sprites.optString(k, ""));
             }
         }
+
+        JSONArray prefabArr = o.optJSONArray("prefabs");
+        if (prefabArr != null) {
+            p.prefabs.clear();   // the constructor seeds built-ins; the file is authoritative
+            for (int i = 0; i < prefabArr.length(); i++) {
+                JSONObject po = prefabArr.optJSONObject(i);
+                if (po != null) p.prefabs.add(Prefab.fromJson(po));
+            }
+        }
+        p.ensurePrefabsInitialized();
         return p;
+    }
+
+    /** Seeds the built-in prefab palette once; custom prefabs are preserved. */
+    public void ensurePrefabsInitialized() {
+        if (!prefabs.isEmpty()) return;
+        prefabs.addAll(Prefab.defaults());
+    }
+
+    public Prefab findPrefab(String name) {
+        for (Prefab p : prefabs) {
+            if (p.name != null && p.name.equalsIgnoreCase(name)) return p;
+        }
+        return null;
+    }
+
+    /** True when a prefab with this name already exists (case-insensitive). */
+    public boolean hasPrefab(String name) {
+        return findPrefab(name) != null;
     }
 }
