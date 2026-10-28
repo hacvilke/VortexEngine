@@ -137,10 +137,14 @@ public class TermuxBridge {
         scriptsDir.mkdirs();
         writeText(new File(assetsDir, "project.vortex.json"), project.toJsonString());
 
-        String ext = "JAVA".equalsIgnoreCase(project.scriptLanguage) ? "main.java"
-                : "JS".equalsIgnoreCase(project.scriptLanguage) ? "main.js"
-                : ("LUA".equalsIgnoreCase(project.scriptLanguage) ? "main.lua" : "main.vxs");
-        writeText(new File(scriptsDir, ext), project.scriptCode == null ? "" : project.scriptCode);
+        project.ensureScriptFilesInitialized();
+        for (Map.Entry<String, String> sf : project.scriptFiles.entrySet()) {
+            String rel = GameProject.normalizeScriptPath(sf.getKey());
+            if (rel.startsWith("scripts/")) rel = rel.substring("scripts/".length());
+            File destScript = new File(scriptsDir, rel);
+            if (destScript.getParentFile() != null) destScript.getParentFile().mkdirs();
+            writeText(destScript, sf.getValue() == null ? "" : sf.getValue());
+        }
 
         if (!project.customObjMeshes.isEmpty()) {
             File meshesDir = new File(assetsDir, "meshes");

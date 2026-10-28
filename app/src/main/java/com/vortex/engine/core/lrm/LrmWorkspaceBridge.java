@@ -473,13 +473,21 @@ public class LrmWorkspaceBridge {
             writeUtf8(new File(repoDir, "scene/entities.json"), ents.toString(2));
         } catch (JSONException ignored) {}
 
-        String ext = "JAVA".equalsIgnoreCase(p.scriptLanguage) ? "java"
-                : "JS".equalsIgnoreCase(p.scriptLanguage) ? "js"
-                : ("LUA".equalsIgnoreCase(p.scriptLanguage) ? "lua" : "vxs");
-        writeUtf8(new File(repoDir, "scripts/main." + ext), p.scriptCode == null ? "" : p.scriptCode);
+        p.ensureScriptFilesInitialized();
+        for (Map.Entry<String, String> sf : p.scriptFiles.entrySet()) {
+            String rel = GameProject.normalizeScriptPath(sf.getKey());
+            if (!rel.startsWith("scripts/")) rel = "scripts/" + rel;
+            writeUtf8(new File(repoDir, rel), sf.getValue() == null ? "" : sf.getValue());
+        }
 
         try {
             writeUtf8(new File(repoDir, "flow/rules.json"), VortexFlowCompiler.toJsonArray(p.flowRules).toString(2));
+            if (!p.blueprintNodes.isEmpty() || !p.blueprintLinks.isEmpty()) {
+                JSONObject bp = new JSONObject();
+                bp.put("nodes", com.vortex.engine.core.flow.VortexBlueprintGraph.nodesToJson(p.blueprintNodes));
+                bp.put("links", com.vortex.engine.core.flow.VortexBlueprintGraph.linksToJson(p.blueprintLinks));
+                writeUtf8(new File(repoDir, "flow/blueprint.json"), bp.toString(2));
+            }
         } catch (JSONException ignored) {}
 
         for (Map.Entry<String, String> sp : p.customSprites.entrySet()) {
@@ -549,26 +557,22 @@ public class LrmWorkspaceBridge {
             }
         }
 
-        String ext = "JAVA".equalsIgnoreCase(p.scriptLanguage) ? "java"
-                : "JS".equalsIgnoreCase(p.scriptLanguage) ? "js"
-                : ("LUA".equalsIgnoreCase(p.scriptLanguage) ? "lua" : "vxs");
-        File primaryScript = new File(repoDir, "scripts/main." + ext);
-        if (primaryScript.exists()) {
-            p.scriptCode = readUtf8(primaryScript);
-        } else {
-            for (String cand : new String[]{"java", "js", "lua", "vxs"}) {
-                File cf = new File(repoDir, "scripts/main." + cand);
-                if (cf.exists()) {
-                    p.scriptLanguage = cand.toUpperCase(Locale.US);
-                    p.scriptCode = readUtf8(cf);
-                    break;
-                }
-            }
+        File scriptsRoot = new File(repoDir, "scripts");
+        if (scriptsRoot.exists() && scriptsRoot.isDirectory()) {
+            collectScriptFilesRecursive(scriptsRoot, "scripts", p);
         }
+        p.ensureScriptFilesInitialized();
+        p.scriptCode = p.getActiveScriptContent();
 
         File flowFile = new File(repoDir, "flow/rules.json");
         if (flowFile.exists()) {
             p.flowRules.addAll(VortexFlowCompiler.fromJsonArray(new JSONArray(readUtf8(flowFile))));
+        }
+        File bpFile = new File(repoDir, "flow/blueprint.json");
+        if (bpFile.exists()) {
+            JSONObject bpo = new JSONObject(readUtf8(bpFile));
+            p.blueprintNodes.addAll(com.vortex.engine.core.flow.VortexBlueprintGraph.nodesFromJson(bpo.optJSONArray("nodes")));
+            p.blueprintLinks.addAll(com.vortex.engine.core.flow.VortexBlueprintGraph.linksFromJson(bpo.optJSONArray("links")));
         }
 
         File spDir = new File(repoDir, "assets/sprites");
@@ -774,6 +778,30 @@ public class LrmWorkspaceBridge {
         if (f.getParentFile() != null) f.getParentFile().mkdirs();
         try (FileOutputStream fos = new FileOutputStream(f)) {
             fos.write((content == null ? "" : content).getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private static void collectScriptFilesRecursive(File dir, String relPrefix, GameProject p) throws Exception {
+        File[] list = dir.listFiles();
+        if (list == null) return;
+        java.util.Arrays.sort(list, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        for (File f : list) {
+            if (f.isDirectory()) {
+                collectScriptFilesRecursive(f, relPrefix + "/" + f.getName(), p);
+            } else {
+                String nm = f.getName().toLowerCase(Locale.US);
+                if (nm.endsWith(".js") || nm.endsWith(".java") || nm.endsWith(".lua") || nm.endsWith(".vxs")) {
+                    String rel = relPrefix + "/" + f.getName();
+                    p.scriptFiles.put(rel, readUtf8(f));
+                    if (nm.startsWith("main.")) {
+                        p.activeScriptFile = rel;
+                        if (nm.endsWith(".java")) p.scriptLanguage = "JAVA";
+                        else if (nm.endsWith(".js")) p.scriptLanguage = "JS";
+                        else if (nm.endsWith(".lua")) p.scriptLanguage = "LUA";
+                        else p.scriptLanguage = "VXS";
+                    }
+                }
+            }
         }
     }
 

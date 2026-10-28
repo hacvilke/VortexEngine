@@ -150,7 +150,8 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         });
 
         if (!startPlaying) {
-            audioEngine.stopMusicLoop();
+            audioEngine.stopAll();
+            scriptEngine.dispose();
         }
 
         if (project != null) {
@@ -165,7 +166,7 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
                 playCamZ = target.z + project.cameraDistance;
             }
             if (startPlaying) {
-                scriptEngine.compileAndInit(project.scriptCode);
+                scriptEngine.compileProject(project);
             }
         }
     }

@@ -138,7 +138,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             L"Vortex Engine Studio requires Java 11+ (64-bit) to run on Windows.\n\n"
             L"Tip: You can either install Eclipse Temurin JRE/JDK OR place a portable 'jre' folder next to this .exe.\n\n"
             L"Would you like to open https://adoptium.net to download Java now?",
-            L"Vortex Engine Studio v4.2.0 — Java Runtime Needed",
+            L"Vortex Engine Studio v4.3.0 — Java Runtime Needed",
             MB_ICONINFORMATION | MB_YESNO
         );
         if (resp == IDYES) {

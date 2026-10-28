@@ -35,6 +35,10 @@ public class VortexFlowCompiler {
 
     public static final String[] ACTION_TYPES = {
             "SET_BANNER",
+            "SHOW_DIALOG",
+            "HIDE_DIALOG",
+            "SET_LABEL",
+            "SET_PROGRESS_BAR",
             "PLAY_MUSIC",
             "MOVE_2D_PLATFORMER",
             "MOVE_2D_TOPDOWN",
@@ -52,6 +56,10 @@ public class VortexFlowCompiler {
 
     public static final String[] ACTION_LABELS = {
             "📢 Show HUD Banner Text",
+            "💬 GUI: Show Dialog Box (Speaker | Message)",
+            "✖ GUI: Hide Dialog Box",
+            "🏷 GUI: Set Screen Text Label",
+            "📊 GUI: Set Progress / HP Bar",
             "🎵 Start Chiptune Music Loop",
             "🏃 Move Player Horizontally (2D Platformer)",
             "🧭 Move Player 4-Way (2D Top-Down / Maze)",
@@ -223,6 +231,14 @@ public class VortexFlowCompiler {
         switch (r.actionType) {
             case "SET_BANNER":
                 return "  vortex.setBanner('" + ext + "');\n";
+            case "SHOW_DIALOG":
+                return "  vortex.showDialog('GUIDE', '" + ext + "', " + (v <= 0 ? 4.0f : v) + ");\n";
+            case "HIDE_DIALOG":
+                return "  vortex.hideDialog();\n";
+            case "SET_LABEL":
+                return "  vortex.setLabel('flow_lbl', '" + ext + "', 50, " + (v <= 0 ? 15f : v) + ", 15, '#FFFFFF');\n";
+            case "SET_PROGRESS_BAR":
+                return "  vortex.setProgressBar('flow_bar', '" + ext + "', " + (v <= 0 ? 100f : v) + ", 100, 50, 10, '#FFFFFF');\n";
             case "PLAY_MUSIC":
                 return "  vortex.playMusic('" + (r.extra.isEmpty() ? "CYBERPUNK" : esc(r.extra)) + "');\n";
             case "MOVE_2D_PLATFORMER":
@@ -331,6 +347,14 @@ public class VortexFlowCompiler {
         switch (r.actionType) {
             case "SET_BANNER":
                 return "    vortex.setBanner(\"" + ext + "\");\n";
+            case "SHOW_DIALOG":
+                return "    vortex.showDialog(\"GUIDE\", \"" + ext + "\", " + (v <= 0 ? 4.0f : v) + ");\n";
+            case "HIDE_DIALOG":
+                return "    vortex.hideDialog();\n";
+            case "SET_LABEL":
+                return "    vortex.setLabel(\"flow_lbl\", \"" + ext + "\", 50, " + (v <= 0 ? 15f : v) + ", 15, \"#FFFFFF\");\n";
+            case "SET_PROGRESS_BAR":
+                return "    vortex.setProgressBar(\"flow_bar\", \"" + ext + "\", " + (v <= 0 ? 100f : v) + ", 100, 50, 10, \"#FFFFFF\");\n";
             case "PLAY_MUSIC":
                 return "    vortex.playMusic(\"" + (r.extra.isEmpty() ? "CYBERPUNK" : esc(r.extra)) + "\");\n";
             case "MOVE_2D_PLATFORMER":
@@ -439,6 +463,14 @@ public class VortexFlowCompiler {
         switch (r.actionType) {
             case "SET_BANNER":
                 return "    vortex.setBanner('" + ext + "')\n";
+            case "SHOW_DIALOG":
+                return "    vortex.showDialog('GUIDE', '" + ext + "', " + (v <= 0 ? 4.0f : v) + ")\n";
+            case "HIDE_DIALOG":
+                return "    vortex.hideDialog()\n";
+            case "SET_LABEL":
+                return "    vortex.setLabel('flow_lbl', '" + ext + "', 50, " + (v <= 0 ? 15f : v) + ", 15, '#FFFFFF')\n";
+            case "SET_PROGRESS_BAR":
+                return "    vortex.setProgressBar('flow_bar', '" + ext + "', " + (v <= 0 ? 100f : v) + ", 100, 50, 10, '#FFFFFF')\n";
             case "PLAY_MUSIC":
                 return "    vortex.playMusic('" + (r.extra.isEmpty() ? "CYBERPUNK" : esc(r.extra)) + "')\n";
             case "MOVE_2D_PLATFORMER":

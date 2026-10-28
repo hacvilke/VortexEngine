@@ -46,7 +46,7 @@ public class StandaloneGameActivity extends Activity {
         applyOrientation(masterProject.orientation);
 
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.parseColor("#0B0F17"));
+        root.setBackgroundColor(Color.parseColor("#09090B"));
 
         gameSurface = new VortexGameSurfaceView(this);
         gameSurface.renderer.setTelemetryListener(new VortexGLRenderer.TelemetryListener() {
@@ -70,9 +70,9 @@ public class StandaloneGameActivity extends Activity {
         restartBtn.setTextSize(12f);
         restartBtn.setPadding(28, 14, 28, 14);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.argb(150, 20, 28, 44));
+        bg.setColor(Color.argb(190, 18, 18, 22));
         bg.setCornerRadius(24f);
-        bg.setStroke(2, Color.argb(180, 0, 229, 255));
+        bg.setStroke(2, Color.argb(210, 255, 255, 255));
         restartBtn.setBackground(bg);
         restartBtn.setOnClickListener(v -> restartGame());
 
@@ -102,15 +102,20 @@ public class StandaloneGameActivity extends Activity {
             }
             String assetJson = readAssetText("project.vortex.json");
             GameProject p = GameProject.fromJsonString(assetJson);
-
-            String overrideLua = readAssetTextOptional("scripts/main.lua");
-            if (overrideLua != null && !overrideLua.trim().isEmpty()) {
-                p.scriptLanguage = "LUA";
-                p.scriptCode = overrideLua;
-            } else {
-                String overrideVxs = readAssetTextOptional("scripts/main.vxs");
-                if (overrideVxs != null && !overrideVxs.trim().isEmpty()) {
-                    p.scriptCode = overrideVxs;
+            p.ensureScriptFilesInitialized();
+            if (p.scriptFiles.size() <= 1) {
+                for (String[] pair : new String[][]{
+                        {"JAVA", "scripts/main.java"},
+                        {"JS", "scripts/main.js"},
+                        {"LUA", "scripts/main.lua"},
+                        {"VXS", "scripts/main.vxs"}}) {
+                    String ov = readAssetTextOptional(pair[1]);
+                    if (ov != null && !ov.trim().isEmpty()) {
+                        p.scriptLanguage = pair[0];
+                        p.scriptCode = ov;
+                        p.putScriptFile(pair[1], ov);
+                        break;
+                    }
                 }
             }
             return p;
@@ -167,13 +172,19 @@ public class StandaloneGameActivity extends Activity {
 
     @Override
     protected void onPause() {
-        if (gameSurface != null) gameSurface.onPause();
+        if (gameSurface != null) {
+            gameSurface.renderer.audioEngine.stopAll();
+            gameSurface.onPause();
+        }
         super.onPause();
     }
 
     @Override
     protected void onDestroy() {
-        if (gameSurface != null) gameSurface.onDestroy();
+        if (gameSurface != null) {
+            gameSurface.renderer.audioEngine.shutdown();
+            gameSurface.onDestroy();
+        }
         super.onDestroy();
     }
 }

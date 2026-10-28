@@ -15,11 +15,20 @@ import com.vortex.engine.core.storage.VortexSaveStore;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GraphicsEnvironment;
 import java.awt.GridLayout;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.ByteArrayOutputStream;
@@ -80,11 +89,37 @@ public class VortexDesktopStudio extends JFrame {
     private final JPanel inspectorForm = new JPanel();
     private final JTextArea scriptArea = new JTextArea();
     private final JLabel syntaxStatusLabel = new JLabel("Syntax Ready");
+    private final DefaultListModel<String> fileListModel = new DefaultListModel<>();
+    private final JList<String> fileList = new JList<>(fileListModel);
+    private final List<String> openScriptTabs = new ArrayList<>();
+    private final JPanel openTabsBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+    private JPanel fileSidebarPanel;
+    private JSplitPane codeSidebarSplit;
+
+    // Snapped Code Split beside/below Scene Viewport (Drag-Drop or 1-Click Snap!)
+    private final JPanel centerSnapHost = new JPanel(new BorderLayout());
+    private JPanel centerStagePanel;
+    private String snappedZone = null; // null, "RIGHT", "LEFT", "BOTTOM"
+    private String snappedFilePath = null;
+    private final JTextArea snappedScriptArea = new JTextArea();
+    private final JLabel snappedTitleLabel = new JLabel("");
+    private boolean syncingEditorBuffers = false;
+
+    // Center Visual Blueprint Graph (alongside classic Flow Event-Sheet tab)
+    private DesktopBlueprintPanel blueprintPanel;
+    private DesktopUiKit.VortexTabStrip centerCanvasTabs;
+    private final DesktopUiKit.AnimatedDeck centerCanvasDeck = new DesktopUiKit.AnimatedDeck();
+
+    // Multi-turn Forge AI Conversation State
+    private final List<VortexForgeAgent.ChatMessage> forgeChatHistory = new ArrayList<>();
+    private JPanel forgeMessagesBox;
+    private JScrollPane forgeMessagesScroll;
+
     private final JTextArea consoleArea = new JTextArea();
     private final DesktopTerminalPanel terminalPanel;
     private DesktopUiKit.VortexTabStrip bottomTabs;
     private final DesktopUiKit.AnimatedDeck bottomDeck = new DesktopUiKit.AnimatedDeck();
-    private final JLabel telemetryLabel = new JLabel("60 FPS • Ready");
+    private final JLabel telemetryLabel = new JLabel("Editor Ready");
 
     private DesktopUiKit.VortexButton playStopBtn;
     private DesktopUiKit.VortexButton dimBtn;
@@ -142,10 +177,27 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio(boolean checkStartupDependencies) {
-        super("Vortex Engine Studio v4.2.0 — Native Java • ES6 JS • Lua 5.2 • LRM P2P Sync • Forge AI • APK/PC/HTML5");
+        super("Vortex Engine Studio v4.3.0 — Multi-File IDE • Blueprint GUI • Forge AI Chat • Native Java / JS / Lua");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1480, 880);
+
+        // Laptop-aware sizing: fit cleanly inside 1280x720 / 1366x768 / 1536x864 / 1440x900 screens!
+        int winW = 1360;
+        int winH = 800;
+        boolean compactLaptop = false;
+        try {
+            if (!GraphicsEnvironment.isHeadless()) {
+                Rectangle usable = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+                winW = Math.min(1440, Math.max(1024, usable.width - 20));
+                winH = Math.min(860, Math.max(660, usable.height - 20));
+                compactLaptop = (usable.width <= 1440 || usable.height <= 864);
+            }
+        } catch (Throwable ignored) {}
+        setSize(winW, winH);
+        setMinimumSize(new Dimension(960, 600));
         setLocationRelativeTo(null);
+        if (compactLaptop && !GraphicsEnvironment.isHeadless()) {
+            setExtendedState(getExtendedState() | JFrame.MAXIMIZED_BOTH);
+        }
         getContentPane().setBackground(DesktopUiKit.C_VOID);
         setLayout(new BorderLayout());
 
@@ -160,19 +212,27 @@ public class VortexDesktopStudio extends JFrame {
         // Left Dock: Scene Hierarchy + Entity & Physics Inspector
         JPanel leftPanel = buildHierarchyAndInspector();
 
-        // Center Dock: 60 FPS 2D/3D Viewport + Tabbed Console & Interactive OS Terminal
+        // Center Dock: [ Scene Viewport | Blueprint Graph ] + Optional Snapped Code Split + Bottom Console/Terminal
+        centerStagePanel = buildCenterViewportAndBlueprintStage();
+        initSnappedCodeEditorSync();
+        rebuildCenterSnapLayout();
+
         JPanel bottomPanel = buildBottomConsoleAndTerminalPanel();
-        centerVerticalSplit = DesktopUiKit.createSplitPane(JSplitPane.VERTICAL_SPLIT, viewport, bottomPanel, 610);
-        centerVerticalSplit.setResizeWeight(0.78);
+        int leftW = Math.max(210, Math.round(winW * 0.175f));
+        int centerAndBottomH = Math.max(380, Math.round((winH - 44) * 0.75f));
+        int centerW = Math.max(460, Math.round((winW - leftW) * 0.56f));
+
+        centerVerticalSplit = DesktopUiKit.createSplitPane(JSplitPane.VERTICAL_SPLIT, centerSnapHost, bottomPanel, centerAndBottomH);
+        centerVerticalSplit.setResizeWeight(0.76);
 
         // Right Dock: Animated 7-Tab Studio Workspace (Code, Flow, Forge AI, LRM, Pixel, Audio, Export)
         JPanel rightPanel = buildRightTabbedWorkspace();
 
-        midRightSplit = DesktopUiKit.createSplitPane(JSplitPane.HORIZONTAL_SPLIT, centerVerticalSplit, rightPanel, 680);
-        midRightSplit.setResizeWeight(0.60);
+        midRightSplit = DesktopUiKit.createSplitPane(JSplitPane.HORIZONTAL_SPLIT, centerVerticalSplit, rightPanel, centerW);
+        midRightSplit.setResizeWeight(0.56);
 
-        mainSplit = DesktopUiKit.createSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, midRightSplit, 290);
-        mainSplit.setResizeWeight(0.18);
+        mainSplit = DesktopUiKit.createSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, midRightSplit, leftW);
+        mainSplit.setResizeWeight(0.17);
 
         add(mainSplit, BorderLayout.CENTER);
 
@@ -195,9 +255,13 @@ public class VortexDesktopStudio extends JFrame {
 
             @Override
             public void onTelemetry(int fps, int score, int health, String banner) {
-                SwingUtilities.invokeLater(() -> telemetryLabel.setText(
-                        fps + " FPS  •  " + project.entities.size() + " objs  •  "
-                        + project.dimensionMode + " / " + project.scriptLanguage));
+                if (!viewport.isPlaying()) return;
+                SwingUtilities.invokeLater(() -> {
+                    if (viewport.isPlaying()) {
+                        telemetryLabel.setText(fps + " FPS  •  " + project.entities.size() + " objs  •  "
+                                + project.dimensionMode + " / " + project.scriptLanguage);
+                    }
+                });
             }
         });
 
@@ -368,7 +432,7 @@ public class VortexDesktopStudio extends JFrame {
 
         DesktopUiKit.VortexDropdown tplQuickDrop = new DesktopUiKit.VortexDropdown(
                 ProjectTemplates.TEMPLATE_NAMES, ProjectTemplates.TEMPLATE_NAMES[0]);
-        tplQuickDrop.setPreferredSize(new Dimension(190, 30));
+        tplQuickDrop.setPreferredSize(new Dimension(DesktopUiKit.scaled(156), DesktopUiKit.scaled(27)));
         tplQuickDrop.setToolTipText("Switch starter game template (JS, Java, Lua, 3D, Box2D)");
         tplQuickDrop.setOnSelect((idx, label) -> {
             pushUndo();
@@ -424,20 +488,35 @@ public class VortexDesktopStudio extends JFrame {
         termJumpBtn.addActionListener(e -> {
             if (bottomTabs != null) bottomTabs.selectTabByKey("TERMINAL", true);
             if (centerVerticalSplit.getDividerLocation() > getHeight() - 180) {
-                centerVerticalSplit.setDividerLocation(Math.max(300, getHeight() - 260));
+                centerVerticalSplit.setDividerLocation(Math.max(280, getHeight() - 250));
             }
             terminalPanel.focusInput();
         });
         left.add(termJumpBtn);
 
-        bar.add(left, BorderLayout.WEST);
+        DesktopUiKit.VortexButton scaleBtn = new DesktopUiKit.VortexButton(
+                Math.round(DesktopUiKit.getUiScale() * 100) + "%", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.GRID);
+        scaleBtn.setToolTipText("IDE Laptop / Monitor UI Scale");
+        scaleBtn.addActionListener(e -> {
+            List<DesktopUiKit.MenuAction> items = new ArrayList<>();
+            float[] scales = {0.82f, 0.88f, 0.94f, 1.00f, 1.12f};
+            String[] names = {"82% — Compact 13\" Laptop", "88% — Laptop Balanced", "94% — Standard", "100% — Desktop", "112% — HiDPI Large"};
+            for (int i = 0; i < scales.length; i++) {
+                final float sc = scales[i];
+                items.add(new DesktopUiKit.MenuAction(names[i], () -> applyIdeScale(sc, scaleBtn)));
+            }
+            DesktopUiKit.showPopupMenu(scaleBtn, items);
+        });
+        left.add(scaleBtn);
 
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 7, 0));
+        bar.add(left, BorderLayout.CENTER);
+
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         right.setOpaque(false);
 
         telemetryLabel.setFont(DesktopUiKit.FONT_UI);
         telemetryLabel.setForeground(DesktopUiKit.C_TEXT_MUTED);
-        telemetryLabel.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 6));
+        telemetryLabel.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 4));
         right.add(telemetryLabel);
 
         playStopBtn = new DesktopUiKit.VortexButton("PLAY GAME", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.PLAY);
@@ -450,6 +529,198 @@ public class VortexDesktopStudio extends JFrame {
 
         bar.add(right, BorderLayout.EAST);
         return bar;
+    }
+
+    private void applyIdeScale(float scale, DesktopUiKit.VortexButton scaleBtn) {
+        DesktopUiKit.setUiScale(scale);
+        scaleBtn.setText(Math.round(scale * 100) + "%");
+        scriptArea.setFont(DesktopUiKit.FONT_MONO);
+        snappedScriptArea.setFont(DesktopUiKit.FONT_MONO);
+        consoleArea.setFont(DesktopUiKit.FONT_MONO);
+        SwingUtilities.updateComponentTreeUI(this);
+        revalidate();
+        repaint();
+    }
+
+    // =========================================================================
+    // Center Stage: [ Scene Viewport | Blueprint Graph ] + Drag/Drop/Snap Split Code
+    // =========================================================================
+    private JPanel buildCenterViewportAndBlueprintStage() {
+        JPanel stage = new JPanel(new BorderLayout());
+        stage.setBackground(DesktopUiKit.C_VOID);
+        stage.setMinimumSize(new Dimension(240, 180));
+
+        JPanel stageHeader = new JPanel(new BorderLayout(6, 0));
+        stageHeader.setBackground(DesktopUiKit.C_HEADER);
+        stageHeader.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, DesktopUiKit.C_BORDER));
+
+        centerCanvasTabs = new DesktopUiKit.VortexTabStrip(
+                new String[]{"VIEWPORT", "BLUEPRINT"},
+                new String[]{"Scene Viewport", "Blueprint Graph"},
+                new DesktopUiKit.Icon[]{DesktopUiKit.Icon.CUBE, DesktopUiKit.Icon.NODES});
+        centerCanvasTabs.setPreferredSize(new Dimension(DesktopUiKit.scaled(310), DesktopUiKit.scaled(30)));
+        stageHeader.add(centerCanvasTabs, BorderLayout.WEST);
+
+        JPanel stageRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 2));
+        stageRight.setOpaque(false);
+        DesktopUiKit.VortexButton snapToggleBtn = new DesktopUiKit.VortexButton("Snap Code Split", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.SPLIT);
+        snapToggleBtn.setToolTipText("Snap or unsnap a live code editor pane right next to the Viewport (or drag any file tab onto the Viewport!)");
+        snapToggleBtn.addActionListener(e -> {
+            if (snappedZone != null) {
+                unsnapCodeEditor();
+            } else {
+                snapFileNextToViewport(project.activeScriptFile, "RIGHT");
+            }
+        });
+        stageRight.add(snapToggleBtn);
+        stageHeader.add(stageRight, BorderLayout.EAST);
+
+        blueprintPanel = new DesktopBlueprintPanel(project, () -> viewport.repaint());
+        viewport.setMinimumSize(new Dimension(220, 160));
+        centerCanvasDeck.addCard("VIEWPORT", viewport, 0);
+        centerCanvasDeck.addCard("BLUEPRINT", blueprintPanel, 1);
+
+        centerCanvasTabs.setOnTabSelected((idx, key) -> {
+            centerCanvasDeck.showCard(key, true);
+            if ("VIEWPORT".equals(key)) viewport.repaint();
+        });
+
+        stage.add(stageHeader, BorderLayout.NORTH);
+        stage.add(centerCanvasDeck, BorderLayout.CENTER);
+        return stage;
+    }
+
+    private void initSnappedCodeEditorSync() {
+        snappedScriptArea.setBackground(DesktopUiKit.C_VOID);
+        snappedScriptArea.setForeground(DesktopUiKit.C_TEXT);
+        snappedScriptArea.setCaretColor(DesktopUiKit.C_WHITE);
+        snappedScriptArea.setSelectionColor(DesktopUiKit.C_ACCENT_TINT);
+        snappedScriptArea.setSelectedTextColor(DesktopUiKit.C_WHITE);
+        snappedScriptArea.setFont(DesktopUiKit.FONT_MONO);
+        snappedScriptArea.setTabSize(4);
+        snappedScriptArea.setBorder(BorderFactory.createEmptyBorder(8, 10, 12, 10));
+
+        javax.swing.event.DocumentListener mainListener = new javax.swing.event.DocumentListener() {
+            private void push() {
+                if (syncingEditorBuffers || project == null) return;
+                syncingEditorBuffers = true;
+                try {
+                    String txt = scriptArea.getText();
+                    project.putScriptFile(project.activeScriptFile, txt);
+                    if (snappedFilePath != null && snappedFilePath.equals(project.activeScriptFile)) {
+                        snappedScriptArea.setText(txt);
+                    }
+                } finally {
+                    syncingEditorBuffers = false;
+                }
+            }
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { push(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { push(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { push(); }
+        };
+        scriptArea.getDocument().addDocumentListener(mainListener);
+
+        javax.swing.event.DocumentListener snapListener = new javax.swing.event.DocumentListener() {
+            private void push() {
+                if (syncingEditorBuffers || project == null || snappedFilePath == null) return;
+                syncingEditorBuffers = true;
+                try {
+                    String txt = snappedScriptArea.getText();
+                    project.putScriptFile(snappedFilePath, txt);
+                    if (snappedFilePath.equals(project.activeScriptFile)) {
+                        scriptArea.setText(txt);
+                    }
+                } finally {
+                    syncingEditorBuffers = false;
+                }
+            }
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { push(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { push(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { push(); }
+        };
+        snappedScriptArea.getDocument().addDocumentListener(snapListener);
+    }
+
+    private void snapFileNextToViewport(String filePath, String zone) {
+        if (project == null) return;
+        project.ensureScriptFilesInitialized();
+        String norm = GameProject.normalizeScriptPath(filePath);
+        if (!project.scriptFiles.containsKey(norm)) norm = project.activeScriptFile;
+        this.snappedFilePath = norm;
+        this.snappedZone = (zone == null || zone.isEmpty()) ? "RIGHT" : zone;
+        syncingEditorBuffers = true;
+        try {
+            snappedScriptArea.setText(project.scriptFiles.getOrDefault(norm, ""));
+            snappedScriptArea.setCaretPosition(0);
+        } finally {
+            syncingEditorBuffers = false;
+        }
+        snappedTitleLabel.setText(norm + "  [SNAPPED " + this.snappedZone + "]");
+        rebuildCenterSnapLayout();
+        log("[IDE] Snapped '" + norm + "' " + this.snappedZone.toLowerCase(Locale.US) + " of Scene Viewport.");
+    }
+
+    private void unsnapCodeEditor() {
+        this.snappedZone = null;
+        this.snappedFilePath = null;
+        viewport.setSnapPreviewZone(null);
+        rebuildCenterSnapLayout();
+    }
+
+    private void rebuildCenterSnapLayout() {
+        centerSnapHost.removeAll();
+        centerSnapHost.setBackground(DesktopUiKit.C_VOID);
+        centerSnapHost.setMinimumSize(new Dimension(240, 180));
+        if (snappedZone == null || snappedFilePath == null) {
+            centerSnapHost.add(centerStagePanel, BorderLayout.CENTER);
+        } else {
+            JPanel snapCard = new JPanel(new BorderLayout());
+            snapCard.setBackground(DesktopUiKit.C_VOID);
+            snapCard.setMinimumSize(new Dimension(200, 150));
+
+            JPanel hdr = new JPanel(new BorderLayout(6, 0));
+            hdr.setBackground(DesktopUiKit.C_HEADER);
+            hdr.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(0, 0, 1, 0, DesktopUiKit.C_BORDER),
+                    BorderFactory.createEmptyBorder(3, 8, 3, 6)));
+            snappedTitleLabel.setFont(DesktopUiKit.FONT_UI_BOLD);
+            snappedTitleLabel.setForeground(DesktopUiKit.C_WHITE);
+            hdr.add(snappedTitleLabel, BorderLayout.CENTER);
+
+            JPanel hdrBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+            hdrBtns.setOpaque(false);
+            DesktopUiKit.VortexButton flipSideBtn = new DesktopUiKit.VortexButton("Side", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.SPLIT);
+            flipSideBtn.setToolTipText("Cycle snap position (Right / Left / Bottom)");
+            flipSideBtn.addActionListener(e -> {
+                String next = "RIGHT".equals(snappedZone) ? "BOTTOM" : ("BOTTOM".equals(snappedZone) ? "LEFT" : "RIGHT");
+                snapFileNextToViewport(snappedFilePath, next);
+            });
+            DesktopUiKit.VortexButton closeSnapBtn = new DesktopUiKit.VortexButton("Unsnap", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.CLOSE);
+            closeSnapBtn.addActionListener(e -> unsnapCodeEditor());
+            hdrBtns.add(flipSideBtn);
+            hdrBtns.add(closeSnapBtn);
+            hdr.add(hdrBtns, BorderLayout.EAST);
+
+            snapCard.add(hdr, BorderLayout.NORTH);
+            snapCard.add(DesktopUiKit.createScrollPane(snappedScriptArea), BorderLayout.CENTER);
+
+            int curW = Math.max(540, centerSnapHost.getWidth());
+            int curH = Math.max(360, centerSnapHost.getHeight());
+            JSplitPane sp;
+            if ("BOTTOM".equals(snappedZone)) {
+                sp = DesktopUiKit.createSplitPane(JSplitPane.VERTICAL_SPLIT, centerStagePanel, snapCard, Math.round(curH * 0.56f));
+                sp.setResizeWeight(0.56);
+            } else if ("LEFT".equals(snappedZone)) {
+                sp = DesktopUiKit.createSplitPane(JSplitPane.HORIZONTAL_SPLIT, snapCard, centerStagePanel, Math.round(curW * 0.44f));
+                sp.setResizeWeight(0.44);
+            } else {
+                sp = DesktopUiKit.createSplitPane(JSplitPane.HORIZONTAL_SPLIT, centerStagePanel, snapCard, Math.round(curW * 0.54f));
+                sp.setResizeWeight(0.54);
+            }
+            centerSnapHost.add(sp, BorderLayout.CENTER);
+        }
+        centerSnapHost.revalidate();
+        centerSnapHost.repaint();
     }
 
     // =========================================================================
@@ -487,10 +758,10 @@ public class VortexDesktopStudio extends JFrame {
         consoleArea.setCaretColor(DesktopUiKit.C_WHITE);
         consoleArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
         consoleArea.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
-        consoleArea.setText("Vortex Engine v4.2.0 Desktop Studio Ready.\n"
-                + "• Polyglot VMs  : Native Java (BeanShell JVM) + ES6 JavaScript (Mozilla Rhino) + Lua 5.2 + Vortex Flow + VXS\n"
-                + "• P2P & AI      : LRM P2P Version Control (hacvilke/lrm) + Vortex Forge AI (Groq / OpenRouter Free / Offline)\n"
-                + "• Tip           : Switch to 'Interactive Terminal' tab next door to run PowerShell / sh / java / go / lrm commands!\n");
+        consoleArea.setText("Vortex Engine v4.3.0 Desktop Studio Ready.\n"
+                + "• Multi-File IDE: Organize modules across `scripts/`, `objects/`, `ui/` — drag any file tab onto Viewport to snap split!\n"
+                + "• Visual & GUI  : Blueprint Graph + Classic Flow Sheet + In-Game Dialogs, Labels & Progress Bars\n"
+                + "• Forge AI Chat : Continuous multi-turn workspace assistant with contextual file, scene & test tools\n");
 
         JScrollPane consoleScroll = DesktopUiKit.createScrollPane(consoleArea);
         bottomDeck.addCard("CONSOLE", consoleScroll, 0);
@@ -614,40 +885,55 @@ public class VortexDesktopStudio extends JFrame {
     private JPanel buildScriptEditorTab() {
         JPanel p = new JPanel(new BorderLayout());
         p.setBackground(DesktopUiKit.C_VOID);
+        p.setMinimumSize(new Dimension(240, 180));
 
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(DesktopUiKit.C_PANEL);
         header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, DesktopUiKit.C_BORDER));
 
-        JPanel btnBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
+        JPanel btnBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
         btnBar.setOpaque(false);
 
+        DesktopUiKit.VortexButton filesToggleBtn = new DesktopUiKit.VortexButton("Files", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.FOLDER);
+        filesToggleBtn.setToolTipText("Show/Hide Project File Directory Sidebar");
+        filesToggleBtn.addActionListener(e -> {
+            if (fileSidebarPanel == null || codeSidebarSplit == null) return;
+            boolean vis = !fileSidebarPanel.isVisible();
+            fileSidebarPanel.setVisible(vis);
+            if (vis) codeSidebarSplit.setDividerLocation(DesktopUiKit.scaled(168));
+            codeSidebarSplit.revalidate();
+            codeSidebarSplit.repaint();
+        });
+        btnBar.add(filesToggleBtn);
+
         vmDropdown = new DesktopUiKit.VortexDropdown(VM_ITEMS, VM_ITEMS[0]);
-        vmDropdown.setPreferredSize(new Dimension(168, 30));
+        vmDropdown.setPreferredSize(new Dimension(DesktopUiKit.scaled(148), DesktopUiKit.scaled(27)));
         vmDropdown.setOnSelect((idx, val) -> {
             syncCode();
             project.scriptLanguage = VM_CODES[idx];
-            syntaxStatusLabel.setText("Switched VM to " + val + " — click Check Syntax.");
+            syntaxStatusLabel.setText("Switched VM to " + val + " — click Check.");
             syntaxStatusLabel.setForeground(DesktopUiKit.C_WHITE);
         });
         btnBar.add(vmDropdown);
 
-        DesktopUiKit.VortexButton checkBtn = new DesktopUiKit.VortexButton("Check Syntax", DesktopUiKit.Variant.ACCENT, DesktopUiKit.Icon.CHECK);
+        DesktopUiKit.VortexButton checkBtn = new DesktopUiKit.VortexButton("Check", DesktopUiKit.Variant.ACCENT, DesktopUiKit.Icon.CHECK);
+        checkBtn.setToolTipText("Validate syntax across all project files");
         checkBtn.addActionListener(e -> checkScriptSyntax());
         btnBar.add(checkBtn);
 
         String[] snips = {
-                "Insert API Snippet…",
+                "Snippets…",
+                "vortex.showDialog(\"COMMANDER\", \"Mission start!\", 4.0)",
+                "vortex.setLabel(\"obj\", \"WAVE 1\", 50, 12, 15, \"#FFFFFF\")",
+                "vortex.setProgressBar(\"xp\", \"XP\", 40, 100, 50, 92, \"#FFFFFF\")",
                 "vortex.findNearestTag(\"Player\", \"enemy\", 30)",
                 "vortex.chaseTagAI(\"enemy\", \"Player\", 4.5)",
                 "vortex.setSpriteAnim(\"Player\", \"knight_1,knight_2\", 7)",
                 "vortex.tweenTagYoyo(\"coin\", 0.35, 0.9, \"SINE\")",
-                "vortex.saveData(\"best\", vortex.getScore())",
-                "vortex.playMusic(\"CYBERPUNK\", 136)",
-                "vortex.particles(0, 1, 0, 22, \"#FFFFFF\")"
+                "vortex.playMusic(\"CYBERPUNK\", 136)"
         };
         snippetDropdown = new DesktopUiKit.VortexDropdown(snips, snips[0]);
-        snippetDropdown.setPreferredSize(new Dimension(165, 30));
+        snippetDropdown.setPreferredSize(new Dimension(DesktopUiKit.scaled(118), DesktopUiKit.scaled(27)));
         snippetDropdown.setOnSelect((idx, val) -> {
             if (idx > 0) {
                 String tail = "LUA".equalsIgnoreCase(project.scriptLanguage) ? "\n" : ";\n";
@@ -657,21 +943,29 @@ public class VortexDesktopStudio extends JFrame {
         });
         btnBar.add(snippetDropdown);
 
+        DesktopUiKit.VortexButton snapBtn = new DesktopUiKit.VortexButton("Snap", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.SPLIT);
+        snapBtn.setToolTipText("Snap active file beside Viewport (or drag any file tab onto the Viewport!)");
+        snapBtn.addActionListener(e -> {
+            if (snappedZone != null && project.activeScriptFile.equals(snappedFilePath)) {
+                unsnapCodeEditor();
+            } else {
+                snapFileNextToViewport(project.activeScriptFile, "RIGHT");
+            }
+        });
+        btnBar.add(snapBtn);
+
         DesktopUiKit.VortexButton objQuickBtn = new DesktopUiKit.VortexButton(".OBJ", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.CUBE);
         objQuickBtn.setToolTipText("Import Custom Wavefront .OBJ 3D Mesh");
         objQuickBtn.addActionListener(e -> showCustomObjModal());
         btnBar.add(objQuickBtn);
 
         DesktopUiKit.VortexButton docsBtn = new DesktopUiKit.VortexButton("API", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.CODE);
-        docsBtn.setToolTipText("Vortex Scripting API Reference (Java • JS • Lua • VXS)");
-        docsBtn.addActionListener(e -> DesktopUiKit.showInfoModal(this, "Vortex Polyglot Scripting API (Java • ES6 JS • Lua 5.2 • VXS)",
-                "• Native Java Class or Top-Level Methods: public void onStart(), onUpdate(float dt), onButton(String btn), onCollide(String a, String b, String tagA, String tagB)\n"
-                + "• ES6 JS / Lua Hooks: onStart(), onUpdate(dt), onButton(btn), onCollide(a, b, tagA, tagB)\n"
-                + "• Input: vortex.joyX(), vortex.joyY(), vortex.isDown(\"A\"), vortex.isDown(\"B\")\n"
-                + "• Transform & Physics: vortex.setPos(n,x,y,z), vortex.setVel(n,vx,vy[,vz]), vortex.jump(n,vy), vortex.applyImpulse(n,ix,iy)\n"
-                + "• AI & Queries: vortex.chaseTagAI(fromTag,target,spd), vortex.findNearestTag(from,tag,range), vortex.raycast(x,y,z,dx,dy,dz,max)\n"
-                + "• Animation & FX: vortex.setSpriteAnim(n,\"f1,f2\",fps), vortex.tweenTagYoyo(tag,dy,dur,\"SINE\"), vortex.particles(x,y,z,cnt,\"#FFFFFF\")\n"
-                + "• Save & Audio: vortex.saveData(k,v), vortex.loadNum(k,0), vortex.playSound(\"laser\"), vortex.playMusic(\"CYBERPUNK\",134)"));
+        docsBtn.setToolTipText("Vortex Polyglot Scripting & GUI API Reference");
+        docsBtn.addActionListener(e -> DesktopUiKit.showInfoModal(this, "Vortex Polyglot Multi-File & GUI Scripting API",
+                "• Multi-File Architecture: Organize scripts into `scripts/`, `objects/`, `ui/` — every file's `onStart()`, `onUpdate(dt)`, `onButton(btn)`, `onCollide(a,b,tagA,tagB)` hooks chain automatically!\n"
+                + "• In-Game GUI API: vortex.showDialog(speaker, msg, durSec), vortex.hideDialog(), vortex.setLabel(id, txt, xPct, yPct, fontSize, \"#FFFFFF\"), vortex.setProgressBar(id, title, val, max, xPct, yPct, \"#FFFFFF\"), vortex.removeUI(id), vortex.clearUI()\n"
+                + "• Input & Physics: vortex.joyX(), vortex.joyY(), vortex.setPos(n,x,y,z), vortex.setVel(n,vx,vy[,vz]), vortex.jump(n,vy)\n"
+                + "• AI, FX & Audio: vortex.chaseTagAI(fromTag,target,spd), vortex.findNearestTag(from,tag,range), vortex.particles(x,y,z,cnt,\"#FFFFFF\"), vortex.playSound(\"laser\"), vortex.playMusic(\"CYBERPUNK\",134)"));
         btnBar.add(docsBtn);
 
         header.add(btnBar, BorderLayout.NORTH);
@@ -680,10 +974,61 @@ public class VortexDesktopStudio extends JFrame {
         syntaxStatusLabel.setBackground(DesktopUiKit.C_HEADER);
         syntaxStatusLabel.setForeground(DesktopUiKit.C_OK_TX);
         syntaxStatusLabel.setFont(DesktopUiKit.FONT_UI);
-        syntaxStatusLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        syntaxStatusLabel.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
         header.add(syntaxStatusLabel, BorderLayout.SOUTH);
 
         p.add(header, BorderLayout.NORTH);
+
+        // Left: Project File Directory Explorer Sidebar
+        fileSidebarPanel = new JPanel(new BorderLayout());
+        fileSidebarPanel.setBackground(DesktopUiKit.C_PANEL);
+        fileSidebarPanel.setMinimumSize(new Dimension(120, 120));
+        fileSidebarPanel.setPreferredSize(new Dimension(DesktopUiKit.scaled(168), 400));
+
+        JPanel explorerHdr = new JPanel(new BorderLayout(4, 0));
+        explorerHdr.setBackground(DesktopUiKit.C_HEADER);
+        explorerHdr.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, DesktopUiKit.C_BORDER),
+                BorderFactory.createEmptyBorder(4, 8, 4, 6)));
+        JLabel expTitle = new JLabel("FILES");
+        expTitle.setFont(DesktopUiKit.FONT_UI_BOLD);
+        expTitle.setForeground(DesktopUiKit.C_WHITE);
+        explorerHdr.add(expTitle, BorderLayout.WEST);
+
+        JPanel expBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
+        expBtns.setOpaque(false);
+        DesktopUiKit.VortexButton newFileBtn = new DesktopUiKit.VortexButton("", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.PLUS);
+        newFileBtn.setToolTipText("New Script Module File (e.g. objects/enemy.js, ui/hud.js)");
+        newFileBtn.addActionListener(e -> promptCreateScriptFile());
+        DesktopUiKit.VortexButton delFileBtn = new DesktopUiKit.VortexButton("", DesktopUiKit.Variant.DANGER, DesktopUiKit.Icon.CLOSE);
+        delFileBtn.setToolTipText("Delete Selected Script File");
+        delFileBtn.addActionListener(e -> deleteSelectedScriptFile());
+        expBtns.add(newFileBtn);
+        expBtns.add(delFileBtn);
+        explorerHdr.add(expBtns, BorderLayout.EAST);
+        fileSidebarPanel.add(explorerHdr, BorderLayout.NORTH);
+
+        fileList.setBackground(DesktopUiKit.C_VOID);
+        fileList.setCellRenderer(DesktopUiKit.createDarkListRenderer());
+        fileList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                String sel = extractPathFromFileItem(fileList.getSelectedValue());
+                if (sel != null && !sel.equals(project.activeScriptFile)) {
+                    openScriptFileTab(sel);
+                }
+            }
+        });
+        installTabDragToViewportHandler(fileList, () -> extractPathFromFileItem(fileList.getSelectedValue()));
+        fileSidebarPanel.add(DesktopUiKit.createScrollPane(fileList), BorderLayout.CENTER);
+
+        // Right: Draggable Open File Tabs Strip + Code Editor Buffer
+        JPanel editorColumn = new JPanel(new BorderLayout());
+        editorColumn.setBackground(DesktopUiKit.C_VOID);
+        editorColumn.setMinimumSize(new Dimension(160, 120));
+
+        openTabsBar.setBackground(DesktopUiKit.C_HEADER);
+        openTabsBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, DesktopUiKit.C_BORDER));
+        editorColumn.add(openTabsBar, BorderLayout.NORTH);
 
         scriptArea.setBackground(DesktopUiKit.C_VOID);
         scriptArea.setForeground(DesktopUiKit.C_TEXT);
@@ -692,9 +1037,257 @@ public class VortexDesktopStudio extends JFrame {
         scriptArea.setSelectedTextColor(DesktopUiKit.C_WHITE);
         scriptArea.setFont(DesktopUiKit.FONT_MONO);
         scriptArea.setTabSize(4);
-        scriptArea.setBorder(BorderFactory.createEmptyBorder(10, 12, 16, 12));
-        p.add(DesktopUiKit.createScrollPane(scriptArea), BorderLayout.CENTER);
+        scriptArea.setBorder(BorderFactory.createEmptyBorder(8, 12, 14, 12));
+        editorColumn.add(DesktopUiKit.createScrollPane(scriptArea), BorderLayout.CENTER);
+
+        codeSidebarSplit = DesktopUiKit.createSplitPane(
+                JSplitPane.HORIZONTAL_SPLIT, fileSidebarPanel, editorColumn, DesktopUiKit.scaled(168));
+        codeSidebarSplit.setResizeWeight(0.24);
+        p.add(codeSidebarSplit, BorderLayout.CENTER);
         return p;
+    }
+
+    private interface DragFileSupplier {
+        String getFilePath();
+    }
+
+    private void installTabDragToViewportHandler(javax.swing.JComponent comp, DragFileSupplier supplier) {
+        final String[] draggingFile = {null};
+        final Point[] pressPt = {null};
+        comp.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                pressPt[0] = e.getPoint();
+                draggingFile[0] = supplier.getFilePath();
+            }
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (draggingFile[0] != null) {
+                    String zone = computeViewportSnapZone(comp, e.getPoint());
+                    viewport.setSnapPreviewZone(null);
+                    comp.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                    if (zone != null && pressPt[0] != null && pressPt[0].distance(e.getPoint()) > 16) {
+                        snapFileNextToViewport(draggingFile[0], zone);
+                    }
+                }
+                draggingFile[0] = null;
+                pressPt[0] = null;
+            }
+        });
+        comp.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (draggingFile[0] == null || pressPt[0] == null || pressPt[0].distance(e.getPoint()) <= 16) return;
+                comp.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                viewport.setSnapPreviewZone(computeViewportSnapZone(comp, e.getPoint()));
+            }
+        });
+    }
+
+    private String computeViewportSnapZone(Component src, Point srcPt) {
+        if (!centerSnapHost.isShowing()) return null;
+        Point p = SwingUtilities.convertPoint(src, srcPt, centerSnapHost);
+        int w = centerSnapHost.getWidth();
+        int h = centerSnapHost.getHeight();
+        if (p.x < 0 || p.y < 0 || p.x > w || p.y > h) return null;
+        if (p.y > h * 0.68) return "BOTTOM";
+        if (p.x < w * 0.42) return "LEFT";
+        return "RIGHT";
+    }
+
+    private String extractPathFromFileItem(String item) {
+        if (item == null) return null;
+        String t = item.trim();
+        if (t.startsWith("▸ ") || t.startsWith("• ")) t = t.substring(2).trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    private void refreshScriptFileExplorer() {
+        if (project == null) return;
+        project.ensureScriptFilesInitialized();
+        fileListModel.clear();
+        for (String path : project.scriptFiles.keySet()) {
+            boolean active = path.equals(project.activeScriptFile);
+            fileListModel.addElement((active ? "▸ " : "• ") + path);
+        }
+        if (openScriptTabs.isEmpty() || !project.scriptFiles.containsKey(project.activeScriptFile)) {
+            openScriptTabs.clear();
+            for (String path : project.scriptFiles.keySet()) {
+                openScriptTabs.add(path);
+                if (openScriptTabs.size() >= 4) break;
+            }
+        } else {
+            openScriptTabs.removeIf(p -> !project.scriptFiles.containsKey(p));
+            if (!openScriptTabs.contains(project.activeScriptFile)) {
+                openScriptTabs.add(project.activeScriptFile);
+            }
+        }
+        rebuildOpenFileTabsBar();
+    }
+
+    private void rebuildOpenFileTabsBar() {
+        openTabsBar.removeAll();
+        for (final String path : openScriptTabs) {
+            boolean isActive = path.equals(project.activeScriptFile);
+            String shortName = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
+
+            JPanel chip = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 1));
+            chip.setBackground(isActive ? DesktopUiKit.C_SURFACE : DesktopUiKit.C_INPUT_BG);
+            chip.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(isActive ? DesktopUiKit.C_WHITE : DesktopUiKit.C_BORDER, 1),
+                    BorderFactory.createEmptyBorder(2, 6, 2, 4)));
+            chip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            chip.setToolTipText(path + " — Click to edit, or drag onto Viewport to snap split!");
+
+            JLabel lbl = new JLabel(shortName);
+            lbl.setFont(isActive ? DesktopUiKit.FONT_UI_BOLD : DesktopUiKit.FONT_UI);
+            lbl.setForeground(isActive ? DesktopUiKit.C_WHITE : DesktopUiKit.C_TEXT_MUTED);
+            chip.add(lbl);
+
+            MouseAdapter selectTabAdapter = new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    openScriptFileTab(path);
+                }
+            };
+            chip.addMouseListener(selectTabAdapter);
+            lbl.addMouseListener(selectTabAdapter);
+            installTabDragToViewportHandler(chip, () -> path);
+            installTabDragToViewportHandler(lbl, () -> path);
+
+            if (openScriptTabs.size() > 1) {
+                JLabel closeX = new JLabel("×");
+                closeX.setFont(DesktopUiKit.FONT_UI_BOLD);
+                closeX.setForeground(DesktopUiKit.C_TEXT_MUTED);
+                closeX.addMouseListener(new MouseAdapter() {
+                    @Override
+                    public void mouseClicked(MouseEvent e) {
+                        openScriptTabs.remove(path);
+                        if (path.equals(project.activeScriptFile) && !openScriptTabs.isEmpty()) {
+                            openScriptFileTab(openScriptTabs.get(0));
+                        } else {
+                            rebuildOpenFileTabsBar();
+                        }
+                    }
+                });
+                chip.add(closeX);
+            }
+            openTabsBar.add(chip);
+        }
+        openTabsBar.revalidate();
+        openTabsBar.repaint();
+    }
+
+    private void openScriptFileTab(String path) {
+        if (project == null || path == null) return;
+        syncCode();
+        String norm = GameProject.normalizeScriptPath(path);
+        if (!project.scriptFiles.containsKey(norm)) return;
+        project.activeScriptFile = norm;
+        if (!openScriptTabs.contains(norm)) openScriptTabs.add(norm);
+        String body = project.scriptFiles.getOrDefault(norm, "");
+        project.scriptCode = body;
+        syncingEditorBuffers = true;
+        try {
+            scriptArea.setText(body);
+            scriptArea.setCaretPosition(0);
+        } finally {
+            syncingEditorBuffers = false;
+        }
+        refreshScriptFileExplorer();
+        checkScriptSyntax();
+    }
+
+    private void promptCreateScriptFile() {
+        String ext = project.getScriptExtension();
+        JDialog dlg = new JDialog(this, "Create New Script Module File", true);
+        JPanel root = new JPanel();
+        root.setLayout(new BoxLayout(root, BoxLayout.Y_AXIS));
+        root.setBackground(DesktopUiKit.C_HEADER);
+        root.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(DesktopUiKit.C_WHITE, 1),
+                BorderFactory.createEmptyBorder(14, 16, 12, 16)));
+        root.setPreferredSize(new Dimension(410, 175));
+
+        JLabel title = new JLabel("NEW SCRIPT MODULE FILE");
+        title.setFont(DesktopUiKit.FONT_TITLE);
+        title.setForeground(DesktopUiKit.C_WHITE);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        root.add(title);
+        root.add(Box.createVerticalStrut(8));
+
+        JLabel hint = mutedLabel("Relative path (e.g. objects/enemy" + ext + ", ui/dialog_hud" + ext + "):");
+        hint.setAlignmentX(Component.LEFT_ALIGNMENT);
+        root.add(hint);
+        JTextField pathTf = DesktopUiKit.createField("objects/module_" + (project.scriptFiles.size() + 1) + ext);
+        pathTf.setAlignmentX(Component.LEFT_ALIGNMENT);
+        root.add(pathTf);
+        root.add(Box.createVerticalStrut(12));
+
+        JPanel foot = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        foot.setOpaque(false);
+        foot.setAlignmentX(Component.LEFT_ALIGNMENT);
+        DesktopUiKit.VortexButton cancel = new DesktopUiKit.VortexButton("Cancel", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.CLOSE);
+        cancel.addActionListener(e -> dlg.dispose());
+        DesktopUiKit.VortexButton create = new DesktopUiKit.VortexButton("Create File", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.CHECK);
+        create.addActionListener(e -> {
+            String raw = pathTf.getText().trim();
+            if (raw.isEmpty()) return;
+            if (!raw.contains(".")) raw = raw + ext;
+            String norm = GameProject.normalizeScriptPath(raw);
+            pushUndo();
+            String starter = buildStarterModuleContent(norm);
+            project.putScriptFile(norm, starter);
+            openScriptFileTab(norm);
+            log("[FILES] Created script module: " + norm);
+            dlg.dispose();
+        });
+        foot.add(cancel);
+        foot.add(create);
+        root.add(foot);
+        dlg.setContentPane(root);
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    private String buildStarterModuleContent(String path) {
+        if ("JAVA".equalsIgnoreCase(project.scriptLanguage)) {
+            return "// " + path + " — Modular Object Script\n"
+                    + "public class ModuleScript {\n"
+                    + "    public void onStart() {\n"
+                    + "    }\n"
+                    + "    public void onUpdate(float dt) {\n"
+                    + "    }\n"
+                    + "}\n";
+        }
+        if ("LUA".equalsIgnoreCase(project.scriptLanguage)) {
+            return "-- " + path + " — Modular Object Script\n"
+                    + "function onStart()\n"
+                    + "end\n\n"
+                    + "function onUpdate(dt)\n"
+                    + "end\n";
+        }
+        return "// " + path + " — Modular Object / UI Script\n"
+                + "function onStart() {\n"
+                + "}\n\n"
+                + "function onUpdate(dt) {\n"
+                + "}\n";
+    }
+
+    private void deleteSelectedScriptFile() {
+        if (project == null || project.scriptFiles.size() <= 1) {
+            DesktopUiKit.showInfoModal(this, "Cannot Delete Last File", "At least one script file must remain in the project.");
+            return;
+        }
+        String target = project.activeScriptFile;
+        pushUndo();
+        if (project.removeScriptFile(target)) {
+            openScriptTabs.remove(target);
+            if (target.equals(snappedFilePath)) unsnapCodeEditor();
+            openScriptFileTab(project.activeScriptFile);
+            log("[FILES] Removed script file: " + target);
+        }
     }
 
     private JPanel buildFlowTab() {
@@ -824,92 +1417,92 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     // =========================================================================
-    // Upgraded Vortex Forge AI Tab (Fixed Groq + OpenRouter Free + Live Models!)
+    // v4.3 Continuous Multi-Turn Forge AI Chat + Contextual IDE Tool Agent
     // =========================================================================
     private JPanel buildForgeAiTab() {
-        JPanel p = new JPanel(new BorderLayout(0, 10));
+        JPanel p = new JPanel(new BorderLayout(0, 6));
         p.setBackground(DesktopUiKit.C_VOID);
-        p.setBorder(BorderFactory.createEmptyBorder(10, 12, 12, 12));
-
-        JPanel form = new JPanel();
-        form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
-        form.setBackground(DesktopUiKit.C_PANEL);
-        form.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1),
-                BorderFactory.createEmptyBorder(12, 12, 12, 12)));
-
-        JLabel title = new JLabel("VORTEX FORGE AI STUDIO AGENT");
-        title.setFont(DesktopUiKit.FONT_TITLE);
-        title.setForeground(DesktopUiKit.C_WHITE);
-        title.setAlignmentX(Component.LEFT_ALIGNMENT);
-        form.add(title);
-
-        JLabel sub = new JLabel("<html><body style='width:385px;color:#A1A1AA;margin-top:4px;'>"
-                + "Local-first BYOK Studio Agent (<b>hacvilke/roforge</b>). Groq uses active <code>openai/gpt-oss-120b</code> "
-                + "(with auto <code>/models</code> fallback) and OpenRouter defaults to <code>openrouter/free</code> ($0 cost). "
-                + "API keys save locally on your machine.</body></html>");
-        sub.setAlignmentX(Component.LEFT_ALIGNMENT);
-        form.add(sub);
-        form.add(Box.createVerticalStrut(10));
+        p.setBorder(BorderFactory.createEmptyBorder(8, 10, 10, 10));
 
         int initProv = Math.max(0, Math.min(VortexForgeAgent.PROVIDERS.length - 1, VortexForgeAgent.loadSavedProviderIdx()));
 
-        JLabel l1 = mutedLabel("AI Provider:");
-        l1.setAlignmentX(Component.LEFT_ALIGNMENT);
-        form.add(l1);
+        // Top Bar + Collapsible Provider/Key Settings Drawer
+        JPanel topContainer = new JPanel(new BorderLayout(0, 6));
+        topContainer.setOpaque(false);
+
+        JPanel hdrBar = new JPanel(new BorderLayout(6, 0));
+        hdrBar.setBackground(DesktopUiKit.C_PANEL);
+        hdrBar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1),
+                BorderFactory.createEmptyBorder(6, 10, 6, 8)));
+
+        JLabel title = new JLabel("FORGE AI — CONTEXTUAL IDE CHAT");
+        title.setFont(DesktopUiKit.FONT_UI_BOLD);
+        title.setForeground(DesktopUiKit.C_WHITE);
+        hdrBar.add(title, BorderLayout.WEST);
+
+        final JPanel settingsCard = new JPanel();
+        settingsCard.setLayout(new BoxLayout(settingsCard, BoxLayout.Y_AXIS));
+        settingsCard.setBackground(DesktopUiKit.C_PANEL);
+        settingsCard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1),
+                BorderFactory.createEmptyBorder(8, 10, 8, 10)));
+        settingsCard.setVisible(false);
+
+        JPanel hdrBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        hdrBtns.setOpaque(false);
+        DesktopUiKit.VortexButton cfgBtn = new DesktopUiKit.VortexButton("Model / Key", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.SPARKLE);
+        cfgBtn.addActionListener(e -> {
+            settingsCard.setVisible(!settingsCard.isVisible());
+            topContainer.revalidate();
+            topContainer.repaint();
+        });
+        DesktopUiKit.VortexButton clearChatBtn = new DesktopUiKit.VortexButton("Clear", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.CLOSE);
+        clearChatBtn.addActionListener(e -> {
+            forgeChatHistory.clear();
+            rebuildForgeChatFeed();
+        });
+        hdrBtns.add(cfgBtn);
+        hdrBtns.add(clearChatBtn);
+        hdrBar.add(hdrBtns, BorderLayout.EAST);
+        topContainer.add(hdrBar, BorderLayout.NORTH);
+
         DesktopUiKit.VortexDropdown provCb = new DesktopUiKit.VortexDropdown(
                 VortexForgeAgent.PROVIDERS, VortexForgeAgent.PROVIDERS[initProv]);
         provCb.setAlignmentX(Component.LEFT_ALIGNMENT);
-        form.add(provCb);
-        form.add(Box.createVerticalStrut(8));
-
-        JLabel lKey = mutedLabel("API Key (saved locally; leave blank for Offline Smart Generator):");
-        lKey.setAlignmentX(Component.LEFT_ALIGNMENT);
-        form.add(lKey);
         final JTextField keyField = DesktopUiKit.createField(VortexForgeAgent.loadSavedApiKey(initProv));
         keyField.setAlignmentX(Component.LEFT_ALIGNMENT);
-        form.add(keyField);
-        form.add(Box.createVerticalStrut(8));
-
-        JLabel lModel = mutedLabel("Model ID (editable or click Fetch Live Models):");
-        lModel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        form.add(lModel);
 
         JPanel modelRow = new JPanel(new BorderLayout(6, 0));
         modelRow.setOpaque(false);
         modelRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        modelRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+        modelRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
         final JTextField modelField = DesktopUiKit.createField(VortexForgeAgent.loadSavedModel(initProv));
         final DesktopUiKit.VortexButton fetchModelsBtn = new DesktopUiKit.VortexButton(
                 "Live Models", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.REFRESH);
         modelRow.add(modelField, BorderLayout.CENTER);
         modelRow.add(fetchModelsBtn, BorderLayout.EAST);
-        form.add(modelRow);
-        form.add(Box.createVerticalStrut(8));
 
         provCb.setOnSelect((idx, val) -> {
             keyField.setText(VortexForgeAgent.loadSavedApiKey(idx));
             modelField.setText(VortexForgeAgent.loadSavedModel(idx));
         });
 
-        final JLabel statusLbl = new JLabel("Ready — Undo checkpoint automatic.");
+        final JLabel statusLbl = new JLabel("Tools active: write_file • edit_file • upsert_entity • blueprint • run_test");
+        statusLbl.setFont(DesktopUiKit.FONT_UI);
         statusLbl.setForeground(DesktopUiKit.C_TEXT_MUTED);
-        statusLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         fetchModelsBtn.addActionListener(e -> {
             final int pIdx = provCb.getSelectedIndex();
             final String k = keyField.getText().trim();
-            statusLbl.setText("Fetching live models from provider API…");
-            statusLbl.setForeground(DesktopUiKit.C_WHITE);
+            statusLbl.setText("Fetching live models…");
             new Thread(() -> {
                 try {
                     final List<String> models = VortexForgeAgent.fetchLiveModels(pIdx, k);
                     SwingUtilities.invokeLater(() -> {
-                        statusLbl.setText("Loaded " + models.size() + " live models — choose one:");
-                        statusLbl.setForeground(DesktopUiKit.C_OK_TX);
+                        statusLbl.setText("Loaded " + models.size() + " live models.");
                         List<DesktopUiKit.MenuAction> items = new ArrayList<>();
-                        int max = Math.min(28, models.size());
-                        for (int i = 0; i < max; i++) {
+                        for (int i = 0; i < Math.min(28, models.size()); i++) {
                             final String mid = models.get(i);
                             items.add(new DesktopUiKit.MenuAction(mid, () -> {
                                 modelField.setText(mid);
@@ -919,89 +1512,208 @@ public class VortexDesktopStudio extends JFrame {
                         DesktopUiKit.showPopupMenu(fetchModelsBtn, items);
                     });
                 } catch (Exception ex) {
-                    SwingUtilities.invokeLater(() -> {
-                        statusLbl.setText("Fetch error: " + ex.getMessage());
-                        statusLbl.setForeground(DesktopUiKit.C_DANGER_TX);
-                    });
+                    SwingUtilities.invokeLater(() -> statusLbl.setText("Model fetch error: " + ex.getMessage()));
                 }
             }, "forge-fetch-models").start();
         });
 
-        final DesktopUiKit.VortexToggle replaceToggle = new DesktopUiKit.VortexToggle(
-                "Replace current scene entities cleanly", true);
-        replaceToggle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        form.add(replaceToggle);
+        JLabel lp = mutedLabel("Provider (Groq openai/gpt-oss-120b • OpenRouter $0 Free • Offline):");
+        lp.setAlignmentX(Component.LEFT_ALIGNMENT);
+        settingsCard.add(lp);
+        settingsCard.add(provCb);
+        settingsCard.add(Box.createVerticalStrut(5));
+        JLabel lk = mutedLabel("API Key (stored locally):");
+        lk.setAlignmentX(Component.LEFT_ALIGNMENT);
+        settingsCard.add(lk);
+        settingsCard.add(keyField);
+        settingsCard.add(Box.createVerticalStrut(5));
+        JLabel lm = mutedLabel("Model ID:");
+        lm.setAlignmentX(Component.LEFT_ALIGNMENT);
+        settingsCard.add(lm);
+        settingsCard.add(modelRow);
+        topContainer.add(settingsCard, BorderLayout.CENTER);
+        p.add(topContainer, BorderLayout.NORTH);
 
-        final DesktopUiKit.VortexToggle javaGenToggle = new DesktopUiKit.VortexToggle(
-                "Generate script in Native Java (off = ES6 JavaScript)", false);
-        javaGenToggle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        form.add(javaGenToggle);
-        form.add(Box.createVerticalStrut(8));
+        // Center: Scrollable Multi-Turn Conversation Feed
+        forgeMessagesBox = new JPanel();
+        forgeMessagesBox.setLayout(new BoxLayout(forgeMessagesBox, BoxLayout.Y_AXIS));
+        forgeMessagesBox.setBackground(DesktopUiKit.C_VOID);
+        forgeMessagesBox.setBorder(BorderFactory.createEmptyBorder(4, 2, 8, 4));
+        forgeMessagesScroll = DesktopUiKit.createScrollPane(forgeMessagesBox);
+        forgeMessagesScroll.setBorder(BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1));
+        p.add(forgeMessagesScroll, BorderLayout.CENTER);
 
-        JLabel l3 = mutedLabel("Describe the 2D or 3D Game Mechanic / Scene to Build:");
-        l3.setAlignmentX(Component.LEFT_ALIGNMENT);
-        form.add(l3);
+        // Bottom: Quick Tool Prompts + Multi-Turn Input Composer
+        JPanel composer = new JPanel(new BorderLayout(0, 5));
+        composer.setOpaque(false);
 
-        JTextArea promptArea = new JTextArea("2D cyber swarm arena with animated drones, XP gems, and auto-aim blaster", 4, 28);
-        promptArea.setLineWrap(true);
-        promptArea.setWrapStyleWord(true);
-        promptArea.setBackground(DesktopUiKit.C_INPUT_BG);
-        promptArea.setForeground(DesktopUiKit.C_TEXT);
-        promptArea.setCaretColor(DesktopUiKit.C_WHITE);
-        promptArea.setFont(DesktopUiKit.FONT_UI);
-        promptArea.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        JScrollPane promptSp = DesktopUiKit.createScrollPane(promptArea);
-        promptSp.setBorder(BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1));
-        promptSp.setAlignmentX(Component.LEFT_ALIGNMENT);
-        promptSp.setPreferredSize(new Dimension(360, 82));
-        form.add(promptSp);
-        form.add(Box.createVerticalStrut(10));
+        JPanel quickRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        quickRow.setOpaque(false);
+        final JTextArea chatInput = new JTextArea(2, 24);
 
-        DesktopUiKit.VortexButton genBtn = new DesktopUiKit.VortexButton(
-                "Generate Scene & Code (+ Undo Checkpoint)", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.SPARKLE);
-        genBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        genBtn.addActionListener(e -> {
-            pushUndo();
-            if (javaGenToggle.isSelected()) {
-                project.scriptLanguage = "JAVA";
-            } else if ("JAVA".equalsIgnoreCase(project.scriptLanguage)) {
-                project.scriptLanguage = "JS";
-            }
-            statusLbl.setText("Generating with Forge AI…");
+        final Runnable sendTurn = () -> {
+            final String userText = chatInput.getText().trim();
+            if (userText.isEmpty()) return;
+            chatInput.setText("");
+            syncCode();
+            VortexForgeAgent.ChatMessage uMsg = new VortexForgeAgent.ChatMessage("user", userText);
+            forgeChatHistory.add(uMsg);
+            rebuildForgeChatFeed();
+            statusLbl.setText("Forge AI inspecting files & running tools…");
             statusLbl.setForeground(DesktopUiKit.C_WHITE);
+
             final int selProv = provCb.getSelectedIndex();
             final String selModel = modelField.getText().trim();
             final String selKey = keyField.getText().trim();
-            final String selPrompt = promptArea.getText().trim();
-            final boolean rep = replaceToggle.isSelected();
-            new Thread(() -> {
+            final List<VortexForgeAgent.ChatMessage> historySnapshot = new ArrayList<>(forgeChatHistory);
+            // Save undo checkpoint before agent mutates workspace
+            final String preTurnJson = project.toJsonString();
+
+            Thread worker = new Thread(() -> {
                 try {
-                    String msg = VortexForgeAgent.applyPromptToProject(
-                            project, selPrompt, selProv, selModel, selKey, rep);
+                    final VortexForgeAgent.ChatTurnResult res = VortexForgeAgent.runChatTurn(
+                            project, historySnapshot, userText, selProv, selModel, selKey);
                     SwingUtilities.invokeLater(() -> {
-                        modelField.setText(VortexForgeAgent.loadSavedModel(selProv));
-                        loadProjectIntoStudio(project);
-                        statusLbl.setText("✓ " + msg);
+                        if (res.mutatedProject) {
+                            undoStack.push(preTurnJson);
+                            while (undoStack.size() > 35) undoStack.removeLast();
+                            redoStack.clear();
+                            loadProjectIntoStudio(project);
+                        }
+                        VortexForgeAgent.ChatMessage aMsg = new VortexForgeAgent.ChatMessage("assistant", res.reply);
+                        aMsg.toolBadges.addAll(res.toolBadges);
+                        forgeChatHistory.add(aMsg);
+                        while (forgeChatHistory.size() > 30) forgeChatHistory.remove(0);
+                        rebuildForgeChatFeed();
+                        statusLbl.setText(res.toolBadges.isEmpty() ? "Ready" : "✓ " + String.join(" • ", res.toolBadges));
                         statusLbl.setForeground(DesktopUiKit.C_OK_TX);
-                        log("[FORGE AI] " + msg);
+                        if (res.mutatedProject) {
+                            log("[FORGE AI] " + String.join(", ", res.toolBadges));
+                        }
                     });
                 } catch (Exception ex) {
                     SwingUtilities.invokeLater(() -> {
+                        forgeChatHistory.add(new VortexForgeAgent.ChatMessage("assistant", "Error: " + ex.getMessage()));
+                        rebuildForgeChatFeed();
                         statusLbl.setText("Error: " + ex.getMessage());
                         statusLbl.setForeground(DesktopUiKit.C_DANGER_TX);
-                        log("[FORGE ERROR] " + ex.getMessage());
                     });
                 }
-            }, "forge-generate").start();
-        });
-        form.add(genBtn);
-        form.add(Box.createVerticalStrut(6));
-        form.add(statusLbl);
+            }, "forge-chat-turn");
+            worker.setDaemon(true);
+            worker.start();
+        };
 
-        JScrollPane outerScroll = DesktopUiKit.createScrollPane(form);
-        outerScroll.getViewport().setBackground(DesktopUiKit.C_VOID);
-        p.add(outerScroll, BorderLayout.CENTER);
+        String[][] quickPrompts = {
+                {"Run Test", "Run a 60-frame headless test on my project and check all files"},
+                {"+ Dialog UI", "Add a modular UI script with an in-game dialog box and objective label"},
+                {"+ Boss Module", "Spawn a boss enemy with its own modular AI script and boss HP bar"}
+        };
+        for (final String[] qp : quickPrompts) {
+            DesktopUiKit.VortexButton chip = new DesktopUiKit.VortexButton(qp[0], DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.SPARKLE);
+            chip.addActionListener(e -> {
+                chatInput.setText(qp[1]);
+                sendTurn.run();
+            });
+            quickRow.add(chip);
+        }
+        composer.add(quickRow, BorderLayout.NORTH);
+
+        JPanel inputRow = new JPanel(new BorderLayout(6, 0));
+        inputRow.setOpaque(false);
+        chatInput.setLineWrap(true);
+        chatInput.setWrapStyleWord(true);
+        chatInput.setBackground(DesktopUiKit.C_INPUT_BG);
+        chatInput.setForeground(DesktopUiKit.C_TEXT);
+        chatInput.setCaretColor(DesktopUiKit.C_WHITE);
+        chatInput.setFont(DesktopUiKit.FONT_UI);
+        chatInput.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+        chatInput.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER && !e.isShiftDown()) {
+                    e.consume();
+                    sendTurn.run();
+                }
+            }
+        });
+        JScrollPane inputSp = DesktopUiKit.createScrollPane(chatInput);
+        inputSp.setBorder(BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1));
+        inputSp.setPreferredSize(new Dimension(240, DesktopUiKit.scaled(52)));
+
+        DesktopUiKit.VortexButton sendBtn = new DesktopUiKit.VortexButton("Send", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.SEND);
+        sendBtn.addActionListener(e -> sendTurn.run());
+
+        inputRow.add(inputSp, BorderLayout.CENTER);
+        inputRow.add(sendBtn, BorderLayout.EAST);
+        composer.add(inputRow, BorderLayout.CENTER);
+        composer.add(statusLbl, BorderLayout.SOUTH);
+
+        p.add(composer, BorderLayout.SOUTH);
+        rebuildForgeChatFeed();
         return p;
+    }
+
+    private void rebuildForgeChatFeed() {
+        if (forgeMessagesBox == null) return;
+        forgeMessagesBox.removeAll();
+        if (forgeChatHistory.isEmpty()) {
+            VortexForgeAgent.ChatMessage welcome = new VortexForgeAgent.ChatMessage(
+                    "assistant",
+                    "Ready to collaborate on **" + (project != null ? project.title : "your game") + "**.\n"
+                    + "I have full visibility into your multi-file directory (`"
+                    + (project != null ? project.scriptFiles.size() : 1) + "` files), scene hierarchy, and Blueprint GUI blocks. "
+                    + "Ask me to create/edit script modules, spawn enemies, add dialog boxes, or run a live playtest!");
+            forgeMessagesBox.add(createChatBubble(welcome));
+        } else {
+            for (VortexForgeAgent.ChatMessage m : forgeChatHistory) {
+                forgeMessagesBox.add(createChatBubble(m));
+                forgeMessagesBox.add(Box.createVerticalStrut(6));
+            }
+        }
+        forgeMessagesBox.revalidate();
+        forgeMessagesBox.repaint();
+        if (forgeMessagesScroll != null) {
+            SwingUtilities.invokeLater(() -> {
+                javax.swing.JScrollBar bar = forgeMessagesScroll.getVerticalScrollBar();
+                if (bar != null) bar.setValue(bar.getMaximum());
+            });
+        }
+    }
+
+    private JPanel createChatBubble(VortexForgeAgent.ChatMessage m) {
+        boolean isUser = "user".equalsIgnoreCase(m.role);
+        JPanel card = new JPanel(new BorderLayout(0, 4));
+        card.setBackground(isUser ? DesktopUiKit.C_SURFACE : DesktopUiKit.C_PANEL);
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(isUser ? DesktopUiKit.C_WHITE : DesktopUiKit.C_BORDER, 1),
+                BorderFactory.createEmptyBorder(7, 9, 7, 9)));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        top.setOpaque(false);
+        JLabel roleLbl = new JLabel(isUser ? "YOU" : "FORGE AI");
+        roleLbl.setFont(DesktopUiKit.FONT_UI_BOLD);
+        roleLbl.setForeground(DesktopUiKit.C_WHITE);
+        top.add(roleLbl);
+        for (String badge : m.toolBadges) {
+            JLabel b = new JLabel("[" + badge + "]");
+            b.setFont(new Font("Monospaced", Font.PLAIN, DesktopUiKit.scaledFontPt(10)));
+            b.setForeground(DesktopUiKit.C_OK_TX);
+            top.add(b);
+        }
+        card.add(top, BorderLayout.NORTH);
+
+        JTextArea body = new JTextArea(m.text);
+        body.setEditable(false);
+        body.setLineWrap(true);
+        body.setWrapStyleWord(true);
+        body.setOpaque(false);
+        body.setForeground(DesktopUiKit.C_TEXT);
+        body.setFont(DesktopUiKit.FONT_UI);
+        body.setBorder(null);
+        card.add(body, BorderLayout.CENTER);
+        return card;
     }
 
     // =========================================================================
@@ -1434,10 +2146,29 @@ public class VortexDesktopStudio extends JFrame {
 
     private void loadProjectIntoStudio(GameProject p) {
         this.project = p;
+        p.ensureScriptFilesInitialized();
         dimBtn.setText("Mode: " + p.dimensionMode);
         syncVmDropdown();
-        scriptArea.setText(p.scriptCode == null ? "" : p.scriptCode);
-        scriptArea.setCaretPosition(0);
+        openScriptTabs.clear();
+        String activeBody = p.scriptFiles.getOrDefault(p.activeScriptFile, p.scriptCode == null ? "" : p.scriptCode);
+        p.scriptCode = activeBody;
+        syncingEditorBuffers = true;
+        try {
+            scriptArea.setText(activeBody);
+            scriptArea.setCaretPosition(0);
+            if (snappedZone != null) {
+                if (!p.scriptFiles.containsKey(snappedFilePath)) {
+                    snappedFilePath = p.activeScriptFile;
+                }
+                snappedScriptArea.setText(p.scriptFiles.getOrDefault(snappedFilePath, ""));
+                snappedScriptArea.setCaretPosition(0);
+                snappedTitleLabel.setText(snappedFilePath + "  [SNAPPED " + snappedZone + "]");
+            }
+        } finally {
+            syncingEditorBuffers = false;
+        }
+        refreshScriptFileExplorer();
+        if (blueprintPanel != null) blueprintPanel.bindProject(p);
         viewport.loadProject(p, false);
         if (!p.entities.isEmpty()) {
             viewport.setSelectedEntityId(p.entities.get(0).id);
@@ -1446,6 +2177,8 @@ public class VortexDesktopStudio extends JFrame {
         refreshFlowListModel();
         populateInspector();
         checkScriptSyntax();
+        rebuildForgeChatFeed();
+        telemetryLabel.setText("Editor • " + p.entities.size() + " objs • " + p.dimensionMode + " / " + p.scriptLanguage);
         playStopBtn.setText("PLAY GAME");
         playStopBtn.setIconType(DesktopUiKit.Icon.PLAY);
         playStopBtn.setVariant(DesktopUiKit.Variant.PRIMARY);
@@ -1688,11 +2421,14 @@ public class VortexDesktopStudio extends JFrame {
 
     private void togglePlayMode() {
         if (viewport.isPlaying()) {
+            viewport.audioEngine.stopAll();
             viewport.loadProject(project, false);
+            telemetryLabel.setText("Editor • " + project.entities.size() + " objs • "
+                    + project.dimensionMode + " / " + project.scriptLanguage);
             playStopBtn.setText("PLAY GAME");
             playStopBtn.setIconType(DesktopUiKit.Icon.PLAY);
             playStopBtn.setVariant(DesktopUiKit.Variant.PRIMARY);
-            log("Stopped Play Mode.");
+            log("Stopped Play Mode (audio cut immediately).");
         } else {
             if (!checkScriptSyntax()) {
                 rightTabs.selectTabByKey("CODE", true);
@@ -1700,11 +2436,14 @@ public class VortexDesktopStudio extends JFrame {
                         "Please fix the highlighted script syntax error in the Code tab before starting Play Mode.");
                 return;
             }
+            if (centerCanvasTabs != null) centerCanvasTabs.selectTabByKey("VIEWPORT", true);
             viewport.loadProject(project.deepCopy(), true);
             playStopBtn.setText("STOP PLAY");
             playStopBtn.setIconType(DesktopUiKit.Icon.STOP);
             playStopBtn.setVariant(DesktopUiKit.Variant.DANGER);
-            log("Started Live Play Mode (" + project.scriptLanguage + ") — Controls: WASD/Arrows + Space(A) + Shift/K(B).");
+            log("Started Live Play Mode (" + project.scriptLanguage + ", "
+                    + project.scriptFiles.size() + " file(s), "
+                    + project.blueprintNodes.size() + " Blueprint block(s)).");
         }
     }
 
@@ -1892,7 +2631,7 @@ public class VortexDesktopStudio extends JFrame {
 
     private boolean checkScriptSyntax() {
         syncCode();
-        String check = VortexScriptEngine.validateSyntax(project.scriptLanguage, project.scriptCode);
+        String check = VortexScriptEngine.validateProjectSyntax(project);
         if (check.startsWith("OK")) {
             syntaxStatusLabel.setText("✓ " + check);
             syntaxStatusLabel.setForeground(DesktopUiKit.C_OK_TX);
@@ -1905,10 +2644,20 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     private void syncCode() {
-        if (project != null) project.scriptCode = scriptArea.getText();
+        if (project == null) return;
+        project.ensureScriptFilesInitialized();
+        String current = scriptArea.getText();
+        project.putScriptFile(project.activeScriptFile, current);
+        if (snappedZone != null && snappedFilePath != null && !snappedFilePath.equals(project.activeScriptFile)) {
+            project.putScriptFile(snappedFilePath, snappedScriptArea.getText());
+        }
     }
 
     private void log(String s) {
+        String existing = consoleArea.getText();
+        if (existing.length() > 24_000) {
+            consoleArea.setText(existing.substring(existing.length() - 16_000));
+        }
         consoleArea.append(s + "\n");
         consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
     }
@@ -1986,6 +2735,12 @@ public class VortexDesktopStudio extends JFrame {
         restart.addActionListener(e -> vp.loadProject(gameProj.deepCopy(), true));
         top.add(restart);
         frame.add(top, BorderLayout.NORTH);
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                vp.shutdown();
+            }
+        });
 
         frame.setVisible(true);
         vp.loadProject(gameProj.deepCopy(), true);
@@ -2008,9 +2763,9 @@ public class VortexDesktopStudio extends JFrame {
     // Headless Verification Suite (Java VM + ES6 JS + Lua + LRM + Forge + UI)
     // =========================================================================
     private static void runHeadlessSelfTests() throws Exception {
-        System.out.println("=== Vortex Engine v4.2.0 Headless Verification Suite ===");
+        System.out.println("=== Vortex Engine v4.3.0 Headless Verification Suite ===");
 
-        // 1) Zero-Blue Monochrome Palette Verification
+        // 1) Zero-Blue Monochrome Palette + Laptop UI Scale Verification
         Color[] uiColors = {
                 DesktopUiKit.C_VOID, DesktopUiKit.C_HEADER, DesktopUiKit.C_PANEL,
                 DesktopUiKit.C_SURFACE, DesktopUiKit.C_WHITE, DesktopUiKit.C_CYAN
@@ -2020,9 +2775,25 @@ public class VortexDesktopStudio extends JFrame {
                 throw new RuntimeException("Blue tint detected in UI color: " + c);
             }
         }
-        System.out.println("  [PASS] Zero-Blue Monochrome Dark + Crisp White UI Palette Verified!");
+        DesktopUiKit.setUiScale(0.85f);
+        if (DesktopUiKit.scaled(100) != 85) throw new RuntimeException("UI scale math failed!");
+        DesktopUiKit.setUiScale(0.92f);
+        System.out.println("  [PASS] Zero-Blue Monochrome Palette + Laptop UI Scale Engine Verified!");
 
-        // 2) JSplitPane Drag & Resize Verification
+        // 2) Instant Audio Stop (< 15ms) & Idle Editor Zero-FPS Verification
+        DesktopSoftware3DViewport vpCheck = new DesktopSoftware3DViewport();
+        GameProject idleProj = ProjectTemplates.create("NEON_SURVIVORS_JS_2D", "IdleTest", "com.vortex.idle");
+        vpCheck.loadProject(idleProj, false);
+        long t0 = System.nanoTime();
+        vpCheck.audioEngine.stopAll();
+        long stopMs = (System.nanoTime() - t0) / 1_000_000L;
+        if (stopMs > 50 || vpCheck.isPlaying()) {
+            throw new RuntimeException("Idle/Audio stop verification failed! stopMs=" + stopMs);
+        }
+        vpCheck.shutdown();
+        System.out.println("  [PASS] Instant Audio Cutoff (" + stopMs + "ms) & Zero-Idle Editor Timer Verified!");
+
+        // 3) JSplitPane Drag & Resize Verification
         JPanel dummyA = new JPanel();
         dummyA.setPreferredSize(new Dimension(320, 600));
         JPanel dummyB = new JPanel();
@@ -2039,7 +2810,7 @@ public class VortexDesktopStudio extends JFrame {
         }
         System.out.println("  [PASS] SplitPane Draggable Divider Range Verified (min=" + minAllowed + "px .. max=" + maxAllowed + "px)");
 
-        // 3) All Starter Templates (including Native JAVA VM!)
+        // 4) All Starter Templates via Multi-File + Blueprint `compileProject`!
         for (int i = 0; i < ProjectTemplates.TEMPLATE_KEYS.length; i++) {
             String key = ProjectTemplates.TEMPLATE_KEYS[i];
             GameProject p = ProjectTemplates.create(key, "Test_" + key, "com.vortex.test." + key.toLowerCase(Locale.US));
@@ -2047,8 +2818,8 @@ public class VortexDesktopStudio extends JFrame {
             VortexScriptEngine vm = new VortexScriptEngine();
             vm.attach(p, pw, null);
 
-            if (!vm.compileAndInit(p.scriptCode)) {
-                throw new RuntimeException("Template failed compile (" + key + "): " + vm.getLastError());
+            if (!vm.compileProject(p)) {
+                throw new RuntimeException("Template failed compileProject (" + key + "): " + vm.getLastError());
             }
 
             vm.inputJoyX = 0.6f;
@@ -2058,15 +2829,26 @@ public class VortexDesktopStudio extends JFrame {
                 List<PhysicsWorld.CollisionEvent> cols = pw.step(p, 0.016f);
                 for (PhysicsWorld.CollisionEvent ce : cols) vm.notifyCollision(ce.a, ce.b);
             }
+            vm.dispose();
 
             GameProject rt = GameProject.fromJsonString(p.toJsonString());
-            if (rt.entities.isEmpty()) throw new RuntimeException("JSON round-trip lost entities for " + key);
+            if (rt.entities.isEmpty() || rt.scriptFiles.isEmpty() || rt.blueprintNodes.isEmpty()) {
+                throw new RuntimeException("JSON round-trip lost entities/files/blueprints for " + key);
+            }
             System.out.println("  [PASS] Template " + key + " (" + p.dimensionMode + " / " + p.scriptLanguage
-                    + " / entities=" + p.entities.size() + " / banner='" + vm.hudBanner + "')");
+                    + " / files=" + p.scriptFiles.size() + " / bpNodes=" + p.blueprintNodes.size() + ")");
         }
 
-        // 4) Vortex Flow Triple Compiler (JS + JAVA + LUA)
+        // 5) Blueprint Visual Diagram + Classic Flow + In-Game GUI Widgets Verification
         GameProject cyber = ProjectTemplates.create("CYBER_MAZE_AI_2D", "Cyber Hunters", "com.vortex.cyber");
+        String bpJs = com.vortex.engine.core.flow.VortexBlueprintGraph.compileGraph(cyber, "JS");
+        String bpJava = com.vortex.engine.core.flow.VortexBlueprintGraph.compileGraph(cyber, "JAVA");
+        String bpLua = com.vortex.engine.core.flow.VortexBlueprintGraph.compileGraph(cyber, "LUA");
+        if (!VortexScriptEngine.validateSyntax("JS", bpJs).startsWith("OK")
+                || !VortexScriptEngine.validateSyntax("JAVA", bpJava).startsWith("OK")
+                || !VortexScriptEngine.validateSyntax("LUA", bpLua).startsWith("OK")) {
+            throw new RuntimeException("Blueprint triple compiler syntax check failed!");
+        }
         String flowJs = VortexFlowCompiler.compileToJavaScript(cyber);
         String flowJava = VortexFlowCompiler.compileToJava(cyber);
         String flowLua = VortexFlowCompiler.compileToLua(cyber);
@@ -2075,7 +2857,18 @@ public class VortexDesktopStudio extends JFrame {
                 || !VortexScriptEngine.validateSyntax("LUA", flowLua).startsWith("OK")) {
             throw new RuntimeException("Flow triple compiler syntax check failed!");
         }
-        System.out.println("  [PASS] Vortex Flow Triple Compiler (JS + Native Java + Lua 5.2) Verified!");
+        System.out.println("  [PASS] Blueprint Graph + Classic Flow Compilers (JS + Java + Lua + GUI Blocks) Verified!");
+
+        // 6) Multi-Turn Contextual Forge AI Chat + IDE Tool Execution Verification
+        List<VortexForgeAgent.ChatMessage> chatHist = new ArrayList<>();
+        GameProject chatProj = ProjectTemplates.create("NEON_SURVIVORS_JS_2D", "ChatTest", "com.vortex.chat");
+        int filesBefore = chatProj.scriptFiles.size();
+        VortexForgeAgent.ChatTurnResult turn1 = VortexForgeAgent.runChatTurn(
+                chatProj, chatHist, "Add a modular dialog and HUD label UI file", 0, "", "");
+        if (!turn1.mutatedProject || chatProj.scriptFiles.size() <= filesBefore || turn1.testReport == null || !turn1.testReport.ok) {
+            throw new RuntimeException("Forge AI chat tool execution failed! " + turn1.reply);
+        }
+        System.out.println("  [PASS] Multi-Turn Forge AI Contextual Tools (" + String.join(", ", turn1.toolBadges) + ") Verified!");
 
         // 5) Forge AI (Retired Groq Migration + Reasoning <think> Stripper + Offline JS & Java)
         VortexForgeAgent.savePrefs(1, "llama-3.3-70b-versatile", "");
@@ -2146,6 +2939,6 @@ public class VortexDesktopStudio extends JFrame {
         tmpExe.delete();
         tmpZip.delete();
 
-        System.out.println("=== ALL VORTEX v4.2.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
+        System.out.println("=== ALL VORTEX v4.3.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
     }
 }

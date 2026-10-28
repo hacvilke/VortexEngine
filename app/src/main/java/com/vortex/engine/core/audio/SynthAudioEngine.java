@@ -4,21 +4,36 @@ import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Procedural 16-bit PCM synthesizer for zero-asset arcade & 3D game sound effects.
+ * Procedural 16-bit PCM synthesizer for zero-asset arcade & 3D game sound effects on Android.
+ * v4.3.0: Instantaneous pause+flush+stop+release cutoff on stopMusicLoop()/stopAll() and daemon threads.
  */
 public class SynthAudioEngine {
     private static final int SAMPLE_RATE = 22050;
+    private static final AtomicInteger THREAD_SEQ = new AtomicInteger(1);
     private final Map<String, short[]> clips = new HashMap<>();
-    private final ExecutorService audioPool = Executors.newFixedThreadPool(3);
+    private final ExecutorService audioPool = Executors.newFixedThreadPool(3, new ThreadFactory() {
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, "Vortex-Android-SFX-" + THREAD_SEQ.getAndIncrement());
+            t.setDaemon(true);
+            return t;
+        }
+    });
     private volatile boolean muted = false;
     private AudioTrack musicTrack = null;
+    private final Set<AudioTrack> activeSfxTracks = Collections.synchronizedSet(new HashSet<>());
 
     public SynthAudioEngine() {
         generatePresets();
@@ -26,6 +41,9 @@ public class SynthAudioEngine {
 
     public void setMuted(boolean muted) {
         this.muted = muted;
+        if (muted) {
+            stopAll();
+        }
     }
 
     public boolean isMuted() {
@@ -62,7 +80,7 @@ public class SynthAudioEngine {
         double phase = 0.0;
         for (int i = 0; i < n; i++) {
             double t = (double) i / n;
-            double hz = t < 0.35 ? 987.77 : 1318.51; // B5 -> E6
+            double hz = t < 0.35 ? 987.77 : 1318.51;
             phase += 2.0 * Math.PI * hz / SAMPLE_RATE;
             double env = Math.pow(1.0 - t, 1.3);
             pcm[i] = (short) (Math.sin(phase) * env * 0.45 * Short.MAX_VALUE);
@@ -99,8 +117,22 @@ public class SynthAudioEngine {
         return pcm;
     }
 
+    private static void forceReleaseTrack(AudioTrack t) {
+        if (t == null) return;
+        try {
+            t.pause();
+            t.flush();
+            t.stop();
+        } catch (Throwable ignored) {
+        }
+        try {
+            t.release();
+        } catch (Throwable ignored) {
+        }
+    }
+
     public void play(String soundName) {
-        if (muted || soundName == null) return;
+        if (muted || soundName == null || audioPool.isShutdown()) return;
         final short[] pcm = clips.get(soundName.toLowerCase().trim());
         if (pcm == null) return;
 
@@ -123,17 +155,17 @@ public class SynthAudioEngine {
                         AudioTrack.MODE_STATIC,
                         AudioManager.AUDIO_SESSION_ID_GENERATE
                 );
+                activeSfxTracks.add(track);
+                if (muted) return;
                 track.write(pcm, 0, pcm.length);
                 track.play();
-                long sleepMs = (pcm.length * 1000L) / SAMPLE_RATE + 40L;
+                long sleepMs = (pcm.length * 1000L) / SAMPLE_RATE + 35L;
                 Thread.sleep(sleepMs);
             } catch (Throwable ignored) {
             } finally {
                 if (track != null) {
-                    try {
-                        track.release();
-                    } catch (Throwable ignored) {
-                    }
+                    activeSfxTracks.remove(track);
+                    forceReleaseTrack(track);
                 }
             }
         });
@@ -164,18 +196,29 @@ public class SynthAudioEngine {
     }
 
     public synchronized void stopMusicLoop() {
-        if (musicTrack != null) {
+        AudioTrack t = musicTrack;
+        musicTrack = null;
+        if (t != null) {
             try {
-                musicTrack.stop();
-                musicTrack.release();
+                t.setLoopPoints(0, 0, 0);
             } catch (Throwable ignored) {
             }
-            musicTrack = null;
+            forceReleaseTrack(t);
+        }
+    }
+
+    public void stopAll() {
+        stopMusicLoop();
+        synchronized (activeSfxTracks) {
+            for (AudioTrack t : activeSfxTracks) {
+                forceReleaseTrack(t);
+            }
+            activeSfxTracks.clear();
         }
     }
 
     public void shutdown() {
-        stopMusicLoop();
+        stopAll();
         audioPool.shutdownNow();
     }
 }

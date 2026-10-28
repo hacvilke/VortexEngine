@@ -144,11 +144,13 @@ public class DesktopExporter {
                 putBytes(zos, "res/" + dirs[i] + "/ic_launcher.png", renderDesktopIconPng(sizes[i], p));
             }
 
+            p.ensureScriptFilesInitialized();
             putUtf8(zos, "assets/project.vortex.json", p.toJsonString());
-            String scriptExt = "JAVA".equalsIgnoreCase(p.scriptLanguage) ? "main.java"
-                    : "JS".equalsIgnoreCase(p.scriptLanguage) ? "main.js"
-                    : ("LUA".equalsIgnoreCase(p.scriptLanguage) ? "main.lua" : "main.vxs");
-            putUtf8(zos, "assets/scripts/" + scriptExt, p.scriptCode == null ? "" : p.scriptCode);
+            for (Map.Entry<String, String> sf : p.scriptFiles.entrySet()) {
+                String rel = GameProject.normalizeScriptPath(sf.getKey());
+                if (!rel.startsWith("scripts/")) rel = "scripts/" + rel;
+                putUtf8(zos, "assets/" + rel, sf.getValue() == null ? "" : sf.getValue());
+            }
 
             for (Map.Entry<String, String> m : p.customObjMeshes.entrySet()) {
                 putUtf8(zos, "assets/meshes/" + m.getKey() + ".obj", m.getValue());

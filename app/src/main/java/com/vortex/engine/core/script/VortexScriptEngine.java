@@ -63,6 +63,69 @@ public class VortexScriptEngine {
     public volatile String hudBanner = "";
     public volatile float elapsedTime = 0f;
 
+    // v4.3 Built-In In-Game GUI Overlay State (Labels, Progress/HP Bars, RPG/Story Dialog Box)
+    public static final class UiWidget {
+        public String id;
+        public String kind; // "LABEL" or "BAR"
+        public String text = "";
+        public float xPct = 50f;
+        public float yPct = 14f;
+        public float value = 100f;
+        public float maxValue = 100f;
+        public int fontSize = 15;
+        public String colorHex = "#FFFFFF";
+    }
+
+    public static final class DialogState {
+        public volatile boolean active = false;
+        public volatile String speaker = "";
+        public volatile String message = "";
+        public volatile boolean timed = false;
+        public volatile float remainingSec = 0f;
+        public volatile float ageSec = 0f;
+
+        public void reset() {
+            active = false;
+            speaker = "";
+            message = "";
+            timed = false;
+            remainingSec = 0f;
+            ageSec = 0f;
+        }
+    }
+
+    public static final class PlaytestReport {
+        public boolean ok;
+        public int framesSimulated;
+        public int activeEntities;
+        public int finalScore;
+        public int finalHealth;
+        public int uiWidgetCount;
+        public boolean dialogShown;
+        public String error;
+        public final List<String> logs = new ArrayList<>();
+
+        public String toSummary() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(ok ? "[TEST PASS]" : "[TEST FAIL]")
+              .append(" frames=").append(framesSimulated)
+              .append(" entities=").append(activeEntities)
+              .append(" score=").append(finalScore)
+              .append(" hp=").append(finalHealth)
+              .append(" ui=").append(uiWidgetCount + (dialogShown ? 1 : 0));
+            if (error != null && !error.isEmpty()) {
+                sb.append("\nError: ").append(error);
+            }
+            if (!logs.isEmpty()) {
+                sb.append("\nLogs: ").append(String.join(" | ", logs.subList(0, Math.min(6, logs.size()))));
+            }
+            return sb.toString();
+        }
+    }
+
+    public final Map<String, UiWidget> uiWidgets = new java.util.concurrent.ConcurrentHashMap<>();
+    public final DialogState activeDialog = new DialogState();
+
     private GameProject project;
     private PhysicsWorld physicsWorld;
     private HostBridge hostBridge;
@@ -78,6 +141,9 @@ public class VortexScriptEngine {
     private Scriptable rhinoScope;
     private Interpreter javaInterpreter;
     private Object javaScriptInstance;
+    private final List<String> javaModuleVars = new ArrayList<>();
+    private final Map<String, List<Function>> jsHookChains = new HashMap<>();
+    private final Map<String, List<LuaValue>> luaHookChains = new HashMap<>();
 
     private static final int MAX_RHINO_OPS_PER_CALL = 250_000;
     private static final ThreadLocal<Integer> rhinoOpsCounter = new ThreadLocal<>();
@@ -115,7 +181,7 @@ public class VortexScriptEngine {
             "shake", "shakeCamera", "setCamTarget", "setCamDist", "setSky",
             "addScore", "setScore", "getScore", "setHealth", "addHealth", "getHealth",
             "saveData", "loadData", "loadNum",
-            "setBanner", "setHudText", "log",
+            "setBanner", "setHudText", "showDialog", "hideDialog", "setLabel", "setProgressBar", "removeUI", "clearUI", "log",
             "chaseAI", "chaseTagAI", "raycast",
             "tweenPos", "tweenScale", "tweenRot", "tweenTagYoyo",
             "noise2D", "noise3D", "terrainHeight", "rand", "clamp", "time"
@@ -362,21 +428,278 @@ public class VortexScriptEngine {
         return validateSyntax("VXS", code);
     }
 
-    public synchronized boolean compileAndInit(String sourceCode) {
+    public static String validateProjectSyntax(GameProject p) {
+        if (p == null) return "OK";
+        p.ensureScriptFilesInitialized();
+        for (Map.Entry<String, String> entry : p.scriptFiles.entrySet()) {
+            String res = validateSyntax(p.scriptLanguage, entry.getValue());
+            if (!res.startsWith("OK")) {
+                return "[" + entry.getKey() + "] " + res;
+            }
+        }
+        return validateSyntax(p.scriptLanguage, p.getActiveScriptContent());
+    }
+
+    public static PlaytestReport runHeadlessPlaytest(GameProject srcProject, int frames) {
+        PlaytestReport rep = new PlaytestReport();
+        if (srcProject == null) {
+            rep.ok = false;
+            rep.error = "Null project";
+            return rep;
+        }
+        String syn = validateProjectSyntax(srcProject);
+        if (!syn.startsWith("OK")) {
+            rep.ok = false;
+            rep.error = syn;
+            return rep;
+        }
+        GameProject sandbox = srcProject.deepCopy();
+        PhysicsWorld pw = new PhysicsWorld();
+        VortexScriptEngine se = new VortexScriptEngine();
+        se.attach(sandbox, pw, new HostBridge() {
+            @Override public void onLog(String message) { if (rep.logs.size() < 24) rep.logs.add(message); }
+            @Override public void onCameraShake(float intensity, float duration) {}
+            @Override public void onEmitParticles(float x, float y, float z, int count, String colorHex) {}
+            @Override public void onPlaySound(String soundName) {}
+            @Override public void onPlayMusic(String pattern, int bpm) {}
+            @Override public void onStopMusic() {}
+        });
+        boolean ok = se.compileProject(sandbox);
+        if (!ok) {
+            rep.ok = false;
+            rep.error = se.getLastError();
+            se.dispose();
+            return rep;
+        }
+        int stepCount = Math.max(1, Math.min(240, frames));
+        for (int f = 0; f < stepCount; f++) {
+            se.update(0.016f);
+            List<PhysicsWorld.CollisionEvent> cols = pw.step(sandbox, 0.016f);
+            for (PhysicsWorld.CollisionEvent ce : cols) {
+                se.notifyCollision(ce.a, ce.b);
+            }
+            if (!se.compiledOk && se.getLastError() != null) {
+                rep.ok = false;
+                rep.error = se.getLastError();
+                rep.framesSimulated = f + 1;
+                se.dispose();
+                return rep;
+            }
+        }
+        int aliveCnt = 0;
+        for (Entity e : sandbox.entities) {
+            if (e.alive) aliveCnt++;
+        }
+        rep.ok = true;
+        rep.framesSimulated = stepCount;
+        rep.activeEntities = aliveCnt;
+        rep.finalScore = se.score;
+        rep.finalHealth = se.health;
+        rep.uiWidgetCount = se.uiWidgets.size();
+        rep.dialogShown = se.activeDialog.active;
+        se.dispose();
+        return rep;
+    }
+
+    public synchronized void dispose() {
         globals.clear();
         functions.clear();
+        jsHookChains.clear();
+        luaHookChains.clear();
+        javaModuleVars.clear();
         luaGlobals = null;
         rhinoScope = null;
         javaInterpreter = null;
         javaScriptInstance = null;
+        uiWidgets.clear();
+        activeDialog.reset();
+        tweenSystem.reset();
+        aiEngine.reset();
+        rhinoOpsCounter.remove();
+        compiledOk = false;
+    }
+
+    public synchronized boolean compileProject(GameProject proj) {
+        if (proj == null) return false;
+        this.project = proj;
+        Map<String, String> modules = proj.getOrderedRuntimeScriptModules();
+        if (modules.size() <= 1) {
+            String single = modules.isEmpty() ? proj.scriptCode : modules.values().iterator().next();
+            return compileAndInit(single);
+        }
+        return compileMultiFileModules(modules);
+    }
+
+    private synchronized boolean compileMultiFileModules(Map<String, String> modules) {
+        dispose();
+        score = 0;
+        health = 100;
+        hudBanner = "";
+        elapsedTime = 0f;
+        lastError = null;
+
+        if (project != null && project.musicEnabled && hostBridge != null) {
+            hostBridge.onPlayMusic(project.musicPattern, project.musicBpm);
+        }
+
+        String sample = modules.values().iterator().next();
+        String lang = project != null ? project.scriptLanguage : "JS";
+        activeVmMode = detectRuntimeMode(lang, sample);
+        usingLua = "LUA".equals(activeVmMode);
+        String[] hookNames = {"onStart", "onUpdate", "onButton", "onCollide"};
+
+        if ("JS".equals(activeVmMode)) {
+            Context cx = SANDBOXED_RHINO_FACTORY.enterContext();
+            try {
+                rhinoOpsCounter.set(0);
+                rhinoScope = cx.initSafeStandardObjects();
+                registerRhinoEngineApi(cx, rhinoScope);
+                for (String hn : hookNames) jsHookChains.put(hn, new ArrayList<>());
+
+                for (Map.Entry<String, String> mod : modules.entrySet()) {
+                    for (String hn : hookNames) {
+                        ScriptableObject.deleteProperty(rhinoScope, hn);
+                    }
+                    String jsSrc = transpileModernEs6ForRhino(mod.getValue() == null ? "" : mod.getValue());
+                    cx.evaluateString(rhinoScope, jsSrc, mod.getKey(), 1, null);
+                    for (String hn : hookNames) {
+                        Object prop = ScriptableObject.getProperty(rhinoScope, hn);
+                        if (prop instanceof Function) {
+                            jsHookChains.get(hn).add((Function) prop);
+                        }
+                    }
+                }
+                compiledOk = true;
+            } catch (RhinoException re) {
+                lastError = re.sourceName() + " Line " + re.lineNumber() + ": " + re.details();
+                log("[JS Error] " + lastError);
+                return false;
+            } catch (Throwable t) {
+                lastError = t.getMessage();
+                log("[JS Error] " + lastError);
+                return false;
+            } finally {
+                rhinoOpsCounter.remove();
+                Context.exit();
+            }
+            callHook("onStart");
+            return compiledOk;
+        } else if ("JAVA".equals(activeVmMode)) {
+            try {
+                javaInterpreter = new Interpreter();
+                VortexJavaBridge api = new VortexJavaBridge();
+                javaInterpreter.set("vortex", api);
+                javaInterpreter.eval(
+                        "void print(Object o) { vortex.log(String.valueOf(o)); }\n" +
+                        "void println(Object o) { vortex.log(String.valueOf(o)); }\n");
+
+                int modIdx = 0;
+                for (Map.Entry<String, String> mod : modules.entrySet()) {
+                    String javaSrc = normalizeJavaForInterpreter(mod.getValue() == null ? "" : mod.getValue());
+                    if (javaSrc.trim().isEmpty()) continue;
+                    String entryCls = detectJavaEntryClassName(javaSrc);
+                    String varName = "__modInst_" + (modIdx++);
+                    if (entryCls != null) {
+                        javaInterpreter.eval(javaSrc);
+                        Object inst;
+                        try {
+                            inst = javaInterpreter.eval("new " + entryCls + "(vortex)");
+                        } catch (Throwable ignored) {
+                            inst = javaInterpreter.eval("new " + entryCls + "()");
+                        }
+                        javaInterpreter.set(varName, inst);
+                        try { javaInterpreter.eval(varName + ".vortex = vortex;"); } catch (Throwable ignored) {}
+                        javaModuleVars.add(varName);
+                    } else {
+                        String synthCls = "__VortexModClass_" + modIdx;
+                        javaInterpreter.eval("public class " + synthCls + " {\n" + javaSrc + "\n}");
+                        Object inst = javaInterpreter.eval("new " + synthCls + "()");
+                        javaInterpreter.set(varName, inst);
+                        javaModuleVars.add(varName);
+                    }
+                }
+                compiledOk = true;
+                callHook("onStart");
+                return true;
+            } catch (EvalError ee) {
+                lastError = "Line " + ee.getErrorLineNumber() + ": " + ee.getMessage();
+                log("[Java Error] " + lastError);
+                return false;
+            } catch (Throwable t) {
+                lastError = t.getMessage();
+                log("[Java Error] " + lastError);
+                return false;
+            }
+        } else if (usingLua) {
+            try {
+                luaGlobals = JsePlatform.standardGlobals();
+                registerLuaEngineApi(luaGlobals);
+                registerLuaInMemoryRequire(luaGlobals, modules);
+                for (String hn : hookNames) luaHookChains.put(hn, new ArrayList<>());
+
+                for (Map.Entry<String, String> mod : modules.entrySet()) {
+                    for (String hn : hookNames) luaGlobals.set(hn, LuaValue.NIL);
+                    LuaValue chunk = luaGlobals.load(mod.getValue() == null ? "" : mod.getValue(), mod.getKey());
+                    chunk.call();
+                    for (String hn : hookNames) {
+                        LuaValue fn = luaGlobals.get(hn);
+                        if (fn != null && fn.isfunction()) {
+                            luaHookChains.get(hn).add(fn);
+                        }
+                    }
+                }
+                compiledOk = true;
+                callHook("onStart");
+                return true;
+            } catch (Exception ex) {
+                lastError = ex.getMessage();
+                log("[Lua Error] " + lastError);
+                return false;
+            }
+        } else {
+            StringBuilder joined = new StringBuilder();
+            for (String code : modules.values()) {
+                if (code != null) joined.append(code).append("\n");
+            }
+            return compileAndInit(joined.toString());
+        }
+    }
+
+    private void registerLuaInMemoryRequire(final Globals g, final Map<String, String> modules) {
+        try {
+            LuaValue pkg = g.get("package");
+            if (pkg != null && pkg.istable()) {
+                LuaValue preload = pkg.get("preload");
+                if (preload != null && preload.istable()) {
+                    for (final Map.Entry<String, String> e : modules.entrySet()) {
+                        String rawKey = e.getKey().replace('\\', '/');
+                        String noExt = rawKey.endsWith(".lua") ? rawKey.substring(0, rawKey.length() - 4) : rawKey;
+                        String dotKey = noExt.replace('/', '.');
+                        String baseName = noExt.contains("/") ? noExt.substring(noExt.lastIndexOf('/') + 1) : noExt;
+                        VarArgFunction loader = new VarArgFunction() {
+                            @Override
+                            public Varargs invoke(Varargs args) {
+                                return g.load(e.getValue() == null ? "" : e.getValue(), e.getKey()).call();
+                            }
+                        };
+                        preload.set(noExt, loader);
+                        preload.set(dotKey, loader);
+                        preload.set(baseName, loader);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    public synchronized boolean compileAndInit(String sourceCode) {
+        dispose();
         score = 0;
         health = 100;
         hudBanner = "";
         elapsedTime = 0f;
         lastError = null;
         compiledOk = false;
-        tweenSystem.reset();
-        aiEngine.reset();
 
         if (project != null && project.musicEnabled && hostBridge != null) {
             hostBridge.onPlayMusic(project.musicPattern, project.musicBpm);
@@ -437,6 +760,7 @@ public class VortexScriptEngine {
                 log("[JS Error] " + lastError);
                 return false;
             } finally {
+                rhinoOpsCounter.remove();
                 Context.exit();
             }
             callHook("onStart");
@@ -638,6 +962,15 @@ public class VortexScriptEngine {
         public String loadData(String k, String def) { return String.valueOf(callBuiltIn("loadData", new Object[]{k, def}, 0)); }
         public float loadNum(String k, double def) { return ((Number) callBuiltIn("loadNum", new Object[]{k, def}, 0)).floatValue(); }
         public void setBanner(String text) { callBuiltIn("setBanner", new Object[]{text}, 0); }
+        public void showDialog(String speaker, String msg) { callBuiltIn("showDialog", new Object[]{speaker, msg, 0.0}, 0); }
+        public void showDialog(String speaker, String msg, double durSec) { callBuiltIn("showDialog", new Object[]{speaker, msg, durSec}, 0); }
+        public void hideDialog() { callBuiltIn("hideDialog", new Object[0], 0); }
+        public void setLabel(String id, String text, double xPct, double yPct) { callBuiltIn("setLabel", new Object[]{id, text, xPct, yPct, 15.0, "#FFFFFF"}, 0); }
+        public void setLabel(String id, String text, double xPct, double yPct, double fontSize, String hex) { callBuiltIn("setLabel", new Object[]{id, text, xPct, yPct, fontSize, hex}, 0); }
+        public void setProgressBar(String id, String label, double val, double max, double xPct, double yPct) { callBuiltIn("setProgressBar", new Object[]{id, label, val, max, xPct, yPct, "#FFFFFF"}, 0); }
+        public void setProgressBar(String id, String label, double val, double max, double xPct, double yPct, String hex) { callBuiltIn("setProgressBar", new Object[]{id, label, val, max, xPct, yPct, hex}, 0); }
+        public void removeUI(String id) { callBuiltIn("removeUI", new Object[]{id}, 0); }
+        public void clearUI() { callBuiltIn("clearUI", new Object[0], 0); }
         public void log(Object msg) { VortexScriptEngine.this.log(String.valueOf(msg)); }
         public float rand(double lo, double hi) { return ((Number) callBuiltIn("rand", new Object[]{lo, hi}, 0)).floatValue(); }
         public float time() { return elapsedTime; }
@@ -645,6 +978,15 @@ public class VortexScriptEngine {
 
     public synchronized void update(float dt) {
         elapsedTime += dt;
+        if (activeDialog.active) {
+            activeDialog.ageSec += dt;
+            if (activeDialog.timed) {
+                activeDialog.remainingSec -= dt;
+                if (activeDialog.remainingSec <= 0f) {
+                    activeDialog.active = false;
+                }
+            }
+        }
         aiEngine.onFrameTick();
         tweenSystem.update(dt);
         if (!compiledOk) return;
@@ -657,6 +999,9 @@ public class VortexScriptEngine {
     }
 
     public synchronized void notifyButton(String buttonName) {
+        if (activeDialog.active && !activeDialog.timed && activeDialog.ageSec > 0.25f && "A".equalsIgnoreCase(buttonName)) {
+            activeDialog.active = false;
+        }
         if (!compiledOk) return;
         callHook("onButton", buttonName);
     }
@@ -665,37 +1010,43 @@ public class VortexScriptEngine {
         if ("JAVA".equals(activeVmMode)) {
             if (javaInterpreter == null) return null;
             try {
-                String targetPrefix = javaScriptInstance != null ? "__gameInstance." : "";
-                if ("onStart".equals(fnName)) {
-                    try { javaInterpreter.eval(targetPrefix + "onStart();"); } catch (EvalError ignored) {}
-                } else if ("onUpdate".equals(fnName)) {
+                List<String> prefixes = new ArrayList<>();
+                if (!javaModuleVars.isEmpty()) {
+                    for (String mv : javaModuleVars) prefixes.add(mv + ".");
+                } else {
+                    prefixes.add(javaScriptInstance != null ? "__gameInstance." : "");
+                }
+
+                if ("onUpdate".equals(fnName)) {
                     float dtVal = (args != null && args.length > 0 && args[0] instanceof Number)
                             ? ((Number) args[0]).floatValue() : 0.016f;
                     javaInterpreter.set("__dt", dtVal);
-                    try {
-                        javaInterpreter.eval(targetPrefix + "onUpdate(__dt);");
-                    } catch (EvalError ee) {
-                        if (ee.getMessage() != null && ee.getMessage().contains("Method onUpdate")) return null;
-                        throw ee;
-                    }
                 } else if ("onButton".equals(fnName)) {
                     String btn = (args != null && args.length > 0) ? String.valueOf(args[0]) : "";
                     javaInterpreter.set("__btn", btn);
-                    try {
-                        javaInterpreter.eval(targetPrefix + "onButton(__btn);");
-                    } catch (EvalError ee) {
-                        if (ee.getMessage() != null && ee.getMessage().contains("Method onButton")) return null;
-                        throw ee;
-                    }
                 } else if ("onCollide".equals(fnName) && args != null && args.length >= 4) {
                     javaInterpreter.set("__ca", String.valueOf(args[0]));
                     javaInterpreter.set("__cb", String.valueOf(args[1]));
                     javaInterpreter.set("__ta", String.valueOf(args[2]));
                     javaInterpreter.set("__tb", String.valueOf(args[3]));
+                }
+
+                for (String targetPrefix : prefixes) {
                     try {
-                        javaInterpreter.eval(targetPrefix + "onCollide(__ca, __cb, __ta, __tb);");
+                        if ("onStart".equals(fnName)) {
+                            javaInterpreter.eval(targetPrefix + "onStart();");
+                        } else if ("onUpdate".equals(fnName)) {
+                            javaInterpreter.eval(targetPrefix + "onUpdate(__dt);");
+                        } else if ("onButton".equals(fnName)) {
+                            javaInterpreter.eval(targetPrefix + "onButton(__btn);");
+                        } else if ("onCollide".equals(fnName) && args != null && args.length >= 4) {
+                            javaInterpreter.eval(targetPrefix + "onCollide(__ca, __cb, __ta, __tb);");
+                        }
                     } catch (EvalError ee) {
-                        if (ee.getMessage() != null && ee.getMessage().contains("Method onCollide")) return null;
+                        String msg = ee.getMessage();
+                        if (msg != null && (msg.contains("Method " + fnName) || msg.contains("not found"))) {
+                            continue;
+                        }
                         throw ee;
                     }
                 }
@@ -712,14 +1063,26 @@ public class VortexScriptEngine {
         }
         if ("JS".equals(activeVmMode)) {
             if (rhinoScope == null) return null;
-            Object prop = ScriptableObject.getProperty(rhinoScope, fnName);
-            if (!(prop instanceof Function)) return null;
+            List<Function> chain = jsHookChains.get(fnName);
+            List<Function> toCall = new ArrayList<>();
+            if (chain != null && !chain.isEmpty()) {
+                toCall.addAll(chain);
+            } else {
+                Object prop = ScriptableObject.getProperty(rhinoScope, fnName);
+                if (prop instanceof Function) toCall.add((Function) prop);
+            }
+            if (toCall.isEmpty()) return null;
             Context cx = SANDBOXED_RHINO_FACTORY.enterContext();
             try {
-                rhinoOpsCounter.set(0);
-                return ((Function) prop).call(cx, rhinoScope, rhinoScope, args == null ? new Object[0] : args);
+                Object last = null;
+                Object[] safeArgs = args == null ? new Object[0] : args;
+                for (Function fn : toCall) {
+                    rhinoOpsCounter.set(0);
+                    last = fn.call(cx, rhinoScope, rhinoScope, safeArgs);
+                }
+                return last;
             } catch (RhinoException re) {
-                lastError = "Line " + re.lineNumber() + ": " + re.details();
+                lastError = re.sourceName() + " Line " + re.lineNumber() + ": " + re.details();
                 log("[JS Runtime Error in " + fnName + "] " + lastError);
                 compiledOk = false;
             } catch (Throwable t) {
@@ -727,14 +1090,22 @@ public class VortexScriptEngine {
                 log("[JS Error in " + fnName + "] " + lastError);
                 compiledOk = false;
             } finally {
+                rhinoOpsCounter.remove();
                 Context.exit();
             }
             return null;
         }
         if (usingLua) {
             if (luaGlobals == null) return null;
-            LuaValue fn = luaGlobals.get(fnName);
-            if (fn == null || fn.isnil() || !fn.isfunction()) return null;
+            List<LuaValue> chain = luaHookChains.get(fnName);
+            List<LuaValue> toCall = new ArrayList<>();
+            if (chain != null && !chain.isEmpty()) {
+                toCall.addAll(chain);
+            } else {
+                LuaValue fn = luaGlobals.get(fnName);
+                if (fn != null && !fn.isnil() && fn.isfunction()) toCall.add(fn);
+            }
+            if (toCall.isEmpty()) return null;
             try {
                 LuaValue[] lArgs = new LuaValue[args.length];
                 for (int i = 0; i < args.length; i++) {
@@ -743,7 +1114,9 @@ public class VortexScriptEngine {
                     else if (a instanceof Boolean) lArgs[i] = LuaValue.valueOf((Boolean) a);
                     else lArgs[i] = LuaValue.valueOf(String.valueOf(a));
                 }
-                fn.invoke(lArgs);
+                for (LuaValue fn : toCall) {
+                    fn.invoke(lArgs);
+                }
             } catch (Exception ex) {
                 lastError = ex.getMessage();
                 log("[Lua Runtime Error in " + fnName + "] " + lastError);
@@ -1126,6 +1499,60 @@ public class VortexScriptEngine {
             case "getHealth": return (double) health;
             case "setBanner":
             case "setHudText": hudBanner = str(a, 0); return 0.0;
+            case "showDialog": {
+                activeDialog.speaker = a.length > 0 ? str(a, 0) : "";
+                activeDialog.message = a.length > 1 ? str(a, 1) : str(a, 0);
+                float dur = a.length > 2 ? flt(a, 2, 0f) : 0f;
+                activeDialog.timed = dur > 0.05f;
+                activeDialog.remainingSec = dur;
+                activeDialog.ageSec = 0f;
+                activeDialog.active = true;
+                return 0.0;
+            }
+            case "hideDialog": {
+                activeDialog.reset();
+                return 0.0;
+            }
+            case "setLabel": {
+                String id = str(a, 0);
+                if (id.isEmpty()) id = "label_default";
+                UiWidget w = uiWidgets.get(id);
+                if (w == null) w = new UiWidget();
+                w.id = id;
+                w.kind = "LABEL";
+                w.text = a.length > 1 ? str(a, 1) : "";
+                w.xPct = Math.max(2f, Math.min(98f, flt(a, 2, 50f)));
+                w.yPct = Math.max(3f, Math.min(96f, flt(a, 3, 14f)));
+                w.fontSize = Math.max(10, Math.min(36, Math.round(flt(a, 4, 15f))));
+                w.colorHex = a.length > 5 && !str(a, 5).isEmpty() ? str(a, 5) : "#FFFFFF";
+                uiWidgets.put(id, w);
+                return 0.0;
+            }
+            case "setProgressBar": {
+                String id = str(a, 0);
+                if (id.isEmpty()) id = "bar_default";
+                UiWidget w = uiWidgets.get(id);
+                if (w == null) w = new UiWidget();
+                w.id = id;
+                w.kind = "BAR";
+                w.text = a.length > 1 ? str(a, 1) : "";
+                w.value = flt(a, 2, 100f);
+                w.maxValue = Math.max(1f, flt(a, 3, 100f));
+                w.xPct = Math.max(5f, Math.min(95f, flt(a, 4, 50f)));
+                w.yPct = Math.max(4f, Math.min(95f, flt(a, 5, 10f)));
+                w.colorHex = a.length > 6 && !str(a, 6).isEmpty() ? str(a, 6) : "#FFFFFF";
+                uiWidgets.put(id, w);
+                return 0.0;
+            }
+            case "removeUI": {
+                uiWidgets.remove(str(a, 0));
+                return 0.0;
+            }
+            case "clearUI": {
+                uiWidgets.clear();
+                activeDialog.reset();
+                return 0.0;
+            }
             case "log": log(str(a, 0)); return 0.0;
 
             // Open-Source FastNoiseLite procedural noise functions!

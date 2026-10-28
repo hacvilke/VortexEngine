@@ -1,10 +1,34 @@
-# Vortex Engine Studio — v4.2.0 ("Monolith White Edition")
+# Vortex Engine Studio — v4.3.0 ("Monolith White Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
 
-## What's New in v4.2.0 ("Monolith White Edition")
+## What's New in v4.3.0
+
+### 1. Multi-File Code Directory Sidebar & Modular Hook Chaining
+- **Multi-File Script Organization (`scripts/main.*`, `objects/*`, `ui/*`)**: Replaced the single monolithic script buffer with a dedicated **File Directory Sidebar** (Desktop `FILES` explorer + open file tab bar; Android mobile horizontal file chips + `+ File`).
+- **Seamless Multi-Module Compilation**: `VortexScriptEngine` automatically links and chains lifecycle hooks (`onStart`, `onUpdate(dt)`, `onCollision(a, b, tagA, tagB)`) across all project files in **ES6+ JavaScript**, **Native Java (`GameScript`)**, and **Lua 5.2**, and syncs every module file cleanly into `hacvilke/lrm` workspaces (`scripts/**`) and single-file HTML5 Web exports.
+
+### 2. Laptop Screen Scaling (`85%`–`115%`) & Drag/Drop/Snap Split Code Tabs
+- **Auto-Adaptive Laptop UI Scaling**: Automatically detects compact laptop screens (`1280×720`, `1366×768`, `1536×864`) and scales fonts, paddings, toolbars, and split proportions cleanly, plus an interactive **`85% / 92% / 100% / 115%`** UI Zoom selector in the header.
+- **Drag, Drop & Snap Code Panes**: Drag any open code file tab directly over the right or bottom half of the Scene Viewport (with live dashed drop-zone preview) — or click **Snap Split** — to dock a live second code editor right beside or beneath the viewport.
+
+### 3. Blueprint Visual Flow Diagram + In-Game GUI Blocks (Dialogs, Labels & Bars)
+- **Lightweight Blueprint Node Graph (Alongside Classic `Flow`)**: Kept the existing `Flow` event-sheet tab intact and added a dedicated **`Blueprint Graph`** stage tab with draggable Event, Condition, Action, and **GUI** blocks connected via anti-aliased Bezier execution wires, compiling cleanly to JS, Java, or Lua.
+- **In-Game GUI Blocks & Runtime HUD System**: Added visual & scripted **Dialog Boxes** (`showDialog(speaker, message, duration)` / `hideDialog()`), **Text Labels** (`setLabel(id, text, xPct, yPct, size, color)`), and **Progress / Health / XP Bars** (`setProgressBar(id, label, value, max, xPct, yPct, color)`) rendered across Desktop, Android Touch/HUD Overlay, and HTML5 Web!
+
+### 4. Continuous Multi-Turn Forge AI Chat with Contextual IDE Tools
+- **Multi-Turn Conversational Agent**: Upgraded Forge AI from single-shot prompts into a persistent multi-turn chat session (`Clear Chat` to reset) on both Desktop and Android.
+- **Contextual IDE Tool Execution**: Forge AI inspects your active file tree, entities, Blueprint nodes, and console state and executes structured IDE tools (`create_file`, `edit_file`, `delete_file`, `upsert_entity`, `remove_entity`, `add_blueprint_node`, `run_test`) with automatic Undo checkpoints and live 60-frame headless verification badges.
+
+### 5. Instant (`0ms`) Audio Cutoff, Playtest-Only FPS & Zero-Leak Engine Polish
+- **Instant Audio Cutoff on Stop**: Tracked active `SourceDataLine` (Desktop) and `AudioTrack` (Android) handles with atomic generation tokens so stopping Play calls `stop() + flush() + close()` immediately (`0ms` trailing chiptune buffer bleed).
+- **Playtest-Only FPS & Zero Idle Churn**: Stopped the `16ms` viewport tick loop in Editor mode (`RENDERMODE_WHEN_DIRTY` on Android OpenGL ES) so idle Editor mode uses ~0% CPU and never displays fake FPS counters — FPS telemetry runs strictly during live game playtests.
+
+---
+
+## Core Highlights from v4.2.0 ("Monolith White Edition")
 
 ### 1. Zero-Blue Monochrome Carbon + Crisp White (`#FFFFFF`) Design System & Vector Icons
 - **Pure Neutral Carbon + Crisp White UI**: Unified every Desktop and Android Mobile screen, control, HUD pill, sprite default, and launcher icon under a zero-blue **Monochrome Carbon (`#09090B` / `#101013` / `#18181C`) + Crisp White (`#FFFFFF`)** aesthetic (`PRIMARY` solid white with carbon ink, `ACCENT` crisp white-outlined carbon, `SECONDARY` neutral zinc, `DANGER` crimson).

@@ -121,6 +121,69 @@ public class TouchControlsOverlay extends View {
                 float tw = paintText.measureText(banner);
                 canvas.drawText(banner, Math.max(pad, (w - tw) * 0.5f), pad + pillH + 21f * density, paintText);
             }
+
+            // v4.3 In-Game Custom GUI Widgets (Labels & Progress/Chart Bars) + Story Dialog Box
+            if (scriptEngine != null) {
+                int h = getHeight();
+                for (VortexScriptEngine.UiWidget wg : scriptEngine.uiWidgets.values()) {
+                    float wx = (wg.xPct / 100f) * w;
+                    float wy = (wg.yPct / 100f) * h;
+                    int wc = parseHexSafe(wg.colorHex, Color.WHITE);
+                    if ("BAR".equalsIgnoreCase(wg.kind)) {
+                        float bw = Math.min(220f * density, w * 0.45f);
+                        float bh = 12f * density;
+                        float bx = wx - bw * 0.5f;
+                        float ratio = Math.max(0f, Math.min(1f, wg.value / Math.max(0.0001f, wg.maxValue)));
+                        paintText.setTextSize(10.5f * density);
+                        paintText.setColor(Color.WHITE);
+                        canvas.drawText(wg.text + " (" + Math.round(wg.value) + "/" + Math.round(wg.maxValue) + ")",
+                                bx, wy - 4f * density, paintText);
+                        hpRect.set(bx, wy, bx + bw, wy + bh);
+                        paintFill.setColor(Color.argb(215, 14, 14, 18));
+                        canvas.drawRoundRect(hpRect, 5f * density, 5f * density, paintFill);
+                        hpRect.set(bx + 2f * density, wy + 2f * density,
+                                bx + 2f * density + Math.max(0f, (bw - 4f * density) * ratio), wy + bh - 2f * density);
+                        paintFill.setColor(wc);
+                        canvas.drawRoundRect(hpRect, 4f * density, 4f * density, paintFill);
+                    } else {
+                        paintText.setTextSize(wg.fontSize * density * 0.92f);
+                        float tw = paintText.measureText(wg.text);
+                        hpRect.set(wx - tw * 0.5f - 8f * density, wy - wg.fontSize * density,
+                                wx + tw * 0.5f + 8f * density, wy + 5f * density);
+                        paintFill.setColor(Color.argb(185, 10, 10, 14));
+                        canvas.drawRoundRect(hpRect, 6f * density, 6f * density, paintFill);
+                        paintText.setColor(wc);
+                        canvas.drawText(wg.text, wx - tw * 0.5f, wy, paintText);
+                    }
+                }
+
+                VortexScriptEngine.DialogState dlg = scriptEngine.activeDialog;
+                if (dlg != null && dlg.active && dlg.message != null && !dlg.message.isEmpty()) {
+                    float dw = Math.min(520f * density, w - 32f * density);
+                    float dh = 76f * density;
+                    float dx = (w - dw) * 0.5f;
+                    float dy = showJoystick ? (pad + pillH + 34f * density) : (h - dh - 18f * density);
+                    hpRect.set(dx, dy, dx + dw, dy + dh);
+                    paintFill.setColor(Color.argb(236, 11, 11, 14));
+                    canvas.drawRoundRect(hpRect, 11f * density, 11f * density, paintFill);
+                    paintStroke.setStrokeWidth(1.4f * density);
+                    paintStroke.setColor(Color.argb(225, 255, 255, 255));
+                    canvas.drawRoundRect(hpRect, 11f * density, 11f * density, paintStroke);
+
+                    if (dlg.speaker != null && !dlg.speaker.isEmpty()) {
+                        paintText.setTextSize(10f * density);
+                        float sw = paintText.measureText(dlg.speaker.toUpperCase()) + 16f * density;
+                        hpRect.set(dx + 12f * density, dy - 9f * density, dx + 12f * density + sw, dy + 10f * density);
+                        paintFill.setColor(Color.WHITE);
+                        canvas.drawRoundRect(hpRect, 5f * density, 5f * density, paintFill);
+                        paintText.setColor(Color.rgb(10, 10, 12));
+                        canvas.drawText(dlg.speaker.toUpperCase(), dx + 20f * density, dy + 4f * density, paintText);
+                    }
+                    paintText.setTextSize(12.2f * density);
+                    paintText.setColor(Color.rgb(248, 248, 250));
+                    canvas.drawText(dlg.message, dx + 14f * density, dy + 34f * density, paintText);
+                }
+            }
         }
 
         paintStroke.setStrokeWidth(2.0f * density);
@@ -257,6 +320,14 @@ public class TouchControlsOverlay extends View {
         if (scriptEngine != null) {
             scriptEngine.inputJoyX = dx / joyRadius;
             scriptEngine.inputJoyY = -dy / joyRadius;
+        }
+    }
+
+    private static int parseHexSafe(String hex, int fallback) {
+        try {
+            return Color.parseColor(hex);
+        } catch (Exception e) {
+            return fallback;
         }
     }
 

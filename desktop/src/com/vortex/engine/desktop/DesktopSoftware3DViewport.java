@@ -102,7 +102,8 @@ public class DesktopSoftware3DViewport extends JPanel {
     private long lastTickNs = System.nanoTime();
     private int frameCount = 0;
     private long fpsWindowNs = System.nanoTime();
-    private int currentFps = 60;
+    private int currentFps = 0;
+    private String snapPreviewZone = null; // "LEFT", "RIGHT", "BOTTOM", or null
     private final Timer frameTimer;
 
     public DesktopSoftware3DViewport() {
@@ -110,8 +111,15 @@ public class DesktopSoftware3DViewport extends JPanel {
         setFocusable(true);
         setupInputs();
 
+        // Only run the 60 FPS frame timer during an active playtest (0% idle CPU & no idle FPS counter!)
         frameTimer = new Timer(16, e -> tickAndRepaint());
-        frameTimer.start();
+    }
+
+    public void setSnapPreviewZone(String zone) {
+        if ((snapPreviewZone == null && zone == null)
+                || (snapPreviewZone != null && snapPreviewZone.equals(zone))) return;
+        this.snapPreviewZone = zone;
+        repaint();
     }
 
     public void setViewportListener(ViewportListener l) {
@@ -134,6 +142,10 @@ public class DesktopSoftware3DViewport extends JPanel {
     }
 
     public void loadProject(final GameProject project, boolean startPlay) {
+        // Immediately kill all active audio lines & dispose previous VM before switching state
+        audioEngine.stopAll();
+        scriptEngine.dispose();
+
         this.activeProject = project;
         this.playing = startPlay;
         this.particles.clear();
@@ -142,6 +154,9 @@ public class DesktopSoftware3DViewport extends JPanel {
         this.cachedTerrainVerts = null;
         this.physicsWorld.reset();
         this.lastTickNs = System.nanoTime();
+        this.fpsWindowNs = System.nanoTime();
+        this.frameCount = 0;
+        this.currentFps = startPlay ? 60 : 0;
 
         scriptEngine.attach(project, physicsWorld, new VortexScriptEngine.HostBridge() {
             @Override
@@ -162,12 +177,12 @@ public class DesktopSoftware3DViewport extends JPanel {
 
             @Override
             public void onPlaySound(String soundName) {
-                audioEngine.play(soundName);
+                if (playing) audioEngine.play(soundName);
             }
 
             @Override
             public void onPlayMusic(String pattern, int bpm) {
-                audioEngine.startMusicLoop(pattern, bpm);
+                if (playing) audioEngine.startMusicLoop(pattern, bpm);
             }
 
             @Override
@@ -175,10 +190,6 @@ public class DesktopSoftware3DViewport extends JPanel {
                 audioEngine.stopMusicLoop();
             }
         });
-
-        if (!startPlay) {
-            audioEngine.stopMusicLoop();
-        }
 
         if (project != null) {
             editor2DZoom = project.zoom2D;
@@ -188,9 +199,15 @@ public class DesktopSoftware3DViewport extends JPanel {
                 playCamX = target.x; playCamY = target.y + project.cameraHeight; playCamZ = target.z + project.cameraDistance;
             }
             if (startPlay) {
-                scriptEngine.compileAndInit(project.scriptCode);
+                scriptEngine.compileProject(project);
+                if (!frameTimer.isRunning()) frameTimer.start();
                 requestFocusInWindow();
+            } else {
+                if (frameTimer.isRunning()) frameTimer.stop();
+                audioEngine.stopAll();
             }
+        } else {
+            if (frameTimer.isRunning()) frameTimer.stop();
         }
         repaint();
     }
@@ -343,6 +360,10 @@ public class DesktopSoftware3DViewport extends JPanel {
     }
 
     private void tickAndRepaint() {
+        if (!playing || activeProject == null) {
+            if (frameTimer.isRunning()) frameTimer.stop();
+            return;
+        }
         long now = System.nanoTime();
         float dt = (now - lastTickNs) / 1_000_000_000f;
         lastTickNs = now;
@@ -353,21 +374,19 @@ public class DesktopSoftware3DViewport extends JPanel {
             currentFps = Math.round(frameCount * 1_000_000_000f / Math.max(1L, now - fpsWindowNs));
             frameCount = 0;
             fpsWindowNs = now;
-            if (listener != null && activeProject != null) {
+            if (listener != null) {
                 listener.onTelemetry(currentFps, scriptEngine.score, scriptEngine.health, scriptEngine.hudBanner);
             }
         }
 
-        if (playing && activeProject != null) {
-            syncKeyboardAxes();
-            scriptEngine.update(dt);
-            List<PhysicsWorld.CollisionEvent> cols = physicsWorld.step(activeProject, dt);
-            for (PhysicsWorld.CollisionEvent ce : cols) {
-                scriptEngine.notifyCollision(ce.a, ce.b);
-            }
-            updateParticles(dt, activeProject.gravityY);
-            repaint();
+        syncKeyboardAxes();
+        scriptEngine.update(dt);
+        List<PhysicsWorld.CollisionEvent> cols = physicsWorld.step(activeProject, dt);
+        for (PhysicsWorld.CollisionEvent ce : cols) {
+            scriptEngine.notifyCollision(ce.a, ce.b);
         }
+        updateParticles(dt, activeProject.gravityY);
+        repaint();
     }
 
     private void emitParticles(float x, float y, float z, int count, String hex, boolean is3D) {
@@ -841,36 +860,141 @@ public class DesktopSoftware3DViewport extends JPanel {
     }
 
     private void paintHudOverlay(Graphics2D g2, GameProject p, int w, int h) {
+        int barW = Math.min(w - 24, 410);
         g2.setColor(new Color(14, 14, 17, 210));
-        g2.fill(new RoundRectangle2D.Float(14, 12, 418, 38, 10, 10));
+        g2.fill(new RoundRectangle2D.Float(12, 10, barW, 34, 9, 9));
         g2.setColor(new Color(58, 58, 66, 200));
         g2.setStroke(new BasicStroke(1f));
-        g2.draw(new RoundRectangle2D.Float(14, 12, 418, 38, 10, 10));
+        g2.draw(new RoundRectangle2D.Float(12, 10, barW, 34, 9, 9));
 
-        g2.setFont(new Font("SansSerif", Font.BOLD, 13));
+        g2.setFont(new Font("SansSerif", Font.BOLD, 12));
         if (playing) {
             g2.setColor(new Color(255, 255, 255));
-            g2.drawString("SCORE " + scriptEngine.score, 26, 36);
+            g2.drawString("SCORE " + scriptEngine.score, 22, 31);
             g2.setColor(scriptEngine.health > 30 ? new Color(134, 239, 172) : new Color(252, 165, 165));
-            g2.drawString("HP " + scriptEngine.health, 145, 36);
-            g2.setColor(new Color(175, 175, 184));
-            g2.drawString(currentFps + " FPS • WASD + Space(A) / Shift(B)", 225, 36);
+            g2.drawString("HP " + scriptEngine.health, 128, 31);
+            g2.setColor(new Color(185, 185, 194));
+            g2.drawString(currentFps + " FPS • WASD + Space(A) / Shift(B)", 202, 31);
 
             if (scriptEngine.hudBanner != null && !scriptEngine.hudBanner.isEmpty()) {
-                g2.setFont(new Font("SansSerif", Font.BOLD, 18));
+                g2.setFont(new Font("SansSerif", Font.BOLD, 16));
                 FontMetrics fm = g2.getFontMetrics();
                 int bw = fm.stringWidth(scriptEngine.hudBanner);
-                g2.setColor(new Color(14, 14, 17, 215));
-                g2.fillRoundRect((w - bw) / 2 - 14, 58, bw + 28, 32, 8, 8);
+                g2.setColor(new Color(14, 14, 17, 220));
+                g2.fillRoundRect((w - bw) / 2 - 14, 52, bw + 28, 30, 8, 8);
                 g2.setColor(new Color(255, 255, 255));
-                g2.drawString(scriptEngine.hudBanner, (w - bw) / 2, 80);
+                g2.drawString(scriptEngine.hudBanner, (w - bw) / 2, 72);
+            }
+
+            // In-Game Custom GUI Widgets (Labels & Progress/Chart Bars)
+            for (VortexScriptEngine.UiWidget wg : scriptEngine.uiWidgets.values()) {
+                int wx = Math.round((wg.xPct / 100f) * w);
+                int wy = Math.round((wg.yPct / 100f) * h);
+                Color wc = toAwtColor(wg.colorHex, 255);
+                if ("BAR".equalsIgnoreCase(wg.kind)) {
+                    int bw = Math.min(240, Math.max(120, w / 4));
+                    int bh = 14;
+                    int bx = wx - bw / 2;
+                    float ratio = Math.max(0f, Math.min(1f, wg.value / Math.max(0.0001f, wg.maxValue)));
+                    g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+                    g2.setColor(new Color(245, 245, 248));
+                    g2.drawString(wg.text + " (" + Math.round(wg.value) + "/" + Math.round(wg.maxValue) + ")", bx, wy - 4);
+                    g2.setColor(new Color(14, 14, 18, 220));
+                    g2.fillRoundRect(bx, wy, bw, bh, 6, 6);
+                    g2.setColor(wc);
+                    g2.fillRoundRect(bx + 2, wy + 2, Math.max(0, Math.round((bw - 4) * ratio)), bh - 4, 4, 4);
+                    g2.setColor(new Color(255, 255, 255, 95));
+                    g2.drawRoundRect(bx, wy, bw, bh, 6, 6);
+                } else {
+                    g2.setFont(new Font("SansSerif", Font.BOLD, Math.round(wg.fontSize)));
+                    FontMetrics fm = g2.getFontMetrics();
+                    int tw = fm.stringWidth(wg.text);
+                    g2.setColor(new Color(10, 10, 13, 185));
+                    g2.fillRoundRect(wx - tw / 2 - 8, wy - fm.getAscent() - 2, tw + 16, fm.getHeight() + 4, 6, 6);
+                    g2.setColor(wc);
+                    g2.drawString(wg.text, wx - tw / 2, wy);
+                }
+            }
+
+            // In-Game RPG / Story Dialog Box (`vortex.showDialog(...)` / Blueprint GUI Dialog Block)
+            VortexScriptEngine.DialogState dlg = scriptEngine.activeDialog;
+            if (dlg != null && dlg.active && dlg.message != null && !dlg.message.isEmpty()) {
+                int dw = Math.min(640, w - 40);
+                int dh = 86;
+                int dx = (w - dw) / 2;
+                int dy = h - dh - 18;
+                g2.setColor(new Color(11, 11, 14, 238));
+                g2.fillRoundRect(dx, dy, dw, dh, 12, 12);
+                g2.setColor(new Color(255, 255, 255, 220));
+                g2.setStroke(new BasicStroke(1.5f));
+                g2.drawRoundRect(dx, dy, dw, dh, 12, 12);
+
+                if (dlg.speaker != null && !dlg.speaker.isEmpty()) {
+                    g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+                    int sw = g2.getFontMetrics().stringWidth(dlg.speaker) + 20;
+                    g2.setColor(Color.WHITE);
+                    g2.fillRoundRect(dx + 14, dy - 11, sw, 20, 6, 6);
+                    g2.setColor(new Color(10, 10, 12));
+                    g2.drawString(dlg.speaker.toUpperCase(), dx + 24, dy + 3);
+                }
+                g2.setFont(new Font("SansSerif", Font.PLAIN, 14));
+                g2.setColor(new Color(248, 248, 250));
+                drawWrappedText(g2, dlg.message, dx + 18, dy + 32, dw - 36, 19);
             }
         } else {
             g2.setColor(new Color(255, 255, 255));
-            g2.drawString("EDITOR (" + p.dimensionMode + " • " + p.scriptLanguage + ")", 26, 36);
+            g2.drawString("EDITOR (" + p.dimensionMode + " • " + p.scriptLanguage + ")", 22, 31);
             g2.setColor(new Color(175, 175, 184));
-            g2.drawString("Left-Drag: Move • Right-Drag: Orbit/Pan • Wheel: Zoom", 190, 36);
+            g2.drawString("Drag: Move • Right-Drag: Orbit/Pan • Wheel: Zoom", 168, 31);
         }
+
+        // Visual Code-Tab Drag/Drop Snap Zone Highlight
+        if (snapPreviewZone != null) {
+            int zx = 8, zy = 8, zw = w - 16, zh = h - 16;
+            String label = "SNAP CODE SPLIT";
+            if ("RIGHT".equals(snapPreviewZone)) {
+                zx = w / 2 + 4; zw = w / 2 - 12;
+                label = "DROP TO SNAP CODE RIGHT OF VIEWPORT";
+            } else if ("LEFT".equals(snapPreviewZone)) {
+                zx = 8; zw = w / 2 - 12;
+                label = "DROP TO SNAP CODE LEFT OF VIEWPORT";
+            } else if ("BOTTOM".equals(snapPreviewZone)) {
+                zy = h / 2 + 4; zh = h / 2 - 12;
+                label = "DROP TO SNAP CODE BELOW VIEWPORT";
+            }
+            g2.setColor(new Color(255, 255, 255, 34));
+            g2.fillRoundRect(zx, zy, zw, zh, 12, 12);
+            g2.setColor(new Color(255, 255, 255, 225));
+            g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 1f, new float[]{8f, 6f}, 0f));
+            g2.drawRoundRect(zx, zy, zw, zh, 12, 12);
+            g2.setFont(new Font("SansSerif", Font.BOLD, 13));
+            FontMetrics fm = g2.getFontMetrics();
+            int lw = fm.stringWidth(label);
+            g2.setColor(new Color(12, 12, 15, 230));
+            g2.fillRoundRect(zx + (zw - lw) / 2 - 12, zy + zh / 2 - 16, lw + 24, 30, 8, 8);
+            g2.setColor(Color.WHITE);
+            g2.drawString(label, zx + (zw - lw) / 2, zy + zh / 2 + 4);
+        }
+    }
+
+    private void drawWrappedText(Graphics2D g2, String text, int x, int y, int maxW, int lineH) {
+        FontMetrics fm = g2.getFontMetrics();
+        String[] words = text.split("\\s+");
+        StringBuilder line = new StringBuilder();
+        int curY = y;
+        for (String wd : words) {
+            String test = line.length() == 0 ? wd : line + " " + wd;
+            if (fm.stringWidth(test) > maxW && line.length() > 0) {
+                g2.drawString(line.toString(), x, curY);
+                line.setLength(0);
+                line.append(wd);
+                curY += lineH;
+            } else {
+                line.setLength(0);
+                line.append(test);
+            }
+        }
+        if (line.length() > 0) g2.drawString(line.toString(), x, curY);
     }
 
     private Entity pickEntity(int mx, int my) {
@@ -925,5 +1049,6 @@ public class DesktopSoftware3DViewport extends JPanel {
     public void shutdown() {
         frameTimer.stop();
         audioEngine.shutdown();
+        scriptEngine.dispose();
     }
 }

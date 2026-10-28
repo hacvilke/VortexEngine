@@ -38,7 +38,8 @@ public class VortexGameSurfaceView extends FrameLayout {
 
         renderer = new VortexGLRenderer();
         glView.setRenderer(renderer);
-        glView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
+        // Default to on-demand rendering in Editor mode; switch to CONTINUOUSLY only during live Play!
+        glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
 
         controlsOverlay = new TouchControlsOverlay(context, renderer.scriptEngine);
         controlsOverlay.setVisibility(GONE);
@@ -58,6 +59,7 @@ public class VortexGameSurfaceView extends FrameLayout {
                 } else {
                     renderer.editor2DZoom = Math.max(4f, Math.min(65f, renderer.editor2DZoom / factor));
                 }
+                glView.requestRender();
                 return true;
             }
         });
@@ -78,19 +80,26 @@ public class VortexGameSurfaceView extends FrameLayout {
     }
 
     public void loadProjectForEdit(GameProject project) {
+        renderer.audioEngine.stopAll();
         renderer.loadProject(project, false);
         controlsOverlay.setVisibility(GONE);
+        glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+        glView.requestRender();
     }
 
     public void startPlayMode(GameProject playCopy) {
         renderer.loadProject(playCopy, true);
         controlsOverlay.configure(playCopy.showJoystick, playCopy.showActionButtons, true);
         controlsOverlay.setVisibility(VISIBLE);
+        glView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
     }
 
     public void stopPlayMode(GameProject editorProject) {
+        renderer.audioEngine.stopAll();
         controlsOverlay.setVisibility(GONE);
         renderer.loadProject(editorProject, false);
+        glView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+        glView.requestRender();
     }
 
     private boolean handleViewportTouch(MotionEvent event) {
@@ -134,6 +143,7 @@ public class VortexGameSurfaceView extends FrameLayout {
             }
             prevTouchX = cx;
             prevTouchY = cy;
+            glView.requestRender();
             return true;
         }
 
@@ -153,6 +163,7 @@ public class VortexGameSurfaceView extends FrameLayout {
                 } else {
                     draggingEntity = false;
                 }
+                glView.requestRender();
                 return true;
             }
             case MotionEvent.ACTION_MOVE: {
@@ -178,6 +189,7 @@ public class VortexGameSurfaceView extends FrameLayout {
                 }
                 prevTouchX = tx;
                 prevTouchY = ty;
+                glView.requestRender();
                 return true;
             }
             case MotionEvent.ACTION_UP:
@@ -186,14 +198,21 @@ public class VortexGameSurfaceView extends FrameLayout {
                 return true;
             }
         }
+        glView.requestRender();
         return true;
+    }
+
+    public void requestEditorRender() {
+        glView.requestRender();
     }
 
     public void onResume() {
         glView.onResume();
+        if (!renderer.isPlaying()) glView.requestRender();
     }
 
     public void onPause() {
+        renderer.audioEngine.stopAll();
         glView.onPause();
     }
 

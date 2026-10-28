@@ -100,16 +100,49 @@ public final class DesktopUiKit {
     public static final Color C_DANGER_TX    = new Color(252, 165, 165);
     public static final Color C_OK_TX        = new Color(134, 239, 172);
 
-    public static final Font FONT_UI         = new Font("SansSerif", Font.PLAIN, 12);
-    public static final Font FONT_UI_BOLD    = new Font("SansSerif", Font.BOLD, 12);
-    public static final Font FONT_TITLE      = new Font("SansSerif", Font.BOLD, 13);
-    public static final Font FONT_MONO       = new Font("Monospaced", Font.PLAIN, 13);
+    // Dynamic IDE UI Scale — auto-compacts on laptop screens (1366x768 / 1536x864 / 1440x900)
+    private static float uiScale = detectOptimalLaptopScale();
+
+    public static Font FONT_UI         = new Font("SansSerif", Font.PLAIN, scaledFontPt(12));
+    public static Font FONT_UI_BOLD    = new Font("SansSerif", Font.BOLD, scaledFontPt(12));
+    public static Font FONT_TITLE      = new Font("SansSerif", Font.BOLD, scaledFontPt(13));
+    public static Font FONT_MONO       = new Font("Monospaced", Font.PLAIN, scaledFontPt(12));
+
+    public static float detectOptimalLaptopScale() {
+        try {
+            if (!java.awt.GraphicsEnvironment.isHeadless()) {
+                Rectangle b = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+                if (b.height <= 800 || b.width <= 1380) return 0.85f;
+                if (b.height <= 900 || b.width <= 1560) return 0.90f;
+            }
+        } catch (Throwable ignored) {}
+        return 0.92f;
+    }
+
+    public static float getUiScale() { return uiScale; }
+
+    public static int scaled(int px) {
+        return Math.max(1, Math.round(px * uiScale));
+    }
+
+    public static int scaledFontPt(int basePt) {
+        return Math.max(10, Math.round(basePt * uiScale));
+    }
+
+    public static void setUiScale(float scale) {
+        uiScale = Math.max(0.78f, Math.min(1.25f, scale));
+        FONT_UI      = new Font("SansSerif", Font.PLAIN, scaledFontPt(12));
+        FONT_UI_BOLD = new Font("SansSerif", Font.BOLD, scaledFontPt(12));
+        FONT_TITLE   = new Font("SansSerif", Font.BOLD, scaledFontPt(13));
+        FONT_MONO    = new Font("Monospaced", Font.PLAIN, scaledFontPt(12));
+    }
 
     public enum Variant { PRIMARY, ACCENT, SECONDARY, DANGER }
 
     public enum Icon {
         NONE, PLAY, STOP, PLUS, FOLDER, SAVE, UNDO, REDO, CUBE,
-        CODE, FLOW, SPARKLE, SYNC, GRID, WAVE, EXPORT, TERMINAL, CHECK, CLOSE, REFRESH
+        CODE, FLOW, SPARKLE, SYNC, GRID, WAVE, EXPORT, TERMINAL, CHECK, CLOSE, REFRESH,
+        FILE, SPLIT, NODES, SEND, GUI
     }
 
     private DesktopUiKit() {}
@@ -299,6 +332,49 @@ public final class DesktopUiKit {
                 g.draw(new Line2D.Float(cx + r * 0.55f, cy - r * 0.38f, cx + r * 0.22f, cy - r * 0.38f));
                 break;
             }
+            case FILE: {
+                Path2D doc = new Path2D.Float();
+                doc.moveTo(cx - r * 0.55f, cy - r * 0.72f);
+                doc.lineTo(cx + r * 0.18f, cy - r * 0.72f);
+                doc.lineTo(cx + r * 0.55f, cy - r * 0.35f);
+                doc.lineTo(cx + r * 0.55f, cy + r * 0.72f);
+                doc.lineTo(cx - r * 0.55f, cy + r * 0.72f);
+                doc.closePath();
+                g.draw(doc);
+                g.draw(new Line2D.Float(cx + r * 0.18f, cy - r * 0.72f, cx + r * 0.18f, cy - r * 0.35f));
+                g.draw(new Line2D.Float(cx + r * 0.18f, cy - r * 0.35f, cx + r * 0.55f, cy - r * 0.35f));
+                break;
+            }
+            case SPLIT: {
+                g.draw(new RoundRectangle2D.Float(cx - r * 0.72f, cy - r * 0.62f, r * 1.44f, r * 1.24f, 2.5f, 2.5f));
+                g.draw(new Line2D.Float(cx, cy - r * 0.62f, cx, cy + r * 0.62f));
+                break;
+            }
+            case NODES: {
+                g.draw(new RoundRectangle2D.Float(cx - r * 0.78f, cy - r * 0.62f, r * 0.62f, r * 0.52f, 2f, 2f));
+                g.draw(new RoundRectangle2D.Float(cx + r * 0.16f, cy + r * 0.10f, r * 0.62f, r * 0.52f, 2f, 2f));
+                Path2D wire = new Path2D.Float();
+                wire.moveTo(cx - r * 0.16f, cy - r * 0.36f);
+                wire.curveTo(cx + r * 0.15f, cy - r * 0.36f, cx - r * 0.15f, cy + r * 0.36f, cx + r * 0.16f, cy + r * 0.36f);
+                g.draw(wire);
+                break;
+            }
+            case SEND: {
+                Path2D tri = new Path2D.Float();
+                tri.moveTo(cx - r * 0.68f, cy - r * 0.58f);
+                tri.lineTo(cx + r * 0.72f, cy);
+                tri.lineTo(cx - r * 0.68f, cy + r * 0.58f);
+                tri.lineTo(cx - r * 0.35f, cy);
+                tri.closePath();
+                g.draw(tri);
+                break;
+            }
+            case GUI: {
+                g.draw(new RoundRectangle2D.Float(cx - r * 0.74f, cy - r * 0.62f, r * 1.48f, r * 1.24f, 3f, 3f));
+                g.draw(new Line2D.Float(cx - r * 0.45f, cy - r * 0.18f, cx + r * 0.45f, cy - r * 0.18f));
+                g.draw(new Line2D.Float(cx - r * 0.45f, cy + r * 0.22f, cx + r * 0.18f, cy + r * 0.22f));
+                break;
+            }
             default:
                 break;
         }
@@ -332,7 +408,7 @@ public final class DesktopUiKit {
             setFocusPainted(false);
             setFont(variant == Variant.PRIMARY || variant == Variant.ACCENT ? FONT_UI_BOLD : FONT_UI);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+            setBorder(BorderFactory.createEmptyBorder(scaled(4), scaled(9), scaled(4), scaled(9)));
 
             animTimer = new Timer(16, e -> {
                 float targetH = hovered ? 1f : 0f;
@@ -367,13 +443,15 @@ public final class DesktopUiKit {
 
         @Override
         public Dimension getPreferredSize() {
+            setFont(variant == Variant.PRIMARY || variant == Variant.ACCENT ? FONT_UI_BOLD : FONT_UI);
             Dimension d = super.getPreferredSize();
+            int minH = scaled(26);
             if (iconType != Icon.NONE) {
                 String txt = getText();
-                int extra = (txt == null || txt.isEmpty()) ? 6 : 18;
-                return new Dimension(d.width + extra, Math.max(28, d.height));
+                int extra = (txt == null || txt.isEmpty()) ? scaled(6) : scaled(15);
+                return new Dimension(d.width + extra, Math.max(minH, d.height));
             }
-            return new Dimension(d.width, Math.max(28, d.height));
+            return new Dimension(d.width, Math.max(minH, d.height));
         }
 
         @Override
@@ -477,8 +555,8 @@ public final class DesktopUiKit {
             }
             setOpaque(false);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setPreferredSize(new Dimension(210, 30));
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
+            setPreferredSize(new Dimension(scaled(190), scaled(28)));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, scaled(30)));
 
             animTimer = new Timer(16, e -> {
                 float tH = hovered ? 1f : 0f;
@@ -807,7 +885,7 @@ public final class DesktopUiKit {
             this.icons = icons;
             setOpaque(true);
             setBackground(C_HEADER);
-            setPreferredSize(new Dimension(420, 36));
+            setPreferredSize(new Dimension(scaled(380), scaled(33)));
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
             slideTimer = new Timer(16, e -> {

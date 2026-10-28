@@ -25,7 +25,15 @@ public class Html5WebExporter {
     }
 
     public static String buildStandaloneHtml(GameProject project) {
-        String safeJson = project.toJsonString().replace("</script>", "<\\/script>");
+        GameProject webCopy = project.deepCopy();
+        StringBuilder combinedModules = new StringBuilder();
+        java.util.Map<String, String> mods = webCopy.getOrderedRuntimeScriptModules();
+        for (java.util.Map.Entry<String, String> me : mods.entrySet()) {
+            combinedModules.append("// === Module: ").append(me.getKey()).append(" ===\n")
+                    .append(me.getValue() == null ? "" : me.getValue()).append("\n\n");
+        }
+        webCopy.scriptCode = combinedModules.toString();
+        String safeJson = webCopy.toJsonString().replace("</script>", "<\\/script>");
         String title = escHtml(project.title);
 
         return "<!DOCTYPE html>\n" +
@@ -33,19 +41,19 @@ public class Html5WebExporter {
                 "<head>\n" +
                 "<meta charset=\"UTF-8\">\n" +
                 "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no\">\n" +
-                "<title>" + title + " — Vortex Engine v3.0 Web Build</title>\n" +
+                "<title>" + title + " — Vortex Engine v4.3 Web Build</title>\n" +
                 "<style>\n" +
                 "  *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none;touch-action:none}\n" +
-                "  html,body{width:100%;height:100%;background:#070B12;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;color:#fff}\n" +
+                "  html,body{width:100%;height:100%;background:#09090B;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;color:#fff}\n" +
                 "  canvas{display:block;width:100vw;height:100vh}\n" +
-                "  #hud{position:fixed;top:14px;left:16px;background:rgba(11,15,24,0.82);border:1px solid rgba(0,229,255,0.35);border-radius:12px;padding:9px 16px;display:flex;gap:18px;align-items:center;backdrop-filter:blur(6px);pointer-events:none;z-index:10}\n" +
-                "  .stat{font-weight:700;font-size:14px;letter-spacing:0.4px}\n" +
-                "  #score{color:#00E5FF} #hp{color:#00E676} #fps{color:#94A3B8;font-size:12px}\n" +
-                "  #banner{position:fixed;top:64px;left:50%;transform:translateX(-50%);background:rgba(9,13,22,0.85);border:1px solid rgba(255,213,79,0.45);color:#FFD54F;font-weight:800;font-size:15px;padding:7px 18px;border-radius:999px;pointer-events:none;z-index:10;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}\n" +
+                "  #hud{position:fixed;top:14px;left:16px;background:rgba(14,14,17,0.88);border:1px solid rgba(255,255,255,0.28);border-radius:10px;padding:8px 15px;display:flex;gap:16px;align-items:center;pointer-events:none;z-index:10}\n" +
+                "  .stat{font-weight:700;font-size:13px;letter-spacing:0.4px}\n" +
+                "  #score{color:#FFFFFF} #hp{color:#86EFAC} #fps{color:#A1A1AA;font-size:12px}\n" +
+                "  #banner{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(14,14,17,0.88);border:1px solid rgba(255,255,255,0.24);color:#FFFFFF;font-weight:700;font-size:14px;padding:6px 16px;border-radius:8px;pointer-events:none;z-index:10;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}\n" +
                 "  #topBtns{position:fixed;top:14px;right:16px;display:flex;gap:8px;z-index:20}\n" +
-                "  .tbtn{background:rgba(20,30,48,0.88);color:#fff;border:1px solid #00E5FF;border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer}\n" +
-                "  .tbtn:hover{background:#00E5FF;color:#04131A}\n" +
-                "  #hint{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);color:rgba(148,163,184,0.75);font-size:11px;pointer-events:none;z-index:10}\n" +
+                "  .tbtn{background:rgba(24,24,28,0.92);color:#fff;border:1px solid #FFFFFF;border-radius:8px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer}\n" +
+                "  .tbtn:hover{background:#FFFFFF;color:#09090B}\n" +
+                "  #hint{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);color:rgba(161,161,170,0.75);font-size:11px;pointer-events:none;z-index:10}\n" +
                 "</style>\n" +
                 "</head>\n" +
                 "<body>\n" +
@@ -223,59 +231,69 @@ public class Html5WebExporter {
                 "    findNearestTag: (fromName,tag) => { const f=findE(fromName); if(!f) return ''; let best='', bd=1e18; for(const e of entities){ if(e.alive && e!==f && e.tag===tag){ const d=(e.x-f.x)**2+(e.y-f.y)**2+(e.z-f.z)**2; if(d<bd){bd=d;best=e.name;} } } return best; },\n" +
                 "    saveData: (k,v) => { memStore[k]=String(v??''); try{ localStorage.setItem('vx_'+(proj.id||'g')+'_'+k, memStore[k]); }catch(e){} return 0; },\n" +
                 "    loadData: (k,def) => { try{ const s=localStorage.getItem('vx_'+(proj.id||'g')+'_'+k); if(s!==null) return s; }catch(e){} return k in memStore ? memStore[k] : String(def??''); },\n" +
-                "    loadNum: (k,def) => { const v = parseFloat(vortex.loadData(k, String(def??0))); return Number.isFinite(v) ? v : (+def||0); }\n" +
-                "  };\n\n" +
+                "    loadNum: (k,def) => { const v = parseFloat(vortex.loadData(k, String(def??0))); return Number.isFinite(v) ? v : (+def||0); },\n" +
+                "    showDialog: (spk,msg,dur) => { uiDialog = { active:true, speaker:String(spk||''), message:String(msg||''), timed:(+dur||0)>0.05, rem:+dur||0 }; },\n" +
+                "    hideDialog: () => { uiDialog = { active:false, speaker:'', message:'', timed:false, rem:0 }; },\n" +
+                "    setLabel: (id,txt,xp,yp,fs,hex) => { uiWidgets.set(String(id||'lbl'), {kind:'LABEL',text:String(txt||''),x:(+xp||50),y:(+yp||14),fs:(+fs||15),col:hex||'#FFFFFF'}); },\n" +
+                "    setProgressBar: (id,txt,val,mx,xp,yp,hex) => { uiWidgets.set(String(id||'bar'), {kind:'BAR',text:String(txt||''),val:(+val||0),max:Math.max(1,+mx||100),x:(+xp||50),y:(+yp||10),col:hex||'#FFFFFF'}); },\n" +
+                "    removeUI: id => { uiWidgets.delete(String(id||'')); },\n" +
+                "    clearUI: () => { uiWidgets.clear(); vortex.hideDialog(); }\n" +
+                "  };\n" +
+                "  let uiWidgets = new Map(), uiDialog = { active:false, speaker:'', message:'', timed:false, rem:0 };\n\n" +
                 "  function compileScript(code, lang) {\n" +
-                "    hooks = {};\n" +
+                "    hooks = { onStart:[], onUpdate:[], onButton:[], onCollide:[] };\n" +
                 "    try {\n" +
-                "      let js = code || '';\n" +
                 "      const L = (lang||'').toUpperCase();\n" +
-                "      if (L === 'JS' || L === 'JAVASCRIPT') {\n" +
-                "        // Native ES6+ JavaScript — zero transpilation, full V8 / Browser JIT speed!\n" +
-                "      } else if (L === 'JAVA') {\n" +
-                "        js = js.replace(/^\\s*(?:package|import)\\s+[^;]+;/gm, '')\n" +
-                "               .replace(/public\\s+class\\s+[A-Za-z0-9_$]+\\s*\\{([\\s\\S]*)\\}\\s*$/m, '$1')\n" +
-                "               .replace(/\\b(?:public|private|protected)?\\s*(?:static\\s+)?(?:void|int|float|double|boolean|long|String)\\s+([A-Za-z0-9_$]+)\\s*\\(([^)]*)\\)/g, (_, fn, params) => {\n" +
-                "                 const cp = params.split(',').map(p => p.trim().split(/\\s+/).pop() || '').filter(Boolean).join(', ');\n" +
-                "                 return 'function ' + fn + '(' + cp + ')';\n" +
-                "               })\n" +
-                "               .replace(/\\b(?:final\\s+)?(?:int|float|double|boolean|long|String)\\s+([A-Za-z0-9_$]+)/g, 'let $1')\n" +
-                "               .replace(/\\((?:float|double|int|long)\\)\\s*/g, '')\n" +
-                "               .replace(/(\\d+(?:\\.\\d+)?)[fFdDlL]\\b/g, '$1')\n" +
-                "               .replace(/(\"[^\"]*\")\\.equals\\(([^)]+)\\)/g, '($1 === $2)')\n" +
-                "               .replace(/([A-Za-z0-9_$.]+)\\.equals\\(([^)]+)\\)/g, '($1 === $2)')\n" +
-                "               .replace(/System\\.out\\.println\\s*\\(/g, 'console.log(');\n" +
-                "      } else if (L === 'LUA') {\n" +
-                "        js = js.replace(/--.*$/gm, '')\n" +
-                "               .replace(/\\blocal\\s+([a-zA-Z0-9_]+(?:\\s*,\\s*[a-zA-Z0-9_]+)+)\\s*=\\s*([^\\n;]+)/g, 'let [$1] = [$2]')\n" +
-                "               .replace(/\\blocal\\s+/g, 'let ')\n" +
-                "               .replace(/\\bfunction\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)/g, 'function $1($2) {')\n" +
-                "               .replace(/\\bfor\\s+([a-zA-Z0-9_]+)\\s*=\\s*([^,]+),\\s*([^,\\n]+?),\\s*([^\\s]+)\\s+do\\b/g, 'for (let $1 = ($2); ($4) >= 0 ? $1 <= ($3) : $1 >= ($3); $1 += ($4)) {')\n" +
-                "               .replace(/\\bfor\\s+([a-zA-Z0-9_]+)\\s*=\\s*([^,]+),\\s*([^\\s]+)\\s+do\\b/g, 'for (let $1 = ($2); $1 <= ($3); $1++) {')\n" +
-                "               .replace(/\\bwhile\\s+(.+?)\\s+do\\b/g, 'while ($1) {')\n" +
-                "               .replace(/\\belseif\\s+(.+?)\\s+then\\b/g, '} else if ($1) {')\n" +
-                "               .replace(/\\bif\\s+(.+?)\\s+then\\b/g, 'if ($1) {')\n" +
-                "               .replace(/\\belse(?!\\s+if)\\b/g, '} else {')\n" +
-                "               .replace(/\\bend\\b/g, '}')\n" +
-                "               .replace(/~=/g, '!==')\n" +
-                "               .replace(/\\band\\b/g, '&&')\n" +
-                "               .replace(/\\bor\\b/g, '||')\n" +
-                "               .replace(/\\bnot\\b/g, '!')\n" +
-                "               .replace(/\\.\\./g, '+')\n" +
-                "               .replace(/math\\.rad\\(([^)]+)\\)/g, '(($1)*Math.PI/180)')\n" +
-                "               .replace(/math\\.(sin|cos|abs|sqrt|floor|ceil|min|max|atan2)/g, 'Math.$1');\n" +
-                "      } else {\n" +
-                "        js = js.replace(/\\bfn\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)/g, 'function $1($2)');\n" +
+                "      const rawMods = String(code||'').split(/\\/\\/ === Module: [^\\n]+ ===\\n/).filter(s => s.trim().length > 0);\n" +
+                "      let modWrapped = 'const __hooks = {onStart:[],onUpdate:[],onButton:[],onCollide:[]};\\n';\n" +
+                "      for (let raw of rawMods) {\n" +
+                "        let js = raw;\n" +
+                "        if (L === 'JAVA') {\n" +
+                "          js = js.replace(/^\\s*(?:package|import)\\s+[^;]+;/gm, '')\n" +
+                "                 .replace(/public\\s+class\\s+[A-Za-z0-9_$]+\\s*\\{([\\s\\S]*)\\}\\s*$/m, '$1')\n" +
+                "                 .replace(/\\b(?:public|private|protected)?\\s*(?:static\\s+)?(?:void|int|float|double|boolean|long|String)\\s+([A-Za-z0-9_$]+)\\s*\\(([^)]*)\\)/g, (_, fn, params) => {\n" +
+                "                   const cp = params.split(',').map(p => p.trim().split(/\\s+/).pop() || '').filter(Boolean).join(', ');\n" +
+                "                   return 'function ' + fn + '(' + cp + ')';\n" +
+                "                 })\n" +
+                "                 .replace(/\\b(?:final\\s+)?(?:int|float|double|boolean|long|String)\\s+([A-Za-z0-9_$]+)/g, 'let $1')\n" +
+                "                 .replace(/\\((?:float|double|int|long)\\)\\s*/g, '')\n" +
+                "                 .replace(/(\\d+(?:\\.\\d+)?)[fFdDlL]\\b/g, '$1')\n" +
+                "                 .replace(/(\"[^\"]*\")\\.equals\\(([^)]+)\\)/g, '($1 === $2)')\n" +
+                "                 .replace(/([A-Za-z0-9_$.]+)\\.equals\\(([^)]+)\\)/g, '($1 === $2)')\n" +
+                "                 .replace(/System\\.out\\.println\\s*\\(/g, 'console.log(');\n" +
+                "        } else if (L === 'LUA') {\n" +
+                "          js = js.replace(/--.*$/gm, '')\n" +
+                "                 .replace(/\\blocal\\s+([a-zA-Z0-9_]+(?:\\s*,\\s*[a-zA-Z0-9_]+)+)\\s*=\\s*([^\\n;]+)/g, 'let [$1] = [$2]')\n" +
+                "                 .replace(/\\blocal\\s+/g, 'let ')\n" +
+                "                 .replace(/\\bfunction\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)/g, 'function $1($2) {')\n" +
+                "                 .replace(/\\bfor\\s+([a-zA-Z0-9_]+)\\s*=\\s*([^,]+),\\s*([^,\\n]+?),\\s*([^\\s]+)\\s+do\\b/g, 'for (let $1 = ($2); ($4) >= 0 ? $1 <= ($3) : $1 >= ($3); $1 += ($4)) {')\n" +
+                "                 .replace(/\\bfor\\s+([a-zA-Z0-9_]+)\\s*=\\s*([^,]+),\\s*([^\\s]+)\\s+do\\b/g, 'for (let $1 = ($2); $1 <= ($3); $1++) {')\n" +
+                "                 .replace(/\\bwhile\\s+(.+?)\\s+do\\b/g, 'while ($1) {')\n" +
+                "                 .replace(/\\belseif\\s+(.+?)\\s+then\\b/g, '} else if ($1) {')\n" +
+                "                 .replace(/\\bif\\s+(.+?)\\s+then\\b/g, 'if ($1) {')\n" +
+                "                 .replace(/\\belse(?!\\s+if)\\b/g, '} else {')\n" +
+                "                 .replace(/\\bend\\b/g, '}')\n" +
+                "                 .replace(/~=/g, '!==').replace(/\\band\\b/g, '&&').replace(/\\bor\\b/g, '||').replace(/\\bnot\\b/g, '!').replace(/\\.\\./g, '+')\n" +
+                "                 .replace(/math\\.rad\\(([^)]+)\\)/g, '(($1)*Math.PI/180)')\n" +
+                "                 .replace(/math\\.(sin|cos|abs|sqrt|floor|ceil|min|max|atan2)/g, 'Math.$1');\n" +
+                "        } else if (L !== 'JS' && L !== 'JAVASCRIPT') {\n" +
+                "          js = js.replace(/\\bfn\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)/g, 'function $1($2)');\n" +
+                "        }\n" +
+                "        modWrapped += 'onStart=undefined;onUpdate=undefined;onButton=undefined;onCollide=undefined;\\n' + js + '\\n' +\n" +
+                "          'if(typeof onStart===\"function\") __hooks.onStart.push(onStart);\\n' +\n" +
+                "          'if(typeof onUpdate===\"function\") __hooks.onUpdate.push(onUpdate);\\n' +\n" +
+                "          'if(typeof onButton===\"function\") __hooks.onButton.push(onButton);\\n' +\n" +
+                "          'if(typeof onCollide===\"function\") __hooks.onCollide.push(onCollide);\\n';\n" +
                 "      }\n" +
-                "      const fn = new Function('vortex', 'with(vortex){ ' + js + '; return { onStart: typeof onStart!==\"undefined\"?onStart:null, onUpdate: typeof onUpdate!==\"undefined\"?onUpdate:null, onButton: typeof onButton!==\"undefined\"?onButton:null, onCollide: typeof onCollide!==\"undefined\"?onCollide:null }; }');\n" +
-                "      hooks = fn(vortex) || {};\n" +
+                "      const fn = new Function('vortex', 'let onStart,onUpdate,onButton,onCollide; with(vortex){ ' + modWrapped + '; return __hooks; }');\n" +
+                "      hooks = fn(vortex) || hooks;\n" +
                 "    } catch (err) { console.warn('Script compile fallback:', err); }\n" +
                 "  }\n" +
-                "  function callHook(name, ...args) { try { if (hooks[name]) hooks[name](...args); } catch(e){} }\n\n" +
+                "  function callHook(name, ...args) { try { const arr = hooks[name]; if (Array.isArray(arr)) for (const f of arr) f(...args); } catch(e){} }\n\n" +
                 "  function resetGame() {\n" +
                 "    proj = JSON.parse(JSON.stringify(RAW_PROJECT));\n" +
                 "    entities = proj.entities || []; byName = new Map(); entities.forEach(e => { e.vx=e.vx||0; e.vy=e.vy||0; e.vz=e.vz||0; byName.set(e.name, e); });\n" +
-                "    score = 0; health = 100; banner = proj.title; particles = []; tweens = [];\n" +
+                "    score = 0; health = 100; banner = proj.title; particles = []; tweens = []; uiWidgets.clear(); vortex.hideDialog();\n" +
                 "    document.getElementById('banner').textContent = banner;\n" +
                 "    compileScript(proj.scriptCode, proj.scriptLanguage);\n" +
                 "    callHook('onStart');\n" +
@@ -414,15 +432,38 @@ public class Html5WebExporter {
                 "    }\n" +
                 "  }\n\n" +
                 "  function renderTouchPad() {\n" +
+                "    // Render In-Game Custom GUI Widgets (Labels, Progress Bars & RPG Dialog Box)\n" +
+                "    for (const w of uiWidgets.values()) {\n" +
+                "      const wx = W * (w.x/100), wy = H * (w.y/100);\n" +
+                "      if (w.kind === 'BAR') {\n" +
+                "        const bw = Math.min(260, W*0.42), bh = 16, pct = Math.max(0, Math.min(1, w.val / w.max));\n" +
+                "        ctx.fillStyle='rgba(14,14,17,0.88)'; ctx.fillRect(wx-bw/2, wy-bh/2, bw, bh);\n" +
+                "        ctx.fillStyle=w.col||'#FFFFFF'; ctx.fillRect(wx-bw/2+2, wy-bh/2+2, (bw-4)*pct, bh-4);\n" +
+                "        ctx.strokeStyle='rgba(255,255,255,0.45)'; ctx.lineWidth=1; ctx.strokeRect(wx-bw/2, wy-bh/2, bw, bh);\n" +
+                "        if (w.text) { ctx.fillStyle='#FFFFFF'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.fillText(w.text, wx, wy-bh/2-7); }\n" +
+                "      } else {\n" +
+                "        ctx.font='bold '+(w.fs||15)+'px sans-serif'; ctx.textAlign='center'; ctx.fillStyle=w.col||'#FFFFFF';\n" +
+                "        ctx.fillText(w.text, wx, wy);\n" +
+                "      }\n" +
+                "    }\n" +
+                "    if (uiDialog.active) {\n" +
+                "      const dw = Math.min(540, W*0.84), dh = 86, dx = (W-dw)/2, dy = H - dh - 44;\n" +
+                "      ctx.fillStyle='rgba(12,12,15,0.93)'; ctx.fillRect(dx, dy, dw, dh);\n" +
+                "      ctx.strokeStyle='#FFFFFF'; ctx.lineWidth=1.5; ctx.strokeRect(dx, dy, dw, dh);\n" +
+                "      ctx.textAlign='left';\n" +
+                "      if (uiDialog.speaker) { ctx.fillStyle='#FFFFFF'; ctx.font='bold 12px sans-serif'; ctx.fillText(uiDialog.speaker, dx+16, dy+22); }\n" +
+                "      ctx.fillStyle='#E4E4E7'; ctx.font='13px sans-serif'; ctx.fillText(uiDialog.message, dx+16, dy+(uiDialog.speaker?48:38), dw-32);\n" +
+                "    }\n" +
                 "    const jr = Math.max(58, Math.min(W,H)*0.12), jcx = jr*1.4, jcy = H - jr*1.35;\n" +
-                "    ctx.strokeStyle='rgba(0,229,255,0.45)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(jcx,jcy,jr,0,Math.PI*2); ctx.stroke();\n" +
+                "    ctx.strokeStyle='rgba(255,255,255,0.38)'; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(jcx,jcy,jr,0,Math.PI*2); ctx.stroke();\n" +
                 "    const kx = touchJoyId!==null ? touchKnob.x : jcx + vortex.joyX()*jr*0.7, ky = touchJoyId!==null ? touchKnob.y : jcy - vortex.joyY()*jr*0.7;\n" +
-                "    ctx.fillStyle='rgba(0,229,255,0.65)'; ctx.beginPath(); ctx.arc(kx,ky,jr*0.4,0,Math.PI*2); ctx.fill();\n" +
+                "    ctx.fillStyle='rgba(255,255,255,0.75)'; ctx.beginPath(); ctx.arc(kx,ky,jr*0.38,0,Math.PI*2); ctx.fill();\n" +
                 "    const br = Math.max(42, Math.min(W,H)*0.085), bax = W - br*3.4, bay = H - br*1.4, bbx = W - br*1.35, bby = H - br*2.65;\n" +
-                "    ctx.fillStyle = btnA ? 'rgba(0,230,118,0.85)' : 'rgba(0,200,105,0.42)'; ctx.beginPath(); ctx.arc(bax,bay,br,0,Math.PI*2); ctx.fill();\n" +
-                "    ctx.fillStyle = btnB ? 'rgba(124,77,255,0.85)' : 'rgba(105,65,225,0.42)'; ctx.beginPath(); ctx.arc(bbx,bby,br,0,Math.PI*2); ctx.fill();\n" +
-                "    ctx.fillStyle='#FFF'; ctx.font='bold 20px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';\n" +
-                "    ctx.fillText('A', bax, bay); ctx.fillText('B', bbx, bby);\n" +
+                "    ctx.fillStyle = btnA ? '#FFFFFF' : 'rgba(24,24,28,0.85)'; ctx.beginPath(); ctx.arc(bax,bay,br,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#FFFFFF'; ctx.stroke();\n" +
+                "    ctx.fillStyle = btnB ? '#FFFFFF' : 'rgba(24,24,28,0.85)'; ctx.beginPath(); ctx.arc(bbx,bby,br,0,Math.PI*2); ctx.fill(); ctx.stroke();\n" +
+                "    ctx.font='bold 19px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';\n" +
+                "    ctx.fillStyle = btnA ? '#09090B' : '#FFFFFF'; ctx.fillText('A', bax, bay);\n" +
+                "    ctx.fillStyle = btnB ? '#09090B' : '#FFFFFF'; ctx.fillText('B', bbx, bby);\n" +
                 "  }\n\n" +
                 "  document.getElementById('restartBtn').onclick = () => { ensureAudio(); resetGame(); };\n" +
                 "  document.getElementById('musicBtn').onclick = e => { ensureAudio(); musicMuted = !musicMuted; e.target.textContent = musicMuted ? '🔇 MUSIC: OFF' : '🎵 MUSIC: ON'; };\n\n" +
@@ -432,6 +473,7 @@ public class Html5WebExporter {
                 "    const dt = Math.min(0.05, Math.max(0.001, (now - last)/1000)); last = now;\n" +
                 "    frames++; fpsAcc += dt; if (fpsAcc >= 0.5) { document.getElementById('fps').textContent = Math.round(frames/fpsAcc) + ' FPS'; frames=0; fpsAcc=0; }\n" +
                 "    if (shakeT > 0) shakeT -= dt;\n" +
+                "    if (uiDialog.active && uiDialog.timed) { uiDialog.rem -= dt; if (uiDialog.rem <= 0) uiDialog.active = false; }\n" +
                 "    callHook('onUpdate', dt);\n" +
                 "    stepPhysics(dt);\n" +
                 "    particles = particles.filter(p => { p.life -= dt; p.vy -= 9*dt; p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt; return p.life > 0; });\n" +

@@ -1,6 +1,7 @@
 package com.vortex.engine.core.model;
 
 import com.vortex.engine.core.audio.ChiptuneGenerator;
+import com.vortex.engine.core.flow.VortexBlueprintGraph;
 import com.vortex.engine.core.flow.VortexFlowCompiler;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -20,22 +21,26 @@ public class GameProject {
     public int versionCode = 1;
     public String orientation = "landscape"; // landscape, portrait, sensor
     public String dimensionMode = "3D";      // "3D" or "2D"
-    public String scriptLanguage = "LUA";    // "LUA" (LuaJ 5.2) or "VXS" (VortexScript)
+    public String scriptLanguage = "JS";     // "JS", "JAVA", "LUA", "VXS"
     public boolean useBox2D = true;          // JBox2D Rigid-Body solver for 2D
 
     // Custom Procedural Terrain Parameters (FastNoiseLite)
     public int terrainSeed = 1337;
     public float terrainFreq = 0.065f;
 
-    // Built-in 16-Step Polyphonic Chiptune Sequencer (v3.0)
+    // Built-in 16-Step Polyphonic Chiptune Sequencer
     public boolean musicEnabled = false;
     public int musicBpm = 128;
     public String musicPattern = ChiptuneGenerator.PRESET_CYBERPUNK;
 
-    // Visual Event-Sheet Rules ("Vortex Flow" v3.0)
+    // Visual Event-Sheet Rules ("Vortex Flow") — preserved intact
     public final List<VortexFlowCompiler.FlowRule> flowRules = new ArrayList<>();
 
-    // Custom Icon Theme
+    // Visual Node-Based Blueprint Graph ("Blueprint Diagram" v4.3)
+    public final List<VortexBlueprintGraph.BpNode> blueprintNodes = new ArrayList<>();
+    public final List<VortexBlueprintGraph.BpLink> blueprintLinks = new ArrayList<>();
+
+    // Custom Icon Theme (Monochrome Carbon + Crisp White defaults)
     public String iconBgHex = "#101013";
     public String iconAccentHex = "#FFFFFF";
     public String iconGlyph = "CUBE"; // CUBE, ROCKET, SWORD, STAR
@@ -65,13 +70,134 @@ public class GameProject {
     public long updatedAt = System.currentTimeMillis();
 
     public final List<Entity> entities = new ArrayList<>();
+
+    // Primary/Legacy script code + Multi-File Script Directory (v4.3)
     public String scriptCode = "";
+    public final Map<String, String> scriptFiles = new LinkedHashMap<>();
+    public String activeScriptFile = "";
+
     public final Map<String, String> customObjMeshes = new LinkedHashMap<>();
     // 16x16 pixel-art sprites encoded as 256 comma-separated #RRGGBB or '.' transparent tokens
     public final Map<String, String> customSprites = new LinkedHashMap<>();
 
     public GameProject() {
         this.id = UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    public String getScriptExtension() {
+        if ("JAVA".equalsIgnoreCase(scriptLanguage)) return ".java";
+        if ("JS".equalsIgnoreCase(scriptLanguage)) return ".js";
+        if ("LUA".equalsIgnoreCase(scriptLanguage)) return ".lua";
+        return ".vxs";
+    }
+
+    public String defaultMainFileName() {
+        return "scripts/main" + getScriptExtension();
+    }
+
+    public static String normalizeScriptPath(String path) {
+        if (path == null) return "";
+        String p = path.trim().replace('\\', '/').replaceAll("/+", "/");
+        while (p.startsWith("/")) p = p.substring(1);
+        while (p.startsWith("./")) p = p.substring(2);
+        return p;
+    }
+
+    public void ensureScriptFilesInitialized() {
+        if (scriptFiles.isEmpty()) {
+            String mainPath = defaultMainFileName();
+            scriptFiles.put(mainPath, scriptCode == null ? "" : scriptCode);
+            activeScriptFile = mainPath;
+        } else if (activeScriptFile == null || activeScriptFile.isEmpty() || !scriptFiles.containsKey(activeScriptFile)) {
+            activeScriptFile = scriptFiles.keySet().iterator().next();
+        }
+        if (scriptCode == null || scriptCode.isEmpty()) {
+            String first = scriptFiles.get(activeScriptFile);
+            if (first != null) scriptCode = first;
+        }
+    }
+
+    public String getActiveScriptContent() {
+        ensureScriptFilesInitialized();
+        String c = scriptFiles.get(activeScriptFile);
+        return c != null ? c : (scriptCode == null ? "" : scriptCode);
+    }
+
+    public void putScriptFile(String path, String content) {
+        String norm = normalizeScriptPath(path);
+        if (norm.isEmpty()) norm = defaultMainFileName();
+        if (!norm.contains(".")) norm = norm + getScriptExtension();
+        String safeContent = content == null ? "" : content;
+        scriptFiles.put(norm, safeContent);
+        if (activeScriptFile == null || activeScriptFile.isEmpty() || norm.equals(activeScriptFile)) {
+            activeScriptFile = norm;
+            scriptCode = safeContent;
+        }
+    }
+
+    public boolean renameScriptFile(String oldPath, String newPath) {
+        String o = normalizeScriptPath(oldPath);
+        String n = normalizeScriptPath(newPath);
+        if (o.isEmpty() || n.isEmpty() || !scriptFiles.containsKey(o) || o.equals(n)) return false;
+        if (!n.contains(".")) n = n + getScriptExtension();
+        Map<String, String> rebuilt = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : scriptFiles.entrySet()) {
+            if (entry.getKey().equals(o)) {
+                rebuilt.put(n, entry.getValue());
+            } else {
+                rebuilt.put(entry.getKey(), entry.getValue());
+            }
+        }
+        scriptFiles.clear();
+        scriptFiles.putAll(rebuilt);
+        if (o.equals(activeScriptFile)) activeScriptFile = n;
+        return true;
+    }
+
+    public boolean removeScriptFile(String path) {
+        String o = normalizeScriptPath(path);
+        if (scriptFiles.size() <= 1 || !scriptFiles.containsKey(o)) return false;
+        scriptFiles.remove(o);
+        if (o.equals(activeScriptFile)) {
+            activeScriptFile = scriptFiles.keySet().iterator().next();
+            scriptCode = scriptFiles.get(activeScriptFile);
+        }
+        return true;
+    }
+
+    /**
+     * Ordered list of script files: helper/object modules first so classes & utilities
+     * are registered in scope, followed by `scripts/main.*` (entry point), plus optional
+     * live Blueprint Graph module if `blueprintNodes` has active nodes!
+     */
+    public Map<String, String> getOrderedRuntimeScriptModules() {
+        ensureScriptFilesInitialized();
+        Map<String, String> ordered = new LinkedHashMap<>();
+        String mainKey = null;
+        for (String k : scriptFiles.keySet()) {
+            String lower = k.toLowerCase();
+            if (lower.endsWith("/main.js") || lower.endsWith("/main.java")
+                    || lower.endsWith("/main.lua") || lower.endsWith("/main.vxs")
+                    || lower.equals("main.js") || lower.equals("main.java")
+                    || lower.equals("main.lua") || lower.equals("main.vxs")) {
+                mainKey = k;
+                break;
+            }
+        }
+        for (Map.Entry<String, String> e : scriptFiles.entrySet()) {
+            if (mainKey != null && mainKey.equals(e.getKey())) continue;
+            ordered.put(e.getKey(), e.getValue());
+        }
+        if (mainKey != null) {
+            ordered.put(mainKey, scriptFiles.get(mainKey));
+        }
+        if (!blueprintNodes.isEmpty() && !"VXS".equalsIgnoreCase(scriptLanguage)) {
+            String bpCode = VortexBlueprintGraph.compileGraph(this, scriptLanguage);
+            if (bpCode != null && !bpCode.trim().isEmpty()) {
+                ordered.put("__blueprint/graph" + getScriptExtension(), bpCode);
+            }
+        }
+        return ordered;
     }
 
     public String getSlug() {
@@ -113,6 +239,7 @@ public class GameProject {
 
     public String toJsonString() {
         try {
+            ensureScriptFilesInitialized();
             JSONObject o = new JSONObject();
             o.put("id", id);
             o.put("title", title);
@@ -129,6 +256,8 @@ public class GameProject {
             o.put("musicBpm", musicBpm);
             o.put("musicPattern", musicPattern);
             o.put("flowRules", VortexFlowCompiler.toJsonArray(flowRules));
+            o.put("blueprintNodes", VortexBlueprintGraph.nodesToJson(blueprintNodes));
+            o.put("blueprintLinks", VortexBlueprintGraph.linksToJson(blueprintLinks));
             o.put("iconBgHex", iconBgHex);
             o.put("iconAccentHex", iconAccentHex);
             o.put("iconGlyph", iconGlyph);
@@ -150,7 +279,14 @@ public class GameProject {
             o.put("showJoystick", showJoystick);
             o.put("showActionButtons", showActionButtons);
             o.put("updatedAt", updatedAt);
-            o.put("scriptCode", scriptCode);
+            o.put("scriptCode", scriptCode == null ? "" : scriptCode);
+            o.put("activeScriptFile", activeScriptFile == null ? "" : activeScriptFile);
+
+            JSONObject filesJson = new JSONObject();
+            for (Map.Entry<String, String> entry : scriptFiles.entrySet()) {
+                filesJson.put(entry.getKey(), entry.getValue() == null ? "" : entry.getValue());
+            }
+            o.put("scriptFiles", filesJson);
 
             JSONArray arr = new JSONArray();
             for (Entity e : entities) {
@@ -185,7 +321,6 @@ public class GameProject {
         p.versionCode = o.optInt("versionCode", 1);
         p.orientation = o.optString("orientation", "landscape");
         p.dimensionMode = o.optString("dimensionMode", "3D");
-        // Backwards compatible: existing v1.0 projects without scriptLanguage default to VXS
         String defaultLang = o.has("scriptLanguage") ? "LUA" : "VXS";
         p.scriptLanguage = o.optString("scriptLanguage", defaultLang);
         p.useBox2D = o.optBoolean("useBox2D", true);
@@ -195,11 +330,13 @@ public class GameProject {
         p.musicBpm = o.optInt("musicBpm", 128);
         p.musicPattern = o.optString("musicPattern", ChiptuneGenerator.PRESET_CYBERPUNK);
         p.flowRules.addAll(VortexFlowCompiler.fromJsonArray(o.optJSONArray("flowRules")));
-        p.iconBgHex = o.optString("iconBgHex", "#0D1321");
-        p.iconAccentHex = o.optString("iconAccentHex", "#00E5FF");
+        p.blueprintNodes.addAll(VortexBlueprintGraph.nodesFromJson(o.optJSONArray("blueprintNodes")));
+        p.blueprintLinks.addAll(VortexBlueprintGraph.linksFromJson(o.optJSONArray("blueprintLinks")));
+        p.iconBgHex = o.optString("iconBgHex", "#101013");
+        p.iconAccentHex = o.optString("iconAccentHex", "#FFFFFF");
         p.iconGlyph = o.optString("iconGlyph", "CUBE");
-        p.skyColorHex = o.optString("skyColorHex", "#0B1020");
-        p.ambientColorHex = o.optString("ambientColorHex", "#24344D");
+        p.skyColorHex = o.optString("skyColorHex", "#0B0B0E");
+        p.ambientColorHex = o.optString("ambientColorHex", "#2A2A30");
         p.fogEnabled = o.optBoolean("fogEnabled", true);
         p.fogNear = (float) o.optDouble("fogNear", 18.0);
         p.fogFar = (float) o.optDouble("fogFar", 68.0);
@@ -217,6 +354,20 @@ public class GameProject {
         p.showActionButtons = o.optBoolean("showActionButtons", true);
         p.updatedAt = o.optLong("updatedAt", System.currentTimeMillis());
         p.scriptCode = o.optString("scriptCode", "");
+        p.activeScriptFile = o.optString("activeScriptFile", "");
+
+        JSONObject filesObj = o.optJSONObject("scriptFiles");
+        if (filesObj != null) {
+            Iterator<String> fKeys = filesObj.keys();
+            while (fKeys.hasNext()) {
+                String k = fKeys.next();
+                String norm = normalizeScriptPath(k);
+                if (!norm.isEmpty()) {
+                    p.scriptFiles.put(norm, filesObj.optString(k, ""));
+                }
+            }
+        }
+        p.ensureScriptFilesInitialized();
 
         JSONArray arr = o.optJSONArray("entities");
         if (arr != null) {

@@ -73,6 +73,8 @@ public class EditorActivity extends Activity {
     private TextView scriptStatusTv;
     private VortexMobileUi.VortexDropdown langDropdown;
     private LinearLayout snippetBar;
+    private LinearLayout mobileFileTabsBar;
+    private final List<VortexForgeAgent.ChatMessage> mobileForgeHistory = new ArrayList<>();
     private HorizontalScrollView topTabScroll;
     private boolean inspectorExpandedMobile = false;
     private ScrollView flowPanel;
@@ -152,13 +154,14 @@ public class EditorActivity extends Activity {
         viewportSurface.renderer.setTelemetryListener(new VortexGLRenderer.TelemetryListener() {
             @Override
             public void onHudUpdate(int fps, int entityCount, int score, int health, String banner) {
-                viewportSurface.controlsOverlay.updateHud(fps, score, health, banner);
-                runOnUiThread(() -> {
-                    if (!viewportSurface.renderer.isPlaying()) {
-                        telemetryChip.setText(fps + " FPS • " + entityCount + " objs • "
-                                + project.dimensionMode + " • " + project.scriptLanguage);
-                    }
-                });
+                if (viewportSurface.renderer.isPlaying()) {
+                    viewportSurface.controlsOverlay.updateHud(fps, score, health, banner);
+                    runOnUiThread(() -> {
+                        if (viewportSurface.renderer.isPlaying()) {
+                            telemetryChip.setText("▶ " + fps + " FPS • " + entityCount + " objs • Tap SCENE to stop");
+                        }
+                    });
+                }
             }
 
             @Override
@@ -169,14 +172,16 @@ public class EditorActivity extends Activity {
         workspace.addView(viewportSurface, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
+        project.ensureScriptFilesInitialized();
         telemetryChip = new TextView(this);
-        telemetryChip.setText("60 FPS");
-        telemetryChip.setTextColor(Color.parseColor("#CBD5E1"));
+        telemetryChip.setText("Editor • " + project.entities.size() + " objs • " + project.dimensionMode + "/" + project.scriptLanguage);
+        telemetryChip.setTextColor(Color.parseColor("#FAFAFA"));
         telemetryChip.setTextSize(11f);
         telemetryChip.setPadding(dp(10), dp(5), dp(10), dp(5));
         GradientDrawable chipBg = new GradientDrawable();
-        chipBg.setColor(Color.argb(175, 15, 23, 42));
-        chipBg.setCornerRadius(dp(12));
+        chipBg.setColor(Color.argb(200, 14, 14, 17));
+        chipBg.setStroke(dp(1), Color.argb(180, 56, 56, 64));
+        chipBg.setCornerRadius(dp(10));
         telemetryChip.setBackground(chipBg);
         FrameLayout.LayoutParams chipLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -458,10 +463,16 @@ public class EditorActivity extends Activity {
     }
 
     private void applyRestoredProject(String msg) {
+        project.ensureScriptFilesInitialized();
         dimToggleBtn.setText(project.dimensionMode);
-        if (scriptEditor != null) scriptEditor.setText(project.scriptCode);
+        String body = project.scriptFiles.get(project.activeScriptFile);
+        if (body == null) body = project.scriptCode == null ? "" : project.scriptCode;
+        project.scriptCode = body;
+        if (scriptEditor != null) scriptEditor.setText(body);
+        rebuildMobileFileTabsBar();
         syncLangDropdownUi();
         viewportSurface.loadProjectForEdit(project);
+        telemetryChip.setText("Editor • " + project.entities.size() + " objs • " + project.dimensionMode + "/" + project.scriptLanguage);
         rebuildSceneToolbarButtons();
         if ("INSPECTOR".equals(currentMode)) populateInspector();
         if ("FLOW".equals(currentMode)) refreshFlowRuleList();
@@ -974,11 +985,25 @@ public class EditorActivity extends Activity {
         snipScroll.addView(snippetBar);
         panel.addView(snipScroll);
 
+        // Row 3.5: Multi-File Script Directory Explorer Strip (`scripts/`, `objects/`, `ui/` + `+ FILE`)
+        HorizontalScrollView fileTabsScroll = new HorizontalScrollView(this);
+        fileTabsScroll.setHorizontalScrollBarEnabled(false);
+        fileTabsScroll.setBackgroundColor(Color.parseColor("#101013"));
+        mobileFileTabsBar = new LinearLayout(this);
+        mobileFileTabsBar.setOrientation(LinearLayout.HORIZONTAL);
+        mobileFileTabsBar.setGravity(Gravity.CENTER_VERTICAL);
+        mobileFileTabsBar.setPadding(dp(8), dp(5), dp(8), dp(5));
+        fileTabsScroll.addView(mobileFileTabsBar);
+        panel.addView(fileTabsScroll);
+
         // Row 4: Full-Screen Monospace Code Editor
+        project.ensureScriptFilesInitialized();
+        String initialBody = project.scriptFiles.get(project.activeScriptFile);
+        if (initialBody == null) initialBody = project.scriptCode == null ? "" : project.scriptCode;
         scriptEditor = new EditText(this);
-        scriptEditor.setText(project.scriptCode);
+        scriptEditor.setText(initialBody);
         scriptEditor.setTypeface(Typeface.MONOSPACE);
-        scriptEditor.setTextColor(Color.parseColor("#E2E8F0"));
+        scriptEditor.setTextColor(Color.parseColor("#FAFAFA"));
         scriptEditor.setTextSize(13.5f);
         scriptEditor.setGravity(Gravity.TOP | Gravity.START);
         scriptEditor.setBackgroundColor(Color.parseColor("#09090B"));
@@ -986,6 +1011,7 @@ public class EditorActivity extends Activity {
         scriptEditor.setInputType(InputType.TYPE_CLASS_TEXT
                 | InputType.TYPE_TEXT_FLAG_MULTI_LINE
                 | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        rebuildMobileFileTabsBar();
 
         ScrollView codeScroll = new ScrollView(this);
         codeScroll.setFillViewport(true);
@@ -1063,9 +1089,58 @@ public class EditorActivity extends Activity {
         rebuildSnippetBar();
     }
 
+    private void rebuildMobileFileTabsBar() {
+        if (mobileFileTabsBar == null || project == null) return;
+        project.ensureScriptFilesInitialized();
+        mobileFileTabsBar.removeAllViews();
+        for (final String path : project.scriptFiles.keySet()) {
+            boolean active = path.equals(project.activeScriptFile);
+            TextView tab = VortexMobileUi.makeButton(this, path,
+                    active ? VortexMobileUi.ButtonVariant.PRIMARY : VortexMobileUi.ButtonVariant.SECONDARY, true);
+            tab.setTextSize(11f);
+            tab.setOnClickListener(v -> {
+                syncCodeFromEditor();
+                project.activeScriptFile = path;
+                String b = project.scriptFiles.get(path);
+                if (b == null) b = "";
+                project.scriptCode = b;
+                scriptEditor.setText(b);
+                rebuildMobileFileTabsBar();
+                validateCurrentScript();
+            });
+            mobileFileTabsBar.addView(tab, rightMarginLp(6));
+        }
+        TextView addFileBtn = VortexMobileUi.makeButton(this, "+ FILE", VortexMobileUi.ButtonVariant.ACCENT, true);
+        addFileBtn.setTextSize(11f);
+        addFileBtn.setOnClickListener(v -> {
+            final EditText pathEt = VortexMobileUi.createInput(this,
+                    "objects/module_" + (project.scriptFiles.size() + 1) + project.getScriptExtension(), false, false);
+            VortexMobileUi.showModal(this, "New Script Module File", pathEt, "Create", () -> {
+                String raw = pathEt.getText().toString().trim();
+                if (raw.isEmpty()) return;
+                if (!raw.contains(".")) raw = raw + project.getScriptExtension();
+                String norm = GameProject.normalizeScriptPath(raw);
+                syncCodeFromEditor();
+                pushUndoSnapshot();
+                String starter = "LUA".equalsIgnoreCase(project.scriptLanguage)
+                        ? "-- " + norm + "\nfunction onStart()\nend\n"
+                        : ("JAVA".equalsIgnoreCase(project.scriptLanguage)
+                        ? "// " + norm + "\npublic class Module {\n  public void onStart() {}\n}\n"
+                        : "// " + norm + "\nfunction onStart() {\n}\n");
+                project.putScriptFile(norm, starter);
+                project.activeScriptFile = norm;
+                project.scriptCode = starter;
+                scriptEditor.setText(starter);
+                rebuildMobileFileTabsBar();
+                saveProjectQuiet();
+            }, null, null, "Cancel");
+        });
+        mobileFileTabsBar.addView(addFileBtn);
+    }
+
     private boolean validateCurrentScript() {
         syncCodeFromEditor();
-        String check = VortexScriptEngine.validateSyntax(project.scriptLanguage, project.scriptCode);
+        String check = VortexScriptEngine.validateProjectSyntax(project);
         if (check.startsWith("OK")) {
             scriptStatusTv.setText("✓ " + check);
             scriptStatusTv.setTextColor(Color.parseColor("#00E676"));
@@ -1081,45 +1156,66 @@ public class EditorActivity extends Activity {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
 
-        TextView info = new TextView(this);
-        info.setText("Local-first BYOK Studio Agent (Groq `openai/gpt-oss-120b` • OpenRouter `$0` `openrouter/free` • Offline Generator). Saves Undo checkpoint automatically.");
-        info.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-        info.setTextSize(11.5f);
-        form.addView(info);
+        TextView chatLogTv = new TextView(this);
+        chatLogTv.setTextColor(VortexMobileUi.C_TEXT);
+        chatLogTv.setTextSize(11.5f);
+        chatLogTv.setPadding(dp(10), dp(8), dp(10), dp(8));
+        chatLogTv.setBackgroundColor(Color.parseColor("#0D0D10"));
+        if (mobileForgeHistory.isEmpty()) {
+            chatLogTv.setText("FORGE AI: Ready! I can inspect/create files in your multi-file project, spawn entities, add GUI dialogs/labels, and run headless playtests.");
+        } else {
+            StringBuilder sb = new StringBuilder();
+            for (int i = Math.max(0, mobileForgeHistory.size() - 6); i < mobileForgeHistory.size(); i++) {
+                VortexForgeAgent.ChatMessage m = mobileForgeHistory.get(i);
+                sb.append("user".equals(m.role) ? "YOU: " : "FORGE AI: ").append(m.text).append("\n\n");
+            }
+            chatLogTv.setText(sb.toString().trim());
+        }
+        form.addView(chatLogTv);
 
         int initProv = Math.max(0, Math.min(VortexForgeAgent.PROVIDERS.length - 1, VortexForgeAgent.loadSavedProviderIdx()));
         VortexMobileUi.VortexDropdown provSpin = addLabeledSpinner(form, "AI Engine Mode", VortexForgeAgent.PROVIDERS, VortexForgeAgent.PROVIDERS[initProv]);
         final EditText keyEt = addLabeledEdit(form, "API Key (saved locally; blank = Offline)", VortexForgeAgent.loadSavedApiKey(initProv), false);
-        final EditText modelEt = addLabeledEdit(form, "Model ID (auto-falls back on 404/402)", VortexForgeAgent.loadSavedModel(initProv), false);
+        final EditText modelEt = addLabeledEdit(form, "Model ID", VortexForgeAgent.loadSavedModel(initProv), false);
         provSpin.setOnSelectionListener((idx, val) -> {
             keyEt.setText(VortexForgeAgent.loadSavedApiKey(idx));
             modelEt.setText(VortexForgeAgent.loadSavedModel(idx));
         });
-        EditText promptEt = addLabeledEdit(form, "What should Forge AI build?", "2D cyber swarm arena with animated drones and auto-aim blaster", false);
+        EditText promptEt = addLabeledEdit(form, "Message / Tool Instruction", "Add a modular dialog UI file and run a 60-frame test", false);
 
         VortexMobileUi.showModal(
                 this,
-                "Vortex Forge AI Agent",
+                "Forge AI — Multi-Turn Workspace Chat",
                 form,
-                "Generate (+ Undo)",
+                "Send Turn",
                 () -> {
-                    pushUndoSnapshot();
+                    syncCodeFromEditor();
+                    final String preJson = project.toJsonString();
                     final int pIdx = provSpin.getSelectedItemPosition();
                     final String apiKey = keyEt.getText().toString().trim();
                     final String modelId = modelEt.getText().toString().trim();
                     final String prompt = promptEt.getText().toString().trim();
+                    if (prompt.isEmpty()) return;
+                    mobileForgeHistory.add(new VortexForgeAgent.ChatMessage("user", prompt));
+                    final List<VortexForgeAgent.ChatMessage> snap = new ArrayList<>(mobileForgeHistory);
                     new Thread(() -> {
-                        try {
-                            final String summary = VortexForgeAgent.applyPromptToProject(project, prompt, pIdx, modelId, apiKey, true);
-                            runOnUiThread(() -> applyRestoredProject("Forge AI: " + summary));
-                        } catch (Exception ex) {
-                            runOnUiThread(() -> Toast.makeText(EditorActivity.this, "Forge AI error: " + ex.getMessage(), Toast.LENGTH_LONG).show());
-                        }
+                        final VortexForgeAgent.ChatTurnResult res = VortexForgeAgent.runChatTurn(project, snap, prompt, pIdx, modelId, apiKey);
+                        runOnUiThread(() -> {
+                            VortexForgeAgent.ChatMessage am = new VortexForgeAgent.ChatMessage("assistant", res.reply);
+                            am.toolBadges.addAll(res.toolBadges);
+                            mobileForgeHistory.add(am);
+                            if (res.mutatedProject) {
+                                undoStack.push(preJson);
+                                while (undoStack.size() > 25) undoStack.removeLast();
+                                applyRestoredProject("Forge AI updated workspace");
+                            }
+                            showForgeAiDialog();
+                        });
                     }).start();
                 },
-                null,
-                null,
-                "Cancel");
+                "Clear Chat",
+                mobileForgeHistory::clear,
+                "Close");
     }
 
     private void showCustomObjEditorDialog() {
@@ -2016,7 +2112,7 @@ public class EditorActivity extends Activity {
 
     private void switchMode(String mode) {
         syncCodeFromEditor();
-        sfxPreview.stopMusicLoop();
+        sfxPreview.stopAll();
         currentMode = mode;
 
         for (TextView tb : tabButtons) {
@@ -2062,18 +2158,22 @@ public class EditorActivity extends Activity {
                 return;
             }
             viewportSurface.startPlayMode(project.deepCopy());
-            telemetryChip.setText("▶ LIVE PLAY (" + project.scriptLanguage + ") — Tap 🌐 SCENE to stop");
+            telemetryChip.setText("▶ LIVE PLAY (" + project.scriptLanguage + ") — Tap SCENE to stop");
         } else {
             if (viewportSurface.renderer.isPlaying()) {
-                viewportSurface.loadProjectForEdit(project);
+                viewportSurface.stopPlayMode(project);
             }
+            telemetryChip.setText("Editor • " + project.entities.size() + " objs • " + project.dimensionMode + "/" + project.scriptLanguage);
             if ("INSPECTOR".equals(mode)) populateInspector();
+            if ("SCRIPT".equals(mode)) rebuildMobileFileTabsBar();
         }
     }
 
     private void syncCodeFromEditor() {
         if (scriptEditor != null && project != null) {
-            project.scriptCode = scriptEditor.getText().toString();
+            project.ensureScriptFilesInitialized();
+            String body = scriptEditor.getText().toString();
+            project.putScriptFile(project.activeScriptFile, body);
         }
     }
 
@@ -2184,6 +2284,7 @@ public class EditorActivity extends Activity {
     @Override
     protected void onPause() {
         saveProjectQuiet();
+        sfxPreview.stopAll();
         TermuxResultService.setListener(null);
         if (viewportSurface != null) viewportSurface.onPause();
         super.onPause();

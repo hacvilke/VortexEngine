@@ -42,22 +42,26 @@ public class ProjectTemplates {
     };
 
     public static GameProject create(String templateKey, String title, String pkgName) {
+        GameProject p;
         switch (templateKey) {
-            case "NEON_SURVIVORS_JS_2D":    return buildNeonSurvivorsJs2D(title, pkgName);
-            case "IRON_SENTINEL_JAVA_2D":   return buildIronSentinelJava2D(title, pkgName);
-            case "STARHULL_MECHA_JS_3D":    return buildStarhullMechaJs3D(title, pkgName);
-            case "CYBER_MAZE_AI_2D":        return buildCyberMazeAI2D(title, pkgName);
-            case "CITADEL_TWEEN_3D":        return buildCitadelTween3D(title, pkgName);
-            case "ANGRY_BOX2D_LUA":         return buildAngryCratesBox2D(title, pkgName);
-            case "FRONTIER_TERRAIN_3D_LUA": return buildFrontierTerrain3D(title, pkgName);
-            case "SKY_ISLANDS_3D":          return buildSkyIslands3D(title, pkgName);
-            case "PLATFORMER_2D":           return buildPlatformer2D(title, pkgName);
-            case "SHOOTER_2D":              return buildSpaceShooter2D(title, pkgName);
-            case "BLANK_2D_LUA":            return buildBlankLua(title, pkgName, false);
-            case "BLANK_3D_LUA":            return buildBlankLua(title, pkgName, true);
+            case "NEON_SURVIVORS_JS_2D":    p = buildNeonSurvivorsJs2D(title, pkgName); break;
+            case "IRON_SENTINEL_JAVA_2D":   p = buildIronSentinelJava2D(title, pkgName); break;
+            case "STARHULL_MECHA_JS_3D":    p = buildStarhullMechaJs3D(title, pkgName); break;
+            case "CYBER_MAZE_AI_2D":        p = buildCyberMazeAI2D(title, pkgName); break;
+            case "CITADEL_TWEEN_3D":        p = buildCitadelTween3D(title, pkgName); break;
+            case "ANGRY_BOX2D_LUA":         p = buildAngryCratesBox2D(title, pkgName); break;
+            case "FRONTIER_TERRAIN_3D_LUA": p = buildFrontierTerrain3D(title, pkgName); break;
+            case "SKY_ISLANDS_3D":          p = buildSkyIslands3D(title, pkgName); break;
+            case "PLATFORMER_2D":           p = buildPlatformer2D(title, pkgName); break;
+            case "SHOOTER_2D":              p = buildSpaceShooter2D(title, pkgName); break;
+            case "BLANK_2D_LUA":            p = buildBlankLua(title, pkgName, false); break;
+            case "BLANK_3D_LUA":            p = buildBlankLua(title, pkgName, true); break;
             case "NEON_3D":
-            default:                        return buildNeonHorizon3D(title, pkgName);
+            default:                        p = buildNeonHorizon3D(title, pkgName); break;
         }
+        p.ensureScriptFilesInitialized();
+        com.vortex.engine.core.flow.VortexBlueprintGraph.populateStarterDialogGraph(p);
+        return p;
     }
 
     private static GameProject buildIronSentinelJava2D(String title, String pkgName) {
@@ -893,18 +897,18 @@ public class ProjectTemplates {
         p.customSprites.put("drone_2", PixelSpriteCodec.createDroneFrame2Sprite());
         p.customSprites.put("gem", PixelSpriteCodec.createGemSprite());
 
-        // Arena Bounds + Tactical Pillars for Theta* Pathfinding
-        p.entities.add(Entity.create2D("ArenaN", "solid", "RECT", 0f, 11f, 30f, 1f, "#182B49", "STATIC"));
-        p.entities.add(Entity.create2D("ArenaS", "solid", "RECT", 0f, -11f, 30f, 1f, "#182B49", "STATIC"));
-        p.entities.add(Entity.create2D("ArenaW", "solid", "RECT", -14.5f, 0f, 1f, 23f, "#182B49", "STATIC"));
-        p.entities.add(Entity.create2D("ArenaE", "solid", "RECT", 14.5f, 0f, 1f, 23f, "#182B49", "STATIC"));
+        // Arena Bounds + Tactical Pillars for Theta* Pathfinding (Pure Monochrome Carbon/Titanium)
+        p.entities.add(Entity.create2D("ArenaN", "solid", "RECT", 0f, 11f, 30f, 1f, "#27272A", "STATIC"));
+        p.entities.add(Entity.create2D("ArenaS", "solid", "RECT", 0f, -11f, 30f, 1f, "#27272A", "STATIC"));
+        p.entities.add(Entity.create2D("ArenaW", "solid", "RECT", -14.5f, 0f, 1f, 23f, "#27272A", "STATIC"));
+        p.entities.add(Entity.create2D("ArenaE", "solid", "RECT", 14.5f, 0f, 1f, 23f, "#27272A", "STATIC"));
 
         float[][] pillars = {{-5.5f, 4.5f}, {5.5f, 4.5f}, {-5.5f, -4.5f}, {5.5f, -4.5f}};
         for (int i = 0; i < pillars.length; i++) {
-            p.entities.add(Entity.create2D("Pillar_" + i, "solid", "RECT", pillars[i][0], pillars[i][1], 2.1f, 2.1f, "#004D61", "STATIC"));
+            p.entities.add(Entity.create2D("Pillar_" + i, "solid", "RECT", pillars[i][0], pillars[i][1], 2.1f, 2.1f, "#3F3F46", "STATIC"));
         }
 
-        Entity player = Entity.create2D("Player", "player", "CUSTOM_SPRITE", 0f, 0f, 1.38f, 1.38f, "#00E5FF", "DYNAMIC");
+        Entity player = Entity.create2D("Player", "player", "CUSTOM_SPRITE", 0f, 0f, 1.38f, 1.38f, "#FFFFFF", "DYNAMIC");
         player.customSpriteName = "knight_1";
         player.spriteFrames = "knight_1,knight_2";
         player.animFps = 7.5f;
@@ -929,8 +933,8 @@ public class ProjectTemplates {
             p.entities.add(gem);
         }
 
-        p.scriptCode =
-                "// Neon Survivors Swarm 2D — Powered by Mozilla Rhino ES6+ JS & Native Browser V8!\n" +
+        p.scriptFiles.put("objects/swarm_director.js",
+                "// objects/swarm_director.js — Modular Swarm Director & XP HUD Controller\n" +
                 "class SwarmDirector {\n" +
                 "  constructor() {\n" +
                 "    this.wave = 1;\n" +
@@ -945,9 +949,13 @@ public class ProjectTemplates {
                 "  fireInterval() { return Math.max(0.16, 0.52 - (this.level - 1) * 0.06); }\n" +
                 "  hud() {\n" +
                 "    vortex.setBanner(`NEON SURVIVORS [ES6 JS] • LVL ${this.level} • WAVE ${this.wave} • BEST ${this.best}`);\n" +
+                "    vortex.setProgressBar('xp_bar', `LVL ${this.level} XP`, this.xp % (this.level * 3), this.level * 3, 84, 13, '#FFFFFF');\n" +
                 "  }\n" +
-                "}\n\n" +
-                "const dir = new SwarmDirector();\n\n" +
+                "}\n" +
+                "const dir = new SwarmDirector();\n");
+
+        p.scriptCode =
+                "// scripts/main.js — Player Combat, Auto-Aiming Weapon & Collision Hooks\n" +
                 "function onStart() {\n" +
                 "  vortex.setFixedRotation('Player', true);\n" +
                 "  vortex.playMusic('CYBERPUNK', 138);\n" +
@@ -1039,6 +1047,8 @@ public class ProjectTemplates {
                 "    }\n" +
                 "  }\n" +
                 "}\n";
+        p.scriptFiles.put("scripts/main.js", p.scriptCode);
+        p.activeScriptFile = "scripts/main.js";
         return p;
     }
 
