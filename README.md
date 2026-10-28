@@ -1,17 +1,30 @@
-# Vortex Engine Studio — v4.4.0 ("Monolith White Edition")
+# Vortex Engine Studio — v4.5.0 ("Monolith White Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
 
-## What's New in v4.4.0 (Godot/Unreal-Inspired IDE Rebuild, Real Physics & Readable Type)
+## What's New in v4.5.0 (Godot-Style Scene Tree, Real Parenting & Mobile Tree Inspect)
 
-### 1. Readable Typography Everywhere (no more 8–10pt micro text)
+### 1. Godot-Style Scene Tree (the real thing: nesting, not a flat list)
+- The old flat entity list is gone. The left dock is now a **nested scene tree** with disclosure chevrons, tree guide lines, per-node 3D/2D badges and a green dot for dynamic bodies.
+- **Drag a node onto another to reparent it** — the child keeps its exact on-screen transform, exactly like Godot's Scene dock. Dropping is blocked when it would nest a node inside its own descendant (the graph can never cycle).
+- **Right-click**: `Rename` (or `F2` / double-click), `Duplicate`, `Add child`, `Detach to root`, `Toggle visible`, `Delete`. Deleting a parent removes its subtree; duplicating a parent copies its subtree with the internal parent links rewired.
+- **Filter box** (Godot's scene-tree search) matches name, primitive, tag or full path, auto-expanding hits.
+- The inspector banner now prints the **node path** (`PlayerShip/Turret/Muzzle`) so nesting is unambiguous while editing.
+- **Phone**: the entity picker and inspector dropdown render the same indented tree, and a new **Scene Tree / Parent Node** section reparents or detaches with one tap — no drag precision needed on a 6" screen.
+
+### 2. Transform-Driven Parenting (no renderer or solver rewrite)
+- `SceneHierarchy` keeps a **local** transform per node next to the existing **world** transform, so every renderer (OpenGL ES, software 3D viewport, HTML5 export) and the JBox2D/3D solvers keep reading world coordinates untouched.
+- Each frame publishes parent → child; externally edited worlds (gizmo drag, inspector scrubbers, scripts, physics results) are reconciled and folded back into the local transform, so nothing snaps back.
+- Moving a parent drags its children instantly in the editor, during play, and in exported HTML5 builds (transforms are baked before export).
+
+### 3. Readable Typography Everywhere (no more 8–10pt micro text)
 - **14pt editorial scale**: the Desktop Studio now renders at a true **14pt UI scale with 14pt code**, using the first installed quality face (`Inter → Segoe UI → Ubuntu → Cantarell → DejaVu Sans`) and true monospace (`JetBrains Mono → Cascadia Mono → Consolas → DejaVu Sans Mono`). LCD/ClearType hinting is enabled so glyphs stay sharp instead of blurry.
 - **Menu → Toolbar → Dock hierarchy** with generous spacing, so labels stop colliding and nothing clips at `1366×768`.
 - **Android** got the same treatment: every Studio text size was raised (≈+1.5sp, dialog inputs to 14.5sp, buttons 13–14sp) for real phone readability.
 
-### 2. Honest, Engine-Shaped Layout (fewer, purposeful tabs)
+### 4. Honest, Engine-Shaped Layout (fewer, purposeful tabs)
 - **Menu bar** (`File · Edit · Create · View · Tools · Help`) plus a compact **icon-first tool strip** — the same shape as Godot/Unreal, instead of one long row of duplicate buttons.
 - Only **9 verbs** fill the whole IDE: File · Edit · Create · View · Tools · Help, plus icon actions (New, Open, Save, Undo, Redo, 2D/3D, Gizmo, Colliders, Snap, Play) and two CTAs (`Play`, `Build`).
 - Right dock consolidated **7 tabs → 6** (`Scene · Script · Logic · AI · Assets · Build`), with `Blueprint`/`Event Flow` nested under **Logic** and `Forge AI`/`LRM Sync` nested under **AI** — nothing removed, just de-duplicated.
@@ -19,7 +32,7 @@
 - **Godot-style property rows**: fixed-width label column + stretchable control (see `createPropertyRow`), so the Inspector reads like a real DCC tool.
 - Phone layout rebuilt: cramped top tab strip replaced with a **thumb-reachable bottom navigation bar** (Scene · Inspect · Code · Logic · Play + More), giving the viewport ~34dp more height.
 
-### 3. Godot/Unreal-inspired Viewport, Gizmos & Physics Tooling
+### 5. Godot/Unreal-inspired Viewport, Gizmos & Physics Tooling
 - **Transform gizmos** in the viewport: `MOVE` (X/Y arrows), `SCALE` (handles), `SELECT`, with `Shift` for vertical axis drags, plus **grid snapping** and **collider overlay** (solid green = solid, dashed amber = trigger) and velocity vectors.
 - **New physics solver (Unreal-Chaos-inspired)**, replacing the naive AABB-push resolver:
   - **Substepped integration** (4 substeps; **6 with CCD** for bullets/fast projectiles) so fast objects no longer tunnel through walls.
@@ -29,7 +42,7 @@
   - **Mass-aware impulses**, **coyote-time grounding** (`Entity.canJump()`), slope-normal deflection & friction on **FastNoiseLite 3D terrain**, and **JBox2D CCD bullets** in 2D with `World.setContinuousPhysics(true)`.
   - New script APIs: `applyForce`, `applyRadialImpulse` (shockwaves), `setGravityScale`, `setBounce`, `setFriction`, `setMass`, `raycastDist`, and a rewritten `raycast` (sphere + AABB + terrain) — mirrored in **JS, Java, Lua and HTML5 exports**.
 
-### 4. Cleaner, Reticent Console & Chrome Copy
+### 6. Cleaner, Reticent Console & Chrome Copy
 - Removed tutorial-style walls of text: the terminal banner and Studio console now emit a single-line status instead of three paragraphs of instructions.
 - Kept the color-coded log semantics (emerald success / coral error / amber warning) and the live status pill.
 

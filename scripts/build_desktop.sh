@@ -143,8 +143,16 @@ mkdir -p "$BUILD_DESK/fatjar/toolchain"
 cp "$BUILD_DESK/win/win-launcher-stub.exe" "$BUILD_DESK/fatjar/toolchain/win-launcher-stub.exe"
 cp scripts/termux/build_termux.sh "$BUILD_DESK/fatjar/toolchain/build_termux.sh"
 cp scripts/termux/setup_termux.sh "$BUILD_DESK/fatjar/toolchain/setup_termux.sh"
+# Prefer the dex freshly produced by build_studio_apk.sh, else fall back to the checked-in runtime
+# so a desktop build never silently exports a 14 KB "empty" Termux bundle.
+DEX_SRC=""
 if [ -f "build_studio/assets/toolchain/vortex-runtime.dex" ]; then
-    cp "build_studio/assets/toolchain/vortex-runtime.dex" "$BUILD_DESK/fatjar/toolchain/vortex-runtime.dex"
+    DEX_SRC="build_studio/assets/toolchain/vortex-runtime.dex"
+elif [ -f "app/src/main/assets/toolchain/vortex-runtime.dex" ]; then
+    DEX_SRC="app/src/main/assets/toolchain/vortex-runtime.dex"
+fi
+if [ -n "$DEX_SRC" ]; then
+    cp "$DEX_SRC" "$BUILD_DESK/fatjar/toolchain/vortex-runtime.dex"
 fi
 if [ -f "build_studio/assets/toolchain/vortex-runtime-2.dex" ]; then
     cp "build_studio/assets/toolchain/vortex-runtime-2.dex" "$BUILD_DESK/fatjar/toolchain/vortex-runtime-2.dex"
@@ -158,7 +166,7 @@ Manifest-Version: 1.0
 Main-Class: com.vortex.engine.desktop.VortexDesktopStudio
 EOF
 
-FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.4.0.jar"
+FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.5.0.jar"
 "$JAR" cfm "$FAT_JAR" "$BUILD_DESK/manifest.mf" -C "$BUILD_DESK/fatjar" .
 
 echo "=== [4/5] Building Self-Contained Windows x64 .EXE & Linux x86_64 Binary ==="

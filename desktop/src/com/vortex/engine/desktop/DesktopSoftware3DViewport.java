@@ -453,6 +453,9 @@ public class DesktopSoftware3DViewport extends JPanel {
             return;
         }
 
+        // Scene tree: moving a parent in the editor immediately drags its children.
+        if (!playing) com.vortex.engine.core.model.SceneHierarchy.propagate(p.entities);
+
         g2.setColor(toAwtColor(p.skyColorHex, 255));
         g2.fillRect(0, 0, w, h);
 

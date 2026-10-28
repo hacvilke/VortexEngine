@@ -60,6 +60,19 @@ public class Entity {
     public boolean alive = true;
     public transient boolean transformDirty = false;
 
+    // v4.5.0 Godot-style Scene Tree parenting.
+    // x/y/z/rot*/scale* always hold WORLD transforms (all renderers + physics read them),
+    // while local* hold the transform relative to the parent. SceneHierarchy keeps both in sync.
+    public String parentId = "";
+    public float localX = 0f, localY = 0f, localZ = 0f;
+    public float localRotX = 0f, localRotY = 0f, localRotZ = 0f;
+    public float localScaleX = 1f, localScaleY = 1f, localScaleZ = 1f;
+    // Snapshot of the world transform SceneHierarchy last wrote, so external edits (gizmo drags,
+    // inspector scrubbers, scripts, physics) can be told apart from parent-driven motion.
+    public transient float pubX = Float.NaN, pubY = Float.NaN, pubZ = Float.NaN;
+    public transient float pubRotX = Float.NaN, pubRotY = Float.NaN, pubRotZ = Float.NaN;
+    public transient float pubScaleX = Float.NaN, pubScaleY = Float.NaN, pubScaleZ = Float.NaN;
+
     // Continuous spin (deg/sec) for collectibles, props, asteroids
     public float spinX = 0f;
     public float spinY = 0f;
@@ -221,6 +234,16 @@ public class Entity {
         o.put("spinX", spinX);
         o.put("spinY", spinY);
         o.put("spinZ", spinZ);
+        o.put("parentId", parentId);
+        o.put("localX", localX);
+        o.put("localY", localY);
+        o.put("localZ", localZ);
+        o.put("localRotX", localRotX);
+        o.put("localRotY", localRotY);
+        o.put("localRotZ", localRotZ);
+        o.put("localScaleX", localScaleX);
+        o.put("localScaleY", localScaleY);
+        o.put("localScaleZ", localScaleZ);
         return o;
     }
 
@@ -270,6 +293,16 @@ public class Entity {
         e.spinX = (float) o.optDouble("spinX", 0.0);
         e.spinY = (float) o.optDouble("spinY", 0.0);
         e.spinZ = (float) o.optDouble("spinZ", 0.0);
+        e.parentId = o.optString("parentId", "");
+        e.localX = (float) o.optDouble("localX", 0.0);
+        e.localY = (float) o.optDouble("localY", 0.0);
+        e.localZ = (float) o.optDouble("localZ", 0.0);
+        e.localRotX = (float) o.optDouble("localRotX", 0.0);
+        e.localRotY = (float) o.optDouble("localRotY", 0.0);
+        e.localRotZ = (float) o.optDouble("localRotZ", 0.0);
+        e.localScaleX = (float) o.optDouble("localScaleX", 1.0);
+        e.localScaleY = (float) o.optDouble("localScaleY", 1.0);
+        e.localScaleZ = (float) o.optDouble("localScaleZ", 1.0);
         return e;
     }
 }

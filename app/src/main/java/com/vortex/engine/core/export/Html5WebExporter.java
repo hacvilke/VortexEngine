@@ -25,6 +25,8 @@ public class Html5WebExporter {
     }
 
     public static String buildStandaloneHtml(GameProject project) {
+        // Bake the scene tree's world transforms so the exported JS gets final positions.
+        com.vortex.engine.core.model.SceneHierarchy.propagate(project.entities);
         GameProject webCopy = project.deepCopy();
         StringBuilder combinedModules = new StringBuilder();
         java.util.Map<String, String> mods = webCopy.getOrderedRuntimeScriptModules();

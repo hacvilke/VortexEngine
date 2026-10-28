@@ -30,6 +30,7 @@ import com.vortex.engine.core.flow.VortexFlowCompiler;
 import com.vortex.engine.core.forge.VortexForgeAgent;
 import com.vortex.engine.core.lrm.LrmWorkspaceBridge;
 import com.vortex.engine.core.model.Entity;
+import com.vortex.engine.core.model.SceneHierarchy;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.model.PixelSpriteCodec;
 import com.vortex.engine.core.render.VortexGLRenderer;
@@ -579,8 +580,20 @@ public class EditorActivity extends Activity {
         copy.id = java.util.UUID.randomUUID().toString().substring(0, 8);
         copy.name = src.name + "_copy";
         copy.x += 1.5f;
+        copy.localX += 1.5f;
         synchronized (viewportSurface.renderer) {
             project.entities.add(copy);
+            java.util.Map<String, String> idMap = new java.util.HashMap<>();
+            idMap.put(src.id, copy.id);
+            for (Entity child : SceneHierarchy.subtree(project.entities, src)) {
+                Entity childCopy = child.deepCopy();
+                childCopy.id = java.util.UUID.randomUUID().toString().substring(0, 8);
+                childCopy.name = child.name + "_copy";
+                String mappedParent = idMap.get(child.parentId);
+                childCopy.parentId = mappedParent != null ? mappedParent : child.parentId;
+                idMap.put(child.id, childCopy.id);
+                project.entities.add(childCopy);
+            }
             viewportSurface.renderer.setSelectedEntityId(copy.id);
         }
         saveProjectQuiet();
@@ -591,7 +604,9 @@ public class EditorActivity extends Activity {
         Entity src = project.findById(selId);
         if (src == null) return;
         synchronized (viewportSurface.renderer) {
-            project.entities.remove(src);
+            java.util.List<Entity> doomed = SceneHierarchy.subtree(project.entities, src);
+            doomed.add(src);
+            project.entities.removeAll(doomed);
             viewportSurface.renderer.setSelectedEntityId(
                     project.entities.isEmpty() ? null : project.entities.get(0).id);
         }
@@ -599,18 +614,30 @@ public class EditorActivity extends Activity {
         saveProjectQuiet();
     }
 
+    /** Godot-style indented label for the phone's scene-tree pickers. */
+    private String mobileTreeName(Entity e) {
+        int depth = Math.max(0, SceneHierarchy.depth(project.entities, e));
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < depth; i++) sb.append("    ");
+        sb.append(depth > 0 ? "\u2514\u2500 " : "\u25aa ").append(e.name);
+        sb.append("  [").append(e.primitive).append("]");
+        return sb.toString();
+    }
+
     private void showEntityPickerDialog() {
-        String[] names = new String[project.entities.size()];
+        final java.util.List<Entity> order = SceneHierarchy.flattened(project.entities);
+        String[] names = new String[order.size()];
         int activeIdx = 0;
         String selId = viewportSurface.renderer.getSelectedEntityId();
-        for (int i = 0; i < project.entities.size(); i++) {
-            Entity e = project.entities.get(i);
-            names[i] = e.name + "  [" + e.primitive + " • " + e.bodyType + "]";
+        for (int i = 0; i < order.size(); i++) {
+            Entity e = order.get(i);
+            names[i] = mobileTreeName(e) + " \u2022 " + e.bodyType;
             if (e.id.equals(selId)) activeIdx = i;
         }
-        VortexMobileUi.showPickerModal(this, "Scene Entities (" + names.length + ")", names, activeIdx,
+        VortexMobileUi.showPickerModal(this, "Scene Tree (" + names.length + ")", names, activeIdx,
                 (which, val) -> {
-                    Entity chosen = project.entities.get(which);
+                    if (which < 0 || which >= order.size()) return;
+                    Entity chosen = order.get(which);
                     viewportSurface.renderer.setSelectedEntityId(chosen.id);
                     if ("INSPECTOR".equals(currentMode)) populateInspector();
                 });
@@ -697,18 +724,19 @@ public class EditorActivity extends Activity {
         inspectorContent.addView(topHead);
 
         if (!project.entities.isEmpty()) {
-            String[] entityNames = new String[project.entities.size()];
+            final java.util.List<Entity> order = SceneHierarchy.flattened(project.entities);
+            String[] entityNames = new String[order.size()];
             String curVal = "";
             String curId = viewportSurface.renderer.getSelectedEntityId();
-            for (int i = 0; i < project.entities.size(); i++) {
-                Entity item = project.entities.get(i);
-                entityNames[i] = item.name + " [" + item.primitive + "]";
+            for (int i = 0; i < order.size(); i++) {
+                Entity item = order.get(i);
+                entityNames[i] = mobileTreeName(item);
                 if (item.id.equals(curId)) curVal = entityNames[i];
             }
             VortexMobileUi.VortexDropdown pickDrop = new VortexMobileUi.VortexDropdown(this, entityNames, curVal);
             pickDrop.setOnSelectionListener((pos, val) -> {
-                if (pos >= 0 && pos < project.entities.size()) {
-                    viewportSurface.renderer.setSelectedEntityId(project.entities.get(pos).id);
+                if (pos >= 0 && pos < order.size()) {
+                    viewportSurface.renderer.setSelectedEntityId(order.get(pos).id);
                     populateInspector();
                 }
             });
@@ -746,6 +774,35 @@ public class EditorActivity extends Activity {
         EditText bncEt = addCompactNum(rotRow, "Bounce", e.bounce);
         EditText frcEt = addCompactNum(rotRow, "Friction", e.friction);
         transformAcc.addView(rotRow);
+
+        // v4.5.0 Godot-style scene tree: reparent straight from the phone inspector.
+        LinearLayout treeAcc = createMobileAccordion(inspectorContent, "Scene Tree / Parent Node", false);
+        final java.util.List<Entity> treeOrder = SceneHierarchy.flattened(project.entities);
+        String[] parentOpts = new String[treeOrder.size() + 1];
+        parentOpts[0] = "\u25aa Scene root";
+        int curParentIdx = 0;
+        for (int i = 0; i < treeOrder.size(); i++) {
+            Entity cand = treeOrder.get(i);
+            parentOpts[i + 1] = mobileTreeName(cand);
+            if (cand.id.equals(e.parentId)) curParentIdx = i + 1;
+        }
+        VortexMobileUi.VortexDropdown parentSpin = addLabeledSpinner(treeAcc, "Parent node", parentOpts, parentOpts[curParentIdx]);
+        parentSpin.setOnSelectionListener((pos, val) -> {
+            final Entity target = pos <= 0 ? null : treeOrder.get(pos - 1);
+            boolean ok;
+            synchronized (viewportSurface.renderer) {
+                ok = SceneHierarchy.reparent(project.entities, e, target);
+            }
+            if (!ok) {
+                Toast.makeText(this, "\u2715 A node cannot be nested inside itself", Toast.LENGTH_SHORT).show();
+            } else {
+                saveProjectQuiet();
+                Toast.makeText(this, target == null ? "\u2713 Moved to scene root" : "\u2713 Child of " + target.name,
+                        Toast.LENGTH_SHORT).show();
+            }
+            viewportSurface.requestEditorRender();
+            populateInspector();
+        });
 
         LinearLayout renderAcc = createMobileAccordion(inspectorContent, "Rendering, Color & Sprites", true);
         String[] prims = "3D".equalsIgnoreCase(project.dimensionMode)

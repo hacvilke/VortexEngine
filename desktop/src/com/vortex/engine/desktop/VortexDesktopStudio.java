@@ -9,6 +9,7 @@ import com.vortex.engine.core.model.Entity;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.model.PixelSpriteCodec;
 import com.vortex.engine.core.model.ProjectTemplates;
+import com.vortex.engine.core.model.SceneHierarchy;
 import com.vortex.engine.core.physics.PhysicsWorld;
 import com.vortex.engine.core.script.VortexScriptEngine;
 import com.vortex.engine.core.storage.VortexSaveStore;
@@ -83,8 +84,8 @@ public class VortexDesktopStudio extends JFrame {
     private File currentProjectFile = null;
 
     private final DesktopSoftware3DViewport viewport = new DesktopSoftware3DViewport();
-    private final DefaultListModel<String> entityListModel = new DefaultListModel<>();
-    private final JList<String> entityList = new JList<>(entityListModel);
+    private DesktopSceneTree sceneTree;
+    private String pendingParentId = null;
 
     private final JPanel inspectorForm = new JPanel();
     private final JTextArea scriptArea = new JTextArea();
@@ -132,7 +133,7 @@ public class VortexDesktopStudio extends JFrame {
     private boolean rightDockCollapsed = false;
     private boolean bottomDockCollapsed = false;
     private boolean viewportFocusMode = false;
-    private int savedLeftDivLoc = 260;
+    private int savedLeftDivLoc = 320;
     private int savedRightDivLoc = 760;
     private int savedBottomDivLoc = 560;
     private DesktopUiKit.VortexButton focusModeBtn;
@@ -195,7 +196,7 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio(boolean checkStartupDependencies) {
-        super("Vortex Engine Studio v4.4.0 — Multi-File IDE • Blueprint GUI • Forge AI Chat • Native Java / JS / Lua");
+        super("Vortex Engine Studio v4.5.0 — Multi-File IDE • Blueprint GUI • Forge AI Chat • Native Java / JS / Lua");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         // Laptop-aware sizing: fit cleanly inside 1280x720 / 1366x768 / 1536x864 / 1440x900 screens!
@@ -236,7 +237,7 @@ public class VortexDesktopStudio extends JFrame {
         rebuildCenterSnapLayout();
 
         JPanel bottomPanel = buildBottomConsoleAndTerminalPanel();
-        int leftW = Math.max(210, Math.round(winW * 0.175f));
+        int leftW = Math.min(372, Math.max(304, Math.round(winW * 0.215f)));   // wide enough for 3-up vector rows
         int centerAndBottomH = Math.max(380, Math.round((winH - 44) * 0.75f));
         int centerW = Math.max(460, Math.round((winW - leftW) * 0.56f));
 
@@ -250,7 +251,7 @@ public class VortexDesktopStudio extends JFrame {
         midRightSplit.setResizeWeight(0.56);
 
         mainSplit = DesktopUiKit.createSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, midRightSplit, leftW);
-        mainSplit.setResizeWeight(0.17);
+        mainSplit.setResizeWeight(0.215);
 
         add(mainSplit, BorderLayout.CENTER);
 
@@ -680,6 +681,9 @@ public class VortexDesktopStudio extends JFrame {
         items.add(new DesktopUiKit.MenuAction(
                 floatingConsoleDialog != null ? "Redock Console" : "Undock Console", this::toggleUndockBottomConsole));
         items.add(new DesktopUiKit.MenuAction("---", null));
+        items.add(new DesktopUiKit.MenuAction("Expand Scene Tree", () -> {
+            if (sceneTree != null) sceneTree.expandAll();
+        }));
         items.add(new DesktopUiKit.MenuAction("Reset Layout", this::resetWorkspaceLayout));
         return items;
     }
@@ -726,8 +730,8 @@ public class VortexDesktopStudio extends JFrame {
                 "Physics",
                 "2D: JBox2D rigid bodies (CCD bullets)\n3D: substepped impulse solver + terrain\nLayers: collisionLayer / collisionMask")));
         items.add(new DesktopUiKit.MenuAction("---", null));
-        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.4.0", () -> DesktopUiKit.showInfoModal(this,
-                "Vortex Engine Studio v4.4.0",
+        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.5.0", () -> DesktopUiKit.showInfoModal(this,
+                "Vortex Engine Studio v4.5.0",
                 "Free & open-source 2D/3D game engine\nWindows • Linux • Android • Web")));
         return items;
     }
@@ -808,7 +812,7 @@ public class VortexDesktopStudio extends JFrame {
             mainSplit.setDividerLocation(0);
             leftDockCollapsed = true;
         } else {
-            mainSplit.setDividerLocation(Math.max(210, savedLeftDivLoc));
+            mainSplit.setDividerLocation(Math.max(304, savedLeftDivLoc));
             leftDockCollapsed = false;
         }
     }
@@ -901,7 +905,7 @@ public class VortexDesktopStudio extends JFrame {
         }
         leftDockCollapsed = false;
         rightDockCollapsed = false;
-        mainSplit.setDividerLocation(Math.max(220, savedLeftDivLoc));
+        mainSplit.setDividerLocation(Math.max(304, savedLeftDivLoc));
         int mw = Math.max(600, midRightSplit.getWidth());
         midRightSplit.setDividerLocation(Math.min(mw - 260, Math.max(360, savedRightDivLoc)));
         if (bottomDockCollapsed) toggleBottomDock();
@@ -1154,9 +1158,7 @@ public class VortexDesktopStudio extends JFrame {
         headerBar.add(rightBar, BorderLayout.EAST);
         bottomWrapperPanel.add(headerBar, BorderLayout.NORTH);
 
-        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.4.0 Desktop Studio Ready.");
-        consoleArea.appendColoredLine("• Multi-File IDE: Organize modules across `scripts/`, `objects/`, `ui/` — drag tabs onto Viewport to snap split!");
-        consoleArea.appendColoredLine("• Precision UX  : Drag numeric arrows or scroll mouse wheel in Inspector • Collapsible Accordion Sections • Undock/Collapse Docks");
+        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.5.0 Desktop Studio Ready.");
 
         JScrollPane consoleScroll = DesktopUiKit.createScrollPane(consoleArea);
         bottomDeck.addCard("CONSOLE", consoleScroll, 0);
@@ -1182,7 +1184,7 @@ public class VortexDesktopStudio extends JFrame {
         panel.setBackground(DesktopUiKit.C_PANEL);
         panel.setBorder(BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1));
         panel.setMinimumSize(new Dimension(0, 120));
-        panel.setPreferredSize(new Dimension(296, 600));
+        panel.setPreferredSize(new Dimension(320, 600));
 
         JPanel topList = new JPanel(new BorderLayout());
         topList.setBackground(DesktopUiKit.C_PANEL);
@@ -1195,20 +1197,65 @@ public class VortexDesktopStudio extends JFrame {
         hierRight.add(collapseLeftHdrBtn);
         topList.add(DesktopUiKit.createDockHeader("SCENE HIERARCHY", null, hierRight), BorderLayout.NORTH);
 
-        entityList.setBackground(DesktopUiKit.C_VOID);
-        entityList.setCellRenderer(DesktopUiKit.createDarkListRenderer());
-        entityList.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
-                int idx = entityList.getSelectedIndex();
-                if (idx >= 0 && idx < project.entities.size()) {
-                    viewport.setSelectedEntityId(project.entities.get(idx).id);
+        if (sceneTree == null) {
+            sceneTree = new DesktopSceneTree(new DesktopSceneTree.Listener() {
+                @Override public void onSelect(String entityId) {
+                    if (entityId == null) return;
+                    viewport.setSelectedEntityId(entityId);
+                    populateInspector();
+                    viewport.repaint();
+                }
+
+                @Override public void onReparent(String childId, String newParentId) {
+                    Entity child = project.findById(childId);
+                    if (child == null) return;
+                    Entity parent = newParentId == null || newParentId.isEmpty() ? null : project.findById(newParentId);
+                    pushUndo();
+                    if (SceneHierarchy.reparent(project.entities, child, parent)) {
+                        refreshHierarchyList();
+                        populateInspector();
+                        viewport.repaint();
+                        log("↳ " + child.name + " → " + (parent == null ? "Scene root" : parent.name));
+                    } else {
+                        log("✕ Cannot parent " + child.name + " under its own descendant");
+                    }
+                }
+
+                @Override public void onRename(String entityId, String newName) {
+                    Entity e = project.findById(entityId);
+                    if (e == null) return;
+                    pushUndo();
+                    e.name = newName;
+                    refreshHierarchyList();
                     populateInspector();
                 }
-            }
-        });
-        JScrollPane listScroll = DesktopUiKit.createScrollPane(entityList);
-        listScroll.setPreferredSize(new Dimension(265, 195));
-        topList.add(listScroll, BorderLayout.CENTER);
+
+                @Override public void onDelete(String entityId) {
+                    viewport.setSelectedEntityId(entityId);
+                    deleteSelectedEntity();
+                }
+
+                @Override public void onDuplicate(String entityId) {
+                    viewport.setSelectedEntityId(entityId);
+                    cloneSelectedEntity();
+                }
+
+                @Override public void onAddChild(String parentId) {
+                    showAddEntityMenu(sceneTree, parentId);
+                }
+
+                @Override public void onToggleVisible(String entityId) {
+                    Entity e = project.findById(entityId);
+                    if (e == null) return;
+                    pushUndo();
+                    e.visible = !e.visible;
+                    refreshHierarchyList();
+                    viewport.repaint();
+                }
+            });
+        }
+        sceneTree.setProject(project);
+        topList.add(sceneTree, BorderLayout.CENTER);
 
         JPanel listBtns = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
         listBtns.setBackground(DesktopUiKit.C_HEADER);
@@ -1233,8 +1280,9 @@ public class VortexDesktopStudio extends JFrame {
 
         inspectorForm.setLayout(new BoxLayout(inspectorForm, BoxLayout.Y_AXIS));
         inspectorForm.setBackground(DesktopUiKit.C_PANEL);
-        inspectorForm.setBorder(BorderFactory.createEmptyBorder(8, 8, 16, 8));
+        inspectorForm.setBorder(BorderFactory.createEmptyBorder(8, 8, 16, 26)); // right inset absorbs the vertical scrollbar
         JScrollPane inspScroll = DesktopUiKit.createScrollPane(inspectorForm);
+        inspScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         inspScroll.getViewport().setBackground(DesktopUiKit.C_PANEL);
         inspScroll.setMinimumSize(new Dimension(140, 120));
         inspectorContainer.add(inspScroll, BorderLayout.CENTER);
@@ -2716,21 +2764,14 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     private void refreshHierarchyList() {
-        entityListModel.clear();
-        for (Entity e : project.entities) {
-            entityListModel.addElement(e.name + "  [" + e.primitive + " • " + e.bodyType + "]");
-        }
+        if (sceneTree == null) return;
+        sceneTree.refresh();
         syncHierarchySelection();
     }
 
     private void syncHierarchySelection() {
-        String sel = viewport.getSelectedEntityId();
-        for (int i = 0; i < project.entities.size(); i++) {
-            if (project.entities.get(i).id.equals(sel)) {
-                entityList.setSelectedIndex(i);
-                return;
-            }
-        }
+        if (sceneTree == null) return;
+        sceneTree.selectEntity(viewport.getSelectedEntityId());
     }
 
     private void populateInspector() {
@@ -2757,7 +2798,9 @@ public class VortexDesktopStudio extends JFrame {
         JLabel selTitle = new JLabel(e.name + "  •  " + e.primitive);
         selTitle.setFont(DesktopUiKit.FONT_UI_BOLD);
         selTitle.setForeground(DesktopUiKit.C_WHITE);
-        JLabel selHint = new JLabel("drag / wheel");
+        // Godot-style node path, so nesting is obvious while editing.
+        String nodePath = SceneHierarchy.path(project.entities, e);
+        JLabel selHint = new JLabel(nodePath.contains("/") ? nodePath : "drag / wheel");
         selHint.setFont(DesktopUiKit.FONT_SMALL);
         selHint.setForeground(DesktopUiKit.C_TEXT_MUTED);
         selBanner.add(selTitle, BorderLayout.CENTER);
@@ -2775,7 +2818,7 @@ public class VortexDesktopStudio extends JFrame {
         DesktopUiKit.AccordionSection transformSec = makeAccordion("TRANSFORM", "Transform", true);
         JPanel tBody = transformSec.getBody();
 
-        tBody.add(sectionLabel("Position (X / Y / Z) — drag arrows or scroll wheel"));
+        tBody.add(sectionLabel("Position"));
         tBody.add(Box.createVerticalStrut(3));
         JPanel xyzRow = new JPanel(new GridLayout(1, 3, 4, 0));
         xyzRow.setOpaque(false);
@@ -2791,7 +2834,7 @@ public class VortexDesktopStudio extends JFrame {
         tBody.add(xyzRow);
 
         tBody.add(Box.createVerticalStrut(6));
-        tBody.add(sectionLabel("Scale (W / H / D)"));
+        tBody.add(sectionLabel("Scale"));
         tBody.add(Box.createVerticalStrut(3));
         JPanel sclRow = new JPanel(new GridLayout(1, 3, 4, 0));
         sclRow.setOpaque(false);
@@ -3054,6 +3097,12 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     private void showAddEntityMenu(DesktopUiKit.VortexButton invoker) {
+        showAddEntityMenu((javax.swing.JComponent) invoker, null);
+    }
+
+    /** Create a node; when {@code parentId} is set the new node is attached inside that node. */
+    private void showAddEntityMenu(javax.swing.JComponent invoker, String parentId) {
+        pendingParentId = parentId;
         List<DesktopUiKit.MenuAction> items = new ArrayList<>();
         if ("3D".equalsIgnoreCase(project.dimensionMode)) {
             items.add(new DesktopUiKit.MenuAction("+ 3D Cube (Static)", () -> spawnEntity("CUBE", "#FFFFFF", "STATIC")));
@@ -3163,11 +3212,26 @@ public class VortexDesktopStudio extends JFrame {
                 ? Entity.create3D(nm, "prop", prim, 0f, 1.5f, 0f, 1.2f, 1.2f, 1.2f, hex, body)
                 : Entity.create2D(nm, "prop", prim, 0f, 1.5f, 1.3f, 1.3f, hex, body);
         project.entities.add(e);
+        attachToPendingParent(e);
         viewport.setSelectedEntityId(e.id);
         refreshHierarchyList();
         populateInspector();
         viewport.repaint();
         return e;
+    }
+
+    /** Godot behaviour: a spawned child node is dropped at its parent's origin. */
+    private void attachToPendingParent(Entity child) {
+        String pid = pendingParentId;
+        if (pid == null) return;
+        Entity parent = project.findById(pid);
+        if (parent == null) return;
+        SceneHierarchy.reparent(project.entities, child, parent);
+        child.localX = 0f;
+        child.localY = 0f;
+        child.localZ = 0f;
+        SceneHierarchy.applyLocalToWorld(child, parent);
+        log("+ " + child.name + " → child of " + parent.name);
     }
 
     private void togglePlayMode() {
@@ -3358,22 +3422,42 @@ public class VortexDesktopStudio extends JFrame {
         Entity src = project.findById(viewport.getSelectedEntityId());
         if (src == null) return;
         pushUndo();
-        Entity copy = src.deepCopy();
-        copy.id = java.util.UUID.randomUUID().toString().substring(0, 8);
-        copy.name = src.name + "_copy";
+        // Godot-style duplicate: the whole subtree comes along, parented copy included.
+        java.util.Map<String, String> idMap = new java.util.HashMap<>();
+        Entity copy = duplicateNode(src, idMap);
         copy.x += 1.5f;
-        project.entities.add(copy);
+        copy.localX += 1.5f;
+        for (Entity descendant : SceneHierarchy.subtree(project.entities, src)) {
+            duplicateNode(descendant, idMap);
+        }
         viewport.setSelectedEntityId(copy.id);
         refreshHierarchyList();
         populateInspector();
         viewport.repaint();
     }
 
+    private Entity duplicateNode(Entity src, java.util.Map<String, String> idMap) {
+        Entity copy = src.deepCopy();
+        copy.id = java.util.UUID.randomUUID().toString().substring(0, 8);
+        copy.name = src.name + "_copy";
+        if (src.parentId != null && !src.parentId.isEmpty()) {
+            String mapped = idMap.get(src.parentId);
+            copy.parentId = mapped != null ? mapped : src.parentId;
+        }
+        idMap.put(src.id, copy.id);
+        project.entities.add(copy);
+        return copy;
+    }
+
+    /** Deletes the node and its whole subtree (Godot removes children with the parent). */
     private void deleteSelectedEntity() {
         Entity src = project.findById(viewport.getSelectedEntityId());
         if (src == null) return;
         pushUndo();
-        project.entities.remove(src);
+        List<Entity> doomed = SceneHierarchy.subtree(project.entities, src);
+        doomed.add(src);
+        project.entities.removeAll(doomed);
+        if (doomed.size() > 1) log("− " + doomed.size() + " nodes removed (subtree)");
         viewport.setSelectedEntityId(project.entities.isEmpty() ? null : project.entities.get(0).id);
         refreshHierarchyList();
         populateInspector();
@@ -3528,7 +3612,7 @@ public class VortexDesktopStudio extends JFrame {
     // Headless Verification Suite (Java VM + ES6 JS + Lua + LRM + Forge + UI)
     // =========================================================================
     private static void runHeadlessSelfTests() throws Exception {
-        System.out.println("=== Vortex Engine v4.4.0 Headless Verification Suite ===");
+        System.out.println("=== Vortex Engine v4.5.0 Headless Verification Suite ===");
 
         // 1) Zero-Blue Monochrome Palette + Laptop UI Scale Verification
         Color[] uiColors = {
@@ -3765,6 +3849,44 @@ public class VortexDesktopStudio extends JFrame {
         if (propRow.getComponentCount() < 2) throw new RuntimeException("Property row layout failed!");
         System.out.println("  [PASS] Godot/Unreal-style Inspector Property Rows + Compact Menu Chrome Verified!");
 
+        // 7.7) Godot-style scene tree: parent/child world composition, cycle guard, JSON round-trip
+        {
+            GameProject treeProj = new GameProject();
+            treeProj.dimensionMode = "3D";
+            Entity root = Entity.create3D("Ship", "player", "CUBE", 5f, 0f, 0f, 1f, 1f, 1f, "#FFFFFF", "STATIC");
+            Entity turret = Entity.create3D("Turret", "prop", "CUBE", 5f, 0f, 0f, 0.5f, 0.5f, 0.5f, "#FFFFFF", "STATIC");
+            Entity muzzle = Entity.create3D("Muzzle", "prop", "SPHERE", 5f, 0f, 0f, 0.2f, 0.2f, 0.2f, "#FFFFFF", "STATIC");
+            treeProj.entities.add(root);
+            treeProj.entities.add(turret);
+            treeProj.entities.add(muzzle);
+            if (!SceneHierarchy.reparent(treeProj.entities, turret, root)) throw new RuntimeException("reparent failed");
+            turret.localX = 1f; turret.localY = 2f; turret.localZ = 0f;
+            SceneHierarchy.propagate(treeProj.entities);
+            if (Math.abs(turret.x - 6f) > 1e-3f || Math.abs(turret.y - 2f) > 1e-3f) {
+                throw new RuntimeException("child world transform did not compose (x=" + turret.x + ", y=" + turret.y + ")");
+            }
+            SceneHierarchy.reparent(treeProj.entities, muzzle, turret);
+            muzzle.localX = 0.5f; muzzle.localY = 0f; muzzle.localZ = 0f;
+            SceneHierarchy.propagate(treeProj.entities);
+            if (Math.abs(muzzle.x - 6.25f) > 1e-3f) throw new RuntimeException("3-deep nesting composition failed (x=" + muzzle.x + ")");
+            // moving the root drags grandchildren
+            root.x = 20f;
+            SceneHierarchy.propagate(treeProj.entities);
+            if (Math.abs(muzzle.x - 21.25f) > 1e-3f) throw new RuntimeException("parent motion did not drag descendants (x=" + muzzle.x + ")");
+            // world transform survives reparenting / detaching
+            SceneHierarchy.reparent(treeProj.entities, turret, null);
+            if (Math.abs(turret.x - 21f) > 1e-3f) throw new RuntimeException("detach moved the node on screen");
+            // cycles are impossible
+            if (!SceneHierarchy.reparent(treeProj.entities, turret, root)) throw new RuntimeException("re-attach failed");
+            if (SceneHierarchy.reparent(treeProj.entities, root, muzzle)) throw new RuntimeException("cycle guard failed");
+            if (SceneHierarchy.reparent(treeProj.entities, muzzle, muzzle)) throw new RuntimeException("self-parent guard failed");
+            // depth + order + JSON round-trip
+            GameProject reloaded = GameProject.fromJsonString(treeProj.toJsonString());
+            Entity rMuzzle = reloaded.findById(muzzle.id);
+            if (rMuzzle == null || !turret.id.equals(rMuzzle.parentId)) throw new RuntimeException("parentId lost in save/load");
+            System.out.println("  [PASS] Godot Scene Tree (nested world transforms, drag-reparent, cycle guard, subtree order, JSON round-trip) Verified!");
+        }
+
         // 8) Standalone Exporters (.exe & Termux .zip)
         File tmpExe = File.createTempFile("java_sentinel_test_", ".exe");
         File tmpZip = File.createTempFile("java_sentinel_android_", ".zip");
@@ -3777,6 +3899,6 @@ public class VortexDesktopStudio extends JFrame {
         tmpExe.delete();
         tmpZip.delete();
 
-        System.out.println("=== ALL VORTEX v4.4.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
+        System.out.println("=== ALL VORTEX v4.5.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
     }
 }

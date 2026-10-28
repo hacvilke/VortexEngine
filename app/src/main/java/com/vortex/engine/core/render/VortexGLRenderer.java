@@ -258,6 +258,9 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
                     scriptEngine.notifyCollision(ce.a, ce.b);
                 }
                 particleSystem.update(dt, project.gravityY);
+            } else {
+                // Editor mode: keep the Godot-style scene tree's world transforms in sync.
+                com.vortex.engine.core.model.SceneHierarchy.propagate(project.entities);
             }
         }
 

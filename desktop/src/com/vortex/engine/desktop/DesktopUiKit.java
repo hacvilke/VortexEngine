@@ -236,6 +236,36 @@ public final class DesktopUiKit {
         UIManager.put("ToolTip.border", BorderFactory.createLineBorder(C_WHITE, 1));
         UIManager.put("PopupMenu.border", BorderFactory.createLineBorder(C_BORDER, 1));
         UIManager.put("PopupMenu.background", C_HEADER);
+        // Godot-style tree: crisp white chevrons (never the stock blue Metal handles).
+        UIManager.put("Tree.collapsedIcon", chevronIcon(false));
+        UIManager.put("Tree.expandedIcon", chevronIcon(true));
+        UIManager.put("Tree.background", C_VOID);
+        UIManager.put("Tree.foreground", C_TEXT);
+        UIManager.put("Tree.selectionBackground", C_ACCENT_TINT);
+        UIManager.put("Tree.selectionForeground", C_WHITE);
+        UIManager.put("Tree.hash", new Color(46, 46, 57));
+    }
+
+    /** Small monochrome disclosure chevron for tree/dock headers. */
+    public static javax.swing.Icon chevronIcon(final boolean expanded) {
+        return new javax.swing.Icon() {
+            @Override public void paintIcon(Component c, Graphics g, int x, int y) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(C_TEXT_MUTED);
+                g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                if (expanded) {
+                    g2.drawLine(x + 3, y + 5, x + 6, y + 9);
+                    g2.drawLine(x + 6, y + 9, x + 9, y + 5);
+                } else {
+                    g2.drawLine(x + 5, y + 3, x + 9, y + 6);
+                    g2.drawLine(x + 9, y + 6, x + 5, y + 9);
+                }
+                g2.dispose();
+            }
+            @Override public int getIconWidth() { return 12; }
+            @Override public int getIconHeight() { return 12; }
+        };
     }
 
     public static void enableAA(Graphics2D g2) {

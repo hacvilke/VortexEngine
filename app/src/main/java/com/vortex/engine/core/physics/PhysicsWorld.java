@@ -284,6 +284,10 @@ public class PhysicsWorld {
         float clampedDt = Math.min(dt, 0.05f);
         animClock += clampedDt;
 
+        // Godot-style scene tree: published parent world transforms to children first, so a moving
+        // parent drags its children before any collider is integrated this frame.
+        com.vortex.engine.core.model.SceneHierarchy.propagate(project.entities);
+
         for (int i = 0; i < project.entities.size(); i++) {
             Entity ent = project.entities.get(i);
             if (!ent.alive) continue;
@@ -320,6 +324,9 @@ public class PhysicsWorld {
                 ents.remove(i);
             }
         }
+        // ...and fold the solved world transforms back into each child's local transform.
+        com.vortex.engine.core.model.SceneHierarchy.heal(ents);
+        com.vortex.engine.core.model.SceneHierarchy.syncLocalsFromWorld(ents);
         return events;
     }
 
