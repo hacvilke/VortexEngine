@@ -119,41 +119,82 @@ public final class DesktopUiKit {
     public static final Color C_WARN_BG      = new Color(45, 34, 12);
     public static final Color C_WARN_TX      = new Color(251, 191, 36);   // #FBBF24 Warm amber warnings
 
-    // Dynamic IDE UI Scale — auto-compacts on laptop screens (1366x768 / 1536x864 / 1440x900)
-    private static float uiScale = detectOptimalLaptopScale();
+    // Crisp Native ClearType / FreeType Font Resolution & Readable Default Scale (100% — NEVER 10pt!)
+    public static final String UI_FAMILY   = pickInstalledFont(
+            "Inter", "Segoe UI", "Ubuntu", "Cantarell", "Liberation Sans", "DejaVu Sans", "SansSerif");
+    public static final String MONO_FAMILY = pickInstalledFont(
+            "JetBrains Mono", "Cascadia Mono", "Consolas", "Liberation Mono", "DejaVu Sans Mono", "Monospaced");
 
-    public static Font FONT_UI         = new Font("SansSerif", Font.PLAIN, scaledFontPt(12));
-    public static Font FONT_UI_BOLD    = new Font("SansSerif", Font.BOLD, scaledFontPt(12));
-    public static Font FONT_TITLE      = new Font("SansSerif", Font.BOLD, scaledFontPt(13));
-    public static Font FONT_MONO       = new Font("Monospaced", Font.PLAIN, scaledFontPt(12));
+    private static float uiScale = 1.00f;
+    private static int baseUiPt = 14;
+    private static int baseMonoPt = 14;
 
-    public static float detectOptimalLaptopScale() {
+    public static Font FONT_SMALL      = new Font(UI_FAMILY, Font.PLAIN, scaledFontPt(12));
+    public static Font FONT_SMALL_BOLD = new Font(UI_FAMILY, Font.BOLD, scaledFontPt(12));
+    public static Font FONT_UI         = new Font(UI_FAMILY, Font.PLAIN, scaledFontPt(baseUiPt));
+    public static Font FONT_UI_BOLD    = new Font(UI_FAMILY, Font.BOLD, scaledFontPt(baseUiPt));
+    public static Font FONT_TITLE      = new Font(UI_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 1));
+    public static Font FONT_MONO       = new Font(MONO_FAMILY, Font.PLAIN, scaledFontPt(baseMonoPt));
+
+    private static String pickInstalledFont(String... candidates) {
         try {
-            if (!java.awt.GraphicsEnvironment.isHeadless()) {
-                Rectangle b = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-                if (b.height <= 800 || b.width <= 1380) return 0.85f;
-                if (b.height <= 900 || b.width <= 1560) return 0.90f;
+            String[] avail = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
+            if (avail != null) {
+                java.util.Set<String> lower = new java.util.HashSet<>();
+                Map<String, String> exact = new HashMap<>();
+                for (String f : avail) {
+                    String k = f.toLowerCase(Locale.US);
+                    lower.add(k);
+                    exact.put(k, f);
+                }
+                for (String c : candidates) {
+                    String k = c.toLowerCase(Locale.US);
+                    if (lower.contains(k)) return exact.get(k);
+                }
             }
         } catch (Throwable ignored) {}
-        return 0.92f;
+        return candidates[candidates.length - 1];
+    }
+
+    public static float detectOptimalLaptopScale() {
+        return 1.00f;
     }
 
     public static float getUiScale() { return uiScale; }
+    public static int getBaseFontPt() { return scaledFontPt(baseUiPt); }
 
     public static int scaled(int px) {
         return Math.max(1, Math.round(px * uiScale));
     }
 
     public static int scaledFontPt(int basePt) {
-        return Math.max(10, Math.round(basePt * uiScale));
+        return Math.max(12, Math.round(basePt * uiScale));
     }
 
     public static void setUiScale(float scale) {
-        uiScale = Math.max(0.78f, Math.min(1.25f, scale));
-        FONT_UI      = new Font("SansSerif", Font.PLAIN, scaledFontPt(12));
-        FONT_UI_BOLD = new Font("SansSerif", Font.BOLD, scaledFontPt(12));
-        FONT_TITLE   = new Font("SansSerif", Font.BOLD, scaledFontPt(13));
-        FONT_MONO    = new Font("Monospaced", Font.PLAIN, scaledFontPt(12));
+        uiScale = Math.max(0.92f, Math.min(1.35f, scale));
+        rebuildFonts();
+    }
+
+    public static void adjustFontPt(int delta) {
+        baseUiPt = Math.max(12, Math.min(18, baseUiPt + delta));
+        baseMonoPt = Math.max(12, Math.min(19, baseMonoPt + delta));
+        rebuildFonts();
+    }
+
+    private static void rebuildFonts() {
+        FONT_SMALL      = new Font(UI_FAMILY, Font.PLAIN, Math.max(11, scaledFontPt(baseUiPt - 1)));
+        FONT_SMALL_BOLD = new Font(UI_FAMILY, Font.BOLD, Math.max(11, scaledFontPt(baseUiPt - 1)));
+        FONT_UI         = new Font(UI_FAMILY, Font.PLAIN, scaledFontPt(baseUiPt));
+        FONT_UI_BOLD    = new Font(UI_FAMILY, Font.BOLD, scaledFontPt(baseUiPt));
+        FONT_TITLE      = new Font(UI_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 1));
+        FONT_MONO       = new Font(MONO_FAMILY, Font.PLAIN, scaledFontPt(baseMonoPt));
+        UIManager.put("Label.font", FONT_UI);
+        UIManager.put("Button.font", FONT_UI);
+        UIManager.put("TextField.font", FONT_UI);
+        UIManager.put("TextArea.font", FONT_MONO);
+        UIManager.put("List.font", FONT_UI);
+        UIManager.put("ToolTip.font", FONT_SMALL);
     }
 
     public enum Variant { PRIMARY, ACCENT, SECONDARY, DANGER }
@@ -162,15 +203,19 @@ public final class DesktopUiKit {
         NONE, PLAY, STOP, PLUS, FOLDER, SAVE, UNDO, REDO, CUBE,
         CODE, FLOW, SPARKLE, SYNC, GRID, WAVE, EXPORT, TERMINAL, CHECK, CLOSE, REFRESH,
         FILE, SPLIT, NODES, SEND, GUI,
-        COLLAPSE_LEFT, COLLAPSE_RIGHT, COLLAPSE_DOWN, COLLAPSE_UP, UNDOCK, MAXIMIZE
+        COLLAPSE_LEFT, COLLAPSE_RIGHT, COLLAPSE_DOWN, COLLAPSE_UP, UNDOCK, MAXIMIZE,
+        MORE_VERT, MOVE, SCALE_GIZMO, EYE
     }
 
     private DesktopUiKit() {}
 
     public static void installDarkDefaults() {
+        System.setProperty("awt.useSystemAAFontSettings", "lcd");
+        System.setProperty("swing.aatext", "true");
         try {
             UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
         } catch (Exception ignored) {}
+        rebuildFonts();
         UIManager.put("Panel.background", C_VOID);
         UIManager.put("SplitPane.background", new Color(25, 25, 32));
         UIManager.put("Viewport.background", C_VOID);
@@ -195,8 +240,18 @@ public final class DesktopUiKit {
 
     public static void enableAA(Graphics2D g2) {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+        try {
+            Object dh = java.awt.Toolkit.getDefaultToolkit().getDesktopProperty("awt.font.desktophints");
+            if (dh instanceof Map<?, ?>) {
+                g2.addRenderingHints((Map<?, ?>) dh);
+            } else {
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+            }
+        } catch (Throwable ignored) {
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        }
+        g2.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
+        g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_DEFAULT);
     }
 
     public static Color lerpColor(Color a, Color b, float t) {
@@ -215,6 +270,7 @@ public final class DesktopUiKit {
         if (icon == null || icon == Icon.NONE) return;
         Graphics2D g = (Graphics2D) g2.create();
         enableAA(g);
+        g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
         g.setColor(color);
         float r = size * 0.5f;
         g.setStroke(new BasicStroke(1.55f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
@@ -461,6 +517,39 @@ public final class DesktopUiKit {
                 g.draw(new Line2D.Float(cx - s, cy + s, cx - s, cy + s * 0.3f));
                 g.draw(new Line2D.Float(cx + s, cy + s, cx + s * 0.3f, cy + s));
                 g.draw(new Line2D.Float(cx + s, cy + s, cx + s, cy + s * 0.3f));
+                break;
+            }
+            case MORE_VERT: {
+                float d = 2.4f;
+                g.fill(new Ellipse2D.Float(cx - d * 0.5f, cy - r * 0.65f - d * 0.5f, d, d));
+                g.fill(new Ellipse2D.Float(cx - d * 0.5f, cy - d * 0.5f, d, d));
+                g.fill(new Ellipse2D.Float(cx - d * 0.5f, cy + r * 0.65f - d * 0.5f, d, d));
+                break;
+            }
+            case MOVE: {
+                float s = r * 0.72f;
+                g.draw(new Line2D.Float(cx - s, cy, cx + s, cy));
+                g.draw(new Line2D.Float(cx, cy - s, cx, cy + s));
+                g.draw(new Line2D.Float(cx + s, cy, cx + s * 0.5f, cy - s * 0.35f));
+                g.draw(new Line2D.Float(cx + s, cy, cx + s * 0.5f, cy + s * 0.35f));
+                g.draw(new Line2D.Float(cx, cy - s, cx - s * 0.35f, cy - s * 0.5f));
+                g.draw(new Line2D.Float(cx, cy - s, cx + s * 0.35f, cy - s * 0.5f));
+                break;
+            }
+            case SCALE_GIZMO: {
+                float s = r * 0.68f;
+                g.draw(new Line2D.Float(cx - s, cy + s, cx + s, cy - s));
+                g.fill(new RoundRectangle2D.Float(cx + s - 2.5f, cy - s - 0.5f, 3.5f, 3.5f, 1f, 1f));
+                g.fill(new RoundRectangle2D.Float(cx - s - 1f, cy + s - 2.5f, 3.5f, 3.5f, 1f, 1f));
+                break;
+            }
+            case EYE: {
+                Path2D p = new Path2D.Float();
+                p.moveTo(cx - r * 0.8f, cy);
+                p.quadTo(cx, cy - r * 0.72f, cx + r * 0.8f, cy);
+                p.quadTo(cx, cy + r * 0.72f, cx - r * 0.8f, cy);
+                g.draw(p);
+                g.fill(new Ellipse2D.Float(cx - r * 0.25f, cy - r * 0.25f, r * 0.5f, r * 0.5f));
                 break;
             }
             default:
@@ -1313,8 +1402,11 @@ public final class DesktopUiKit {
         popup.show(invoker, 0, invoker.getHeight() + 4);
     }
 
-    public static void showInfoModal(JFrame owner, String title, String message) {
-        JDialog dlg = new JDialog(owner, title, true);
+    public static void showInfoModal(Component owner, String title, String message) {
+        java.awt.Window win = owner instanceof java.awt.Window
+                ? (java.awt.Window) owner
+                : (owner != null ? SwingUtilities.getWindowAncestor(owner) : null);
+        JDialog dlg = new JDialog(win, title, java.awt.Dialog.ModalityType.APPLICATION_MODAL);
         JPanel root = new JPanel(new BorderLayout(0, 12));
         root.setBackground(C_HEADER);
         root.setBorder(BorderFactory.createCompoundBorder(
@@ -1326,7 +1418,7 @@ public final class DesktopUiKit {
         head.setForeground(C_WHITE);
         root.add(head, BorderLayout.NORTH);
 
-        JLabel msg = new JLabel("<html><body style='width:360px;color:#FAFAFA;font-family:sans-serif;'>"
+        JLabel msg = new JLabel("<html><body style='width:380px;color:#FAFAFA;font-family:" + UI_FAMILY + ",sans-serif;font-size:11pt;'>"
                 + message.replace("\n", "<br>") + "</body></html>");
         root.add(msg, BorderLayout.CENTER);
 
@@ -1539,12 +1631,15 @@ public final class DesktopUiKit {
     // =========================================================================
     // 10. Custom Dark Monochrome File Browser Modal (Zero Swing JFileChooser!)
     // =========================================================================
-    public static File showFileModal(JFrame owner, String title, boolean saveMode, String defaultFileName) {
+    public static File showFileModal(Component owner, String title, boolean saveMode, String defaultFileName) {
         final File[] chosen = {null};
         final File[] curDir = {new File(System.getProperty("user.home", ".")).getAbsoluteFile()};
         if (!curDir[0].exists()) curDir[0] = new File(".").getAbsoluteFile();
 
-        JDialog dlg = new JDialog(owner, title, true);
+        java.awt.Window win = owner instanceof java.awt.Window
+                ? (java.awt.Window) owner
+                : (owner != null ? SwingUtilities.getWindowAncestor(owner) : null);
+        JDialog dlg = new JDialog(win, title, java.awt.Dialog.ModalityType.APPLICATION_MODAL);
         JPanel root = new JPanel(new BorderLayout(0, 8));
         root.setBackground(C_HEADER);
         root.setBorder(BorderFactory.createCompoundBorder(
@@ -1696,7 +1791,7 @@ public final class DesktopUiKit {
         left.add(t);
         if (badgeText != null && !badgeText.isEmpty()) {
             JLabel b = new JLabel(" " + badgeText + " ");
-            b.setFont(new Font("SansSerif", Font.BOLD, Math.max(9, scaledFontPt(10))));
+            b.setFont(FONT_SMALL_BOLD);
             b.setOpaque(true);
             b.setBackground(C_SURFACE);
             b.setForeground(C_TEXT_LABEL);
@@ -1709,6 +1804,23 @@ public final class DesktopUiKit {
             hdr.add(rightActions, BorderLayout.EAST);
         }
         return hdr;
+    }
+
+    /**
+     * Godot 4 / Unreal 5 2-Column Property Inspector Row (clean fixed-width label left, stretch control right).
+     */
+    public static JPanel createPropertyRow(String label, JComponent control) {
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, scaled(30)));
+        JLabel lbl = new JLabel(label);
+        lbl.setFont(FONT_UI);
+        lbl.setForeground(C_TEXT_LABEL);
+        lbl.setPreferredSize(new Dimension(scaled(92), scaled(26)));
+        row.add(lbl, BorderLayout.WEST);
+        row.add(control, BorderLayout.CENTER);
+        return row;
     }
 
     // =========================================================================
@@ -1741,12 +1853,12 @@ public final class DesktopUiKit {
                 scrub.setOpaque(true);
                 scrub.setBackground(new Color(26, 26, 34));
                 scrub.setForeground(badgeColor != null ? badgeColor : C_TEXT_LABEL);
-                scrub.setFont(new Font("SansSerif", Font.BOLD, Math.max(10, scaledFontPt(10))));
+                scrub.setFont(FONT_SMALL_BOLD);
                 scrub.setBorder(BorderFactory.createCompoundBorder(
                         BorderFactory.createMatteBorder(0, 0, 0, 1, C_BORDER_SUBTLE),
-                        BorderFactory.createEmptyBorder(0, scaled(5), 0, scaled(5))));
+                        BorderFactory.createEmptyBorder(0, scaled(6), 0, scaled(6))));
                 scrub.setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
-                scrub.setToolTipText("Drag left/right to scrub value (Shift = fine, Ctrl = coarse) or use mouse wheel");
+                scrub.setToolTipText("Drag to scrub (Shift=fine, Ctrl=fast)");
                 installDragScrub(scrub);
                 add(scrub, BorderLayout.WEST);
             }
@@ -1758,9 +1870,9 @@ public final class DesktopUiKit {
             textField.setCaretColor(C_WHITE);
             textField.setSelectionColor(C_ACCENT_TINT);
             textField.setSelectedTextColor(C_WHITE);
-            textField.setFont(new Font("Monospaced", Font.PLAIN, Math.max(10, scaledFontPt(11))));
-            textField.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 3));
-            textField.setToolTipText("Type value + Enter, scroll mouse wheel, or drag arrows to tweak");
+            textField.setFont(FONT_MONO);
+            textField.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 4));
+            textField.setToolTipText("Enter value, scroll wheel, or drag");
             textField.addActionListener(e -> commitTyped());
             textField.addFocusListener(new FocusAdapter() {
                 @Override public void focusGained(FocusEvent e) {
@@ -1967,12 +2079,12 @@ public final class DesktopUiKit {
                 }
             };
 
-            final JLabel chev = new JLabel(expanded ? "▼" : "▶");
-            chev.setFont(new Font("SansSerif", Font.BOLD, Math.max(9, scaledFontPt(10))));
+            final JLabel chev = new JLabel(expanded ? "▾" : "▸");
+            chev.setFont(FONT_UI_BOLD);
             chev.setForeground(C_WHITE);
             header.add(chev, BorderLayout.WEST);
 
-            JLabel ttl = new JLabel(title.toUpperCase(Locale.US));
+            JLabel ttl = new JLabel(title);
             ttl.setFont(FONT_UI_BOLD);
             ttl.setForeground(C_WHITE);
             header.add(ttl, BorderLayout.CENTER);
@@ -1982,13 +2094,13 @@ public final class DesktopUiKit {
             bodyPanel = new JPanel();
             bodyPanel.setLayout(new BoxLayout(bodyPanel, BoxLayout.Y_AXIS));
             bodyPanel.setBackground(C_PANEL_ALT);
-            bodyPanel.setBorder(BorderFactory.createEmptyBorder(scaled(7), scaled(9), scaled(9), scaled(9)));
+            bodyPanel.setBorder(BorderFactory.createEmptyBorder(scaled(7), scaled(8), scaled(8), scaled(8)));
             bodyPanel.setVisible(expanded);
             add(bodyPanel, BorderLayout.CENTER);
 
             header.addMouseListener(new MouseAdapter() {
                 @Override public void mousePressed(MouseEvent e) {
-                    chev.setText(expanded ? "▼" : "▶");
+                    chev.setText(expanded ? "▾" : "▸");
                 }
             });
         }
@@ -2152,8 +2264,8 @@ public final class DesktopUiKit {
         private void appendSingleLine(StyledDocument doc, String s) throws BadLocationException {
             String u = s.toUpperCase(Locale.US);
             SimpleAttributeSet attr = new SimpleAttributeSet();
-            StyleConstants.setFontFamily(attr, "Monospaced");
-            StyleConstants.setFontSize(attr, Math.max(11, scaledFontPt(12)));
+            StyleConstants.setFontFamily(attr, MONO_FAMILY);
+            StyleConstants.setFontSize(attr, FONT_MONO.getSize());
 
             boolean isErr = u.contains("[ERROR]") || u.contains("[FAIL") || u.contains("[CRASH]")
                     || s.startsWith("✕") || u.contains("SYNTAXERROR") || u.contains("EXCEPTION")

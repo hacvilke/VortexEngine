@@ -175,14 +175,15 @@ public class VortexScriptEngine {
             "joyX", "inputX", "joyY", "inputY", "btnA", "btnB", "touchDown", "touchX", "touchY",
             "exists", "getX", "getY", "getZ", "getVX", "getVY", "getVZ", "getRotY", "getRotZ", "getTag",
             "isGrounded", "dist", "distance", "countByTag", "findNearestTag",
-            "setPos", "move", "setVel", "addVel", "applyImpulse", "setAngularVel", "setFixedRotation",
+            "setPos", "move", "setVel", "addVel", "applyImpulse", "applyForce", "applyRadialImpulse",
+            "setGravityScale", "setBounce", "setFriction", "setMass", "setAngularVel", "setFixedRotation",
             "jump", "setRot", "rotate", "setScale", "setSpin", "setColor", "setSpriteAnim", "destroy",
             "spawn3D", "spawn2D", "particles", "emitParticles", "playSound", "playMusic", "stopMusic",
             "shake", "shakeCamera", "setCamTarget", "setCamDist", "setSky",
             "addScore", "setScore", "getScore", "setHealth", "addHealth", "getHealth",
             "saveData", "loadData", "loadNum",
             "setBanner", "setHudText", "showDialog", "hideDialog", "setLabel", "setProgressBar", "removeUI", "clearUI", "log",
-            "chaseAI", "chaseTagAI", "raycast",
+            "chaseAI", "chaseTagAI", "raycast", "raycastDist",
             "tweenPos", "tweenScale", "tweenRot", "tweenTagYoyo",
             "noise2D", "noise3D", "terrainHeight", "rand", "clamp", "time"
     };
@@ -917,10 +918,20 @@ public class VortexScriptEngine {
 
         public void setPos(String n, double x, double y) { callBuiltIn("setPos", new Object[]{n, x, y}, 0); }
         public void setPos(String n, double x, double y, double z) { callBuiltIn("setPos", new Object[]{n, x, y, z}, 0); }
-        public void setVel(String n, double vx, double vy) { callBuiltIn("setVel", new Object[]{n, vx, vy}, 0); }
-        public void setVel(String n, double vx, double vy, double vz) { callBuiltIn("setVel", new Object[]{n, vx, vy, vz}, 0); }
+        public void setVel(String n, double vx, double vy) { callBuiltIn("setVel", new Object[]{n, xOrZero(vx), xOrZero(vy)}, 0); }
+        public void setVel(String n, double vx, double vy, double vz) { callBuiltIn("setVel", new Object[]{n, xOrZero(vx), xOrZero(vy), xOrZero(vz)}, 0); }
         public void applyImpulse(String n, double ix, double iy) { callBuiltIn("applyImpulse", new Object[]{n, ix, iy}, 0); }
+        public void applyImpulse(String n, double ix, double iy, double iz) { callBuiltIn("applyImpulse", new Object[]{n, ix, iy, iz}, 0); }
+        public void applyForce(String n, double fx, double fy, double fz) { callBuiltIn("applyForce", new Object[]{n, fx, fy, fz}, 0); }
+        public int applyRadialImpulse(double cx, double cy, double cz, double radius, double strength) {
+            return ((Number) callBuiltIn("applyRadialImpulse", new Object[]{cx, cy, cz, radius, strength}, 0)).intValue();
+        }
+        public void setGravityScale(String n, double s) { callBuiltIn("setGravityScale", new Object[]{n, s}, 0); }
+        public void setBounce(String n, double b) { callBuiltIn("setBounce", new Object[]{n, b}, 0); }
+        public void setFriction(String n, double f) { callBuiltIn("setFriction", new Object[]{n, f}, 0); }
+        public void setMass(String n, double m) { callBuiltIn("setMass", new Object[]{n, m}, 0); }
         public void setFixedRotation(String n, boolean fixed) { callBuiltIn("setFixedRotation", new Object[]{n, fixed}, 0); }
+        private double xOrZero(double v) { return Double.isNaN(v) || Double.isInfinite(v) ? 0.0 : v; }
         public void jump(String n, double vy) { callBuiltIn("jump", new Object[]{n, vy}, 0); }
         public void setRot(String n, double rx, double ry, double rz) { callBuiltIn("setRot", new Object[]{n, rx, ry, rz}, 0); }
         public void setScale(String n, double sx, double sy, double sz) { callBuiltIn("setScale", new Object[]{n, sx, sy, sz}, 0); }
@@ -1163,7 +1174,7 @@ public class VortexScriptEngine {
             case "getRotY": { Entity e = ent(a, 0); return e != null ? (double) e.rotY : 0.0; }
             case "getRotZ": { Entity e = ent(a, 0); return e != null ? (double) e.rotZ : 0.0; }
             case "getTag": { Entity e = ent(a, 0); return e != null ? e.tag : ""; }
-            case "isGrounded": { Entity e = ent(a, 0); return e != null && e.isGrounded; }
+            case "isGrounded": { Entity e = ent(a, 0); return e != null && e.canJump(); }
             case "dist": {
                 Entity e1 = ent(a, 0), e2 = ent(a, 1);
                 if (e1 == null || e2 == null) return 999999.0;
@@ -1219,10 +1230,47 @@ public class VortexScriptEngine {
             case "applyImpulse": {
                 Entity e = ent(a, 0);
                 if (e != null) {
-                    float ix = flt(a, 1, 0f), iy = flt(a, 2, 0f);
-                    if (physicsWorld != null) physicsWorld.applyImpulse2D(e, ix, iy);
-                    else { e.vx += ix; e.vy += iy; }
+                    float ix = flt(a, 1, 0f), iy = flt(a, 2, 0f), iz = flt(a, 3, 0f);
+                    if (physicsWorld != null) physicsWorld.applyImpulse3D(e, ix, iy, iz);
+                    else { e.vx += ix; e.vy += iy; e.vz += iz; }
                 }
+                return 0.0;
+            }
+            case "applyForce": {
+                Entity e = ent(a, 0);
+                if (e != null) {
+                    float fx = flt(a, 1, 0f), fy = flt(a, 2, 0f), fz = flt(a, 3, 0f);
+                    if (physicsWorld != null) physicsWorld.applyForce(e, fx, fy, fz, 1f / 60f);
+                    else { e.vx += fx * (1f / 60f); e.vy += fy * (1f / 60f); e.vz += fz * (1f / 60f); }
+                }
+                return 0.0;
+            }
+            case "applyRadialImpulse": {
+                float cx = flt(a, 0, 0f), cy = flt(a, 1, 0f), cz = flt(a, 2, 0f);
+                float rad = flt(a, 3, 6f), strg = flt(a, 4, 12f);
+                if (physicsWorld != null) {
+                    return (double) physicsWorld.applyRadialImpulse(project, cx, cy, cz, rad, strg, true);
+                }
+                return 0.0;
+            }
+            case "setGravityScale": {
+                Entity e = ent(a, 0);
+                if (e != null) e.gravityScale = flt(a, 1, 1f);
+                return 0.0;
+            }
+            case "setBounce": {
+                Entity e = ent(a, 0);
+                if (e != null) e.bounce = Math.max(0f, flt(a, 1, 0.2f));
+                return 0.0;
+            }
+            case "setFriction": {
+                Entity e = ent(a, 0);
+                if (e != null) e.friction = Math.max(0f, flt(a, 1, 0.6f));
+                return 0.0;
+            }
+            case "setMass": {
+                Entity e = ent(a, 0);
+                if (e != null) e.mass = Math.max(0.05f, flt(a, 1, 1.0f));
                 return 0.0;
             }
             case "setAngularVel": {
@@ -1243,9 +1291,10 @@ public class VortexScriptEngine {
             case "jump": {
                 Entity e = ent(a, 0);
                 float imp = flt(a, 1, 11f);
-                if (e != null && e.isGrounded) {
+                if (e != null && e.canJump()) {
                     e.vy = imp;
                     e.isGrounded = false;
+                    e.coyoteTimer = 0f;
                     if (hostBridge != null) hostBridge.onPlaySound("jump");
                     return true;
                 }
@@ -1391,7 +1440,23 @@ public class VortexScriptEngine {
                 float ox = flt(a, 0, 0f), oy = flt(a, 1, 0f), oz = flt(a, 2, 0f);
                 float dx = flt(a, 3, 1f), dy = flt(a, 4, 0f), dz = flt(a, 5, 0f);
                 float maxD = flt(a, 6, 40f);
+                String ignore = a.length > 7 ? str(a, 7) : null;
+                if (physicsWorld != null) {
+                    PhysicsWorld.RaycastHit hit = physicsWorld.raycast(project, ox, oy, oz, dx, dy, dz, maxD, ignore);
+                    return hit != null && hit.entity != null ? hit.entity.name : "";
+                }
                 return aiEngine.raycast(project, null, ox, oy, oz, dx, dy, dz, maxD);
+            }
+            case "raycastDist": {
+                float ox = flt(a, 0, 0f), oy = flt(a, 1, 0f), oz = flt(a, 2, 0f);
+                float dx = flt(a, 3, 1f), dy = flt(a, 4, 0f), dz = flt(a, 5, 0f);
+                float maxD = flt(a, 6, 40f);
+                String ignore = a.length > 7 ? str(a, 7) : null;
+                if (physicsWorld != null) {
+                    PhysicsWorld.RaycastHit hit = physicsWorld.raycast(project, ox, oy, oz, dx, dy, dz, maxD, ignore);
+                    return hit != null ? (double) hit.distance : -1.0;
+                }
+                return -1.0;
             }
             // v3.0 Universal Tween Engine (Bounce, Elastic, Back, Sine, Quad, Expo + Yoyo)
             case "tweenPos": {

@@ -135,7 +135,7 @@ public final class VortexMobileUi {
         tv.setEllipsize(TextUtils.TruncateAt.END);
         tv.setGravity(Gravity.CENTER);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
-        tv.setTextSize(compact ? 11.5f : 12.5f);
+        tv.setTextSize(compact ? 13.0f : 14.0f);
         int padH = dp(ctx, compact ? 11 : 14);
         int padV = dp(ctx, compact ? 7 : 10);
         tv.setPadding(padH, padV, padH, padV);
@@ -179,7 +179,7 @@ public final class VortexMobileUi {
     public static TextView makeBadge(Context ctx, String label, boolean highlighted) {
         TextView tv = new TextView(ctx);
         tv.setText(label);
-        tv.setTextSize(10f);
+        tv.setTextSize(11.5f);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setSingleLine(true);
         tv.setPadding(dp(ctx, 7), dp(ctx, 3.5f), dp(ctx, 7), dp(ctx, 3.5f));
@@ -206,7 +206,7 @@ public final class VortexMobileUi {
         et.setText(value == null ? "" : value);
         et.setTextColor(C_TEXT);
         et.setHintTextColor(C_TEXT_DIM);
-        et.setTextSize(13f);
+        et.setTextSize(14.5f);
         int padH = dp(ctx, 11);
         int padV = dp(ctx, 9);
         et.setPadding(padH, padV, padH, padV);
@@ -273,7 +273,7 @@ public final class VortexMobileUi {
             valueTv = new TextView(ctx);
             valueTv.setText(this.items[selectedIndex]);
             valueTv.setTextColor(C_TEXT);
-            valueTv.setTextSize(13f);
+            valueTv.setTextSize(14.5f);
             valueTv.setSingleLine(true);
             valueTv.setEllipsize(TextUtils.TruncateAt.END);
             addView(valueTv, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
@@ -281,7 +281,7 @@ public final class VortexMobileUi {
             chevronTv = new TextView(ctx);
             chevronTv.setText("▾");
             chevronTv.setTextColor(C_CYAN);
-            chevronTv.setTextSize(14f);
+            chevronTv.setTextSize(15.5f);
             chevronTv.setTypeface(Typeface.DEFAULT_BOLD);
             chevronTv.setPadding(dp(ctx, 8), 0, 0, 0);
             addView(chevronTv);
@@ -355,7 +355,7 @@ public final class VortexMobileUi {
 
                 TextView label = new TextView(ctx);
                 label.setText(items[i]);
-                label.setTextSize(12.8f);
+                label.setTextSize(14.3f);
                 label.setSingleLine(true);
                 label.setEllipsize(TextUtils.TruncateAt.END);
                 label.setTextColor(active ? C_CYAN : C_TEXT);
@@ -420,7 +420,7 @@ public final class VortexMobileUi {
             TextView label = new TextView(ctx);
             label.setText(labelText);
             label.setTextColor(C_TEXT);
-            label.setTextSize(12.5f);
+            label.setTextSize(14.0f);
             addView(label, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
 
             trackView = new SwitchTrackView(ctx, initialChecked);
@@ -545,7 +545,7 @@ public final class VortexMobileUi {
         TextView titleTv = new TextView(act);
         titleTv.setText(title);
         titleTv.setTextColor(C_TEXT);
-        titleTv.setTextSize(15.5f);
+        titleTv.setTextSize(16.5f);
         titleTv.setTypeface(Typeface.DEFAULT_BOLD);
         header.addView(titleTv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -630,7 +630,7 @@ public final class VortexMobileUi {
         TextView tv = new TextView(act);
         tv.setText(message);
         tv.setTextColor(C_TEXT_MUTED);
-        tv.setTextSize(12.5f);
+        tv.setTextSize(14.0f);
         tv.setLineSpacing(dp(act, 3), 1f);
         return showModal(act, title, tv, primaryLabel, onPrimary, neutralLabel, onNeutral, cancelLabel);
     }

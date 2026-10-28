@@ -183,8 +183,14 @@ public class Html5WebExporter {
                 "    setRot: (n,rx,ry,rz) => { const e = findE(n); if(e){ e.rotX=+rx||0; e.rotY=+ry||0; e.rotZ=+rz||0; } },\n" +
                 "    setColor: (n,hex) => { const e = findE(n); if(e) e.colorHex = hex; },\n" +
                 "    setFixedRotation: (n,f) => { const e = findE(n); if(e) e.fixedRotation = !!f; },\n" +
-                "    applyImpulse: (n,ix,iy) => { const e = findE(n); if(e){ e.vx += (+ix||0); e.vy += (+iy||0); } },\n" +
-                "    jump: (n,imp) => { const e = findE(n); if(e && (e.isGrounded || Math.abs(e.vy)<0.4)){ e.vy = +imp||12; e.isGrounded=false; playSfx('jump'); return true; } return false; },\n" +
+                "    applyImpulse: (n,ix,iy,iz) => { const e = findE(n); if(e){ const inv = 1/Math.max(0.05,(e.mass||1)*(e.density||1)); e.vx += (+ix||0)*inv; e.vy += (+iy||0)*inv; if(iz!==undefined) e.vz += (+iz||0)*inv; } },\n" +
+                "    applyForce: (n,fx,fy,fz) => { vortex.applyImpulse(n, (+fx||0)/60, (+fy||0)/60, (+fz||0)/60); },\n" +
+                "    applyRadialImpulse: (cx,cy,cz,rad,str) => { let c=0, r=+rad||6, s=+str||12; for(const e of entities){ if(e.alive && e.bodyType==='DYNAMIC'){ const dx=e.x-(+cx||0), dy=e.y-(+cy||0), dz=(proj.dimensionMode==='3D'?(e.z-(+cz||0)):0), d=Math.hypot(dx,dy,dz); if(d<=r){ const f=Math.max(0.05,1-d/r)*(d>1e-4?1/d:0); vortex.applyImpulse(e.name,dx*f*s,dy*f*s,dz*f*s); c++; } } } return c; },\n" +
+                "    setGravityScale: (n,s) => { const e = findE(n); if(e) e.gravityScale = +s; },\n" +
+                "    setBounce: (n,b) => { const e = findE(n); if(e) e.bounce = Math.max(0,+b||0); },\n" +
+                "    setFriction: (n,f) => { const e = findE(n); if(e) e.friction = Math.max(0,+f||0); },\n" +
+                "    setMass: (n,m) => { const e = findE(n); if(e) e.mass = Math.max(0.05,+m||1); },\n" +
+                "    jump: (n,imp) => { const e = findE(n); if(e && (e.isGrounded || (e.coyote||0)>0 || Math.abs(e.vy)<0.4)){ e.vy = +imp||12; e.isGrounded=false; e.coyote=0; playSfx('jump'); return true; } return false; },\n" +
                 "    spawn2D: (nm,tag,prim,x,y,w,h,hex,body) => { const e={id:nm,name:nm,tag:tag||'prop',primitive:prim||'RECT',x:+x||0,y:+y||0,z:0,scaleX:+w||1,scaleY:+h||1,scaleZ:1,rotX:0,rotY:0,rotZ:0,vx:0,vy:0,vz:0,spinX:0,spinY:0,spinZ:0,colorHex:hex||'#00E5FF',secondaryColorHex:'#1E293B',bodyType:body||'DYNAMIC',collider:'BOX',alive:true,visible:true,alpha:1,bounce:0.2,friction:0.4,gravityScale:1,fixedRotation:true,isTrigger:false}; entities.push(e); byName.set(nm,e); return nm; },\n" +
                 "    spawn3D: (nm,tag,prim,x,y,z,sx,sy,sz,hex,body) => { const e={id:nm,name:nm,tag:tag||'prop',primitive:prim||'CUBE',x:+x||0,y:+y||0,z:+z||0,scaleX:+sx||1,scaleY:+sy||1,scaleZ:+sz||1,rotX:0,rotY:0,rotZ:0,vx:0,vy:0,vz:0,spinX:0,spinY:0,spinZ:0,colorHex:hex||'#00E5FF',secondaryColorHex:'#1E293B',bodyType:body||'DYNAMIC',collider:'BOX',alive:true,visible:true,alpha:1,bounce:0.2,isTrigger:false,emissive:true}; entities.push(e); byName.set(nm,e); return nm; },\n" +
                 "    destroy: n => { const e = findE(n); if(e) e.alive = false; },\n" +
@@ -216,6 +222,21 @@ public class Html5WebExporter {
                 "        if (hit && tmin < bestT) { bestT = tmin; best = e.name; }\n" +
                 "      }\n" +
                 "      return best;\n" +
+                "    },\n" +
+                "    raycastDist: (ox,oy,oz,dx,dy,dz,maxD) => {\n" +
+                "      let bestT = +maxD||40, found = false; const len = Math.hypot(dx,dy,dz)||1; dx/=len; dy/=len; dz/=len;\n" +
+                "      for (const e of entities) {\n" +
+                "        if (!e.alive || e.tag === 'player') continue;\n" +
+                "        const hx=e.scaleX*0.5, hy=e.scaleY*0.5, hz=(proj.dimensionMode==='3D'?e.scaleZ:2)*0.5;\n" +
+                "        let tmin=0, tmax=bestT, hit=true;\n" +
+                "        const axes=[[ox,dx,e.x-hx,e.x+hx],[oy,dy,e.y-hy,e.y+hy],[oz,dz,e.z-hz,e.z+hz]];\n" +
+                "        for (const [o,d,mn,mx] of axes) {\n" +
+                "          if (Math.abs(d)<1e-6) { if (o<mn||o>mx){hit=false;break;} }\n" +
+                "          else { let t1=(mn-o)/d, t2=(mx-o)/d; if(t1>t2){const tmp=t1;t1=t2;t2=tmp;} tmin=Math.max(tmin,t1); tmax=Math.min(tmax,t2); if(tmin>tmax){hit=false;break;} }\n" +
+                "        }\n" +
+                "        if (hit && tmin < bestT) { bestT = tmin; found = true; }\n" +
+                "      }\n" +
+                "      return found ? bestT : -1;\n" +
                 "    },\n" +
                 "    tweenPos: (n,tx,ty,tz,dur,ease,yoyo) => { const e=findE(n); if(e) tweens.push({e,prop:'pos',s:[e.x,e.y,e.z],t:[+tx,+ty,+tz],dur:Math.max(0.1,+dur||1),el:0,yoyo:+yoyo||0,dir:1}); },\n" +
                 "    tweenScale: (n,sx,sy,sz,dur,ease,yoyo) => { const e=findE(n); if(e) tweens.push({e,prop:'scl',s:[e.scaleX,e.scaleY,e.scaleZ],t:[+sx,+sy,+sz],dur:Math.max(0.1,+dur||1),el:0,yoyo:+yoyo||0,dir:1}); },\n" +

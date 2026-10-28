@@ -75,7 +75,6 @@ public class EditorActivity extends Activity {
     private LinearLayout snippetBar;
     private LinearLayout mobileFileTabsBar;
     private final List<VortexForgeAgent.ChatMessage> mobileForgeHistory = new ArrayList<>();
-    private HorizontalScrollView topTabScroll;
     private boolean inspectorExpandedMobile = false;
     private ScrollView flowPanel;
     private LinearLayout flowRuleListContainer;
@@ -176,7 +175,7 @@ public class EditorActivity extends Activity {
         telemetryChip = new TextView(this);
         telemetryChip.setText("Editor • " + project.entities.size() + " objs • " + project.dimensionMode + "/" + project.scriptLanguage);
         telemetryChip.setTextColor(Color.parseColor("#FAFAFA"));
-        telemetryChip.setTextSize(11f);
+        telemetryChip.setTextSize(12.5f);
         telemetryChip.setPadding(dp(10), dp(5), dp(10), dp(5));
         GradientDrawable chipBg = new GradientDrawable();
         chipBg.setColor(Color.argb(200, 14, 14, 17));
@@ -224,6 +223,7 @@ public class EditorActivity extends Activity {
 
         root.addView(workspace, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        root.addView(buildBottomNav());
         setContentView(root);
 
         viewportSurface.loadProjectForEdit(project);
@@ -278,7 +278,7 @@ public class EditorActivity extends Activity {
         TextView titleTv = new TextView(this);
         titleTv.setText(project.title);
         titleTv.setTextColor(VortexMobileUi.C_TEXT);
-        titleTv.setTextSize(14f);
+        titleTv.setTextSize(15.5f);
         titleTv.setTypeface(Typeface.DEFAULT_BOLD);
         titleTv.setSingleLine(true);
         titleTv.setEllipsize(TextUtils.TruncateAt.END);
@@ -313,44 +313,61 @@ public class EditorActivity extends Activity {
         row1.addView(saveBtn);
         container.addView(row1);
 
-        // Row 2: Unified Animated Mode Tabs
-        topTabScroll = new HorizontalScrollView(this);
-        topTabScroll.setHorizontalScrollBarEnabled(false);
-        topTabScroll.setBackgroundColor(VortexMobileUi.C_PANEL);
-
-        LinearLayout tabs = new LinearLayout(this);
-        tabs.setOrientation(LinearLayout.HORIZONTAL);
-        tabs.setPadding(dp(8), dp(5), dp(8), dp(6));
-
-        String[][] modes = {
-                {"SCENE", "🌐 SCENE"},
-                {"INSPECTOR", "🎛 INSPECT"},
-                {"SCRIPT", "📜 CODE"},
-                {"FLOW", "⚡ FLOW"},
-                {"LRM", "🔄 LRM P2P"},
-                {"PIXEL", "🎨 PIXEL"},
-                {"SFX", "🎵 AUDIO"},
-                {"PLAY", "▶ PLAY"},
-                {"BUILD", "📦 EXPORT"}
-        };
-        for (String[] m : modes) {
-            TextView tb = VortexMobileUi.makeButton(this, m[1], VortexMobileUi.ButtonVariant.SECONDARY, true);
-            tb.setTag(m[0]);
-            tb.setOnClickListener(v -> switchMode(m[0]));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            lp.rightMargin = dp(6);
-            tabs.addView(tb, lp);
-            tabButtons.add(tb);
-        }
-        topTabScroll.addView(tabs);
-        container.addView(topTabScroll);
-
         View divider = new View(this);
         divider.setBackgroundColor(VortexMobileUi.C_BORDER);
         container.addView(divider, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
         return container;
+    }
+
+    /**
+     * Thumb-reachable bottom navigation bar (Unity / Godot mobile style):
+     * 6 primary destinations + an overflow menu, replacing the cramped top tab strip.
+     */
+    private LinearLayout buildBottomNav() {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(6), dp(6), dp(6), dp(6));
+        bar.setBackgroundColor(VortexMobileUi.C_HEADER);
+
+        String[][] primary = {
+                {"SCENE", "Scene"},
+                {"INSPECTOR", "Inspect"},
+                {"SCRIPT", "Code"},
+                {"FLOW", "Logic"},
+                {"PLAY", "Play"}
+        };
+        for (String[] m : primary) {
+            TextView tb = VortexMobileUi.makeButton(this, m[1], VortexMobileUi.ButtonVariant.SECONDARY, true);
+            tb.setTag(m[0]);
+            tb.setOnClickListener(v -> switchMode(m[0]));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(38), 1f);
+            lp.rightMargin = dp(4);
+            bar.addView(tb, lp);
+            tabButtons.add(tb);
+        }
+
+        final TextView moreBtn = VortexMobileUi.makeButton(this, "More ⋯", VortexMobileUi.ButtonVariant.SECONDARY, true);
+        moreBtn.setTag("MORE");
+        moreBtn.setOnClickListener(v -> {
+            String[] names = {"Sprite Editor", "Audio & SFX", "LRM P2P Sync", "Build & Export"};
+            String[] keys = {"PIXEL", "SFX", "LRM", "BUILD"};
+            VortexMobileUi.showPickerModal(this, "More tools", names, 0, (which, val) -> switchMode(keys[which]));
+        });
+        LinearLayout.LayoutParams moreLp = new LinearLayout.LayoutParams(0, dp(38), 1f);
+        bar.addView(moreBtn, moreLp);
+        tabButtons.add(moreBtn);
+
+        View topLine = new View(this);
+        topLine.setBackgroundColor(VortexMobileUi.C_BORDER);
+
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.addView(topLine, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
+        wrap.addView(bar);
+        return wrap;
     }
 
     private LinearLayout buildSceneBottomToolbar() {
@@ -628,7 +645,7 @@ public class EditorActivity extends Activity {
         hdr.setText((defaultOpen ? "▼  " : "▶  ") + title.toUpperCase());
         hdr.setTextColor(VortexMobileUi.C_CYAN);
         hdr.setTypeface(Typeface.DEFAULT_BOLD);
-        hdr.setTextSize(11.5f);
+        hdr.setTextSize(13.0f);
         hdr.setBackgroundColor(VortexMobileUi.C_HEADER);
         hdr.setPadding(dp(10), dp(8), dp(10), dp(8));
         card.addView(hdr);
@@ -661,7 +678,7 @@ public class EditorActivity extends Activity {
         head.setText("ENTITY & PHYSICS INSPECTOR");
         head.setTextColor(VortexMobileUi.C_CYAN);
         head.setTypeface(Typeface.DEFAULT_BOLD);
-        head.setTextSize(12.5f);
+        head.setTextSize(14.0f);
         topHead.addView(head, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         if (getResources().getConfiguration().screenWidthDp < 540) {
@@ -669,7 +686,7 @@ public class EditorActivity extends Activity {
                     this, inspectorExpandedMobile ? "⤡ SPLIT VIEW" : "⤢ FULL HEIGHT",
                     VortexMobileUi.ButtonVariant.SECONDARY, true);
             sizeToggle.setPadding(dp(8), dp(4), dp(8), dp(4));
-            sizeToggle.setTextSize(10f);
+            sizeToggle.setTextSize(11.5f);
             sizeToggle.setOnClickListener(v -> {
                 inspectorExpandedMobile = !inspectorExpandedMobile;
                 applyInspectorLayoutParams();
@@ -792,7 +809,7 @@ public class EditorActivity extends Activity {
         worldHead.setText("WORLD & ENGINE SETTINGS");
         worldHead.setTextColor(VortexMobileUi.C_CYAN);
         worldHead.setTypeface(Typeface.DEFAULT_BOLD);
-        worldHead.setTextSize(12.5f);
+        worldHead.setTextSize(14.0f);
         worldHead.setPadding(0, dp(16), 0, dp(4));
         inspectorContent.addView(worldHead);
 
@@ -871,7 +888,7 @@ public class EditorActivity extends Activity {
             TextView swatch = new TextView(this);
             swatch.setText(col == 0 ? "✕ ERASE" : "   ");
             swatch.setTextColor(Color.WHITE);
-            swatch.setTextSize(10.5f);
+            swatch.setTextSize(12.0f);
             swatch.setPadding(dp(12), dp(8), dp(12), dp(8));
             GradientDrawable g = new GradientDrawable();
             g.setColor(col == 0 ? Color.parseColor("#1E1E22") : col);
@@ -1004,7 +1021,7 @@ public class EditorActivity extends Activity {
         scriptStatusTv.setText("✓ Syntax Ready (" + describeVm(project.scriptLanguage) + ")");
         scriptStatusTv.setTextColor(Color.parseColor("#00E676"));
         scriptStatusTv.setBackgroundColor(Color.parseColor("#101013"));
-        scriptStatusTv.setTextSize(12f);
+        scriptStatusTv.setTextSize(13.5f);
         scriptStatusTv.setPadding(dp(12), dp(6), dp(12), dp(6));
         panel.addView(scriptStatusTv);
 
@@ -1038,7 +1055,7 @@ public class EditorActivity extends Activity {
         scriptEditor.setText(initialBody);
         scriptEditor.setTypeface(Typeface.MONOSPACE);
         scriptEditor.setTextColor(Color.parseColor("#FAFAFA"));
-        scriptEditor.setTextSize(13.5f);
+        scriptEditor.setTextSize(15.0f);
         scriptEditor.setGravity(Gravity.TOP | Gravity.START);
         scriptEditor.setBackgroundColor(Color.parseColor("#09090B"));
         scriptEditor.setPadding(dp(14), dp(12), dp(14), dp(24));
@@ -1101,7 +1118,7 @@ public class EditorActivity extends Activity {
                         "addScore(100);", "fn onCollide(a, b, tagA, tagB) {\n}"};
         for (String s : snippets) {
             TextView sb = VortexMobileUi.makeButton(this, s.replace("\n", " "), VortexMobileUi.ButtonVariant.SECONDARY, true);
-            sb.setTextSize(10.8f);
+            sb.setTextSize(12.3f);
             sb.setOnClickListener(v -> {
                 int start = scriptEditor.getSelectionStart();
                 if (!scriptEditor.hasFocus() || start <= 0) {
@@ -1131,7 +1148,7 @@ public class EditorActivity extends Activity {
             boolean active = path.equals(project.activeScriptFile);
             TextView tab = VortexMobileUi.makeButton(this, path,
                     active ? VortexMobileUi.ButtonVariant.PRIMARY : VortexMobileUi.ButtonVariant.SECONDARY, true);
-            tab.setTextSize(11f);
+            tab.setTextSize(12.5f);
             tab.setOnClickListener(v -> {
                 syncCodeFromEditor();
                 project.activeScriptFile = path;
@@ -1145,7 +1162,7 @@ public class EditorActivity extends Activity {
             mobileFileTabsBar.addView(tab, rightMarginLp(6));
         }
         TextView addFileBtn = VortexMobileUi.makeButton(this, "+ FILE", VortexMobileUi.ButtonVariant.ACCENT, true);
-        addFileBtn.setTextSize(11f);
+        addFileBtn.setTextSize(12.5f);
         addFileBtn.setOnClickListener(v -> {
             final EditText pathEt = VortexMobileUi.createInput(this,
                     "objects/module_" + (project.scriptFiles.size() + 1) + project.getScriptExtension(), false, false);
@@ -1192,7 +1209,7 @@ public class EditorActivity extends Activity {
 
         TextView chatLogTv = new TextView(this);
         chatLogTv.setTextColor(VortexMobileUi.C_TEXT);
-        chatLogTv.setTextSize(11.5f);
+        chatLogTv.setTextSize(13.0f);
         chatLogTv.setPadding(dp(10), dp(8), dp(10), dp(8));
         chatLogTv.setBackgroundColor(Color.parseColor("#0D0D10"));
         if (mobileForgeHistory.isEmpty()) {
@@ -1258,7 +1275,7 @@ public class EditorActivity extends Activity {
                 : project.customObjMeshes.values().iterator().next();
         EditText objEt = VortexMobileUi.createInput(this, existing, false, true);
         objEt.setTypeface(Typeface.MONOSPACE);
-        objEt.setTextSize(12f);
+        objEt.setTextSize(13.5f);
         objEt.setMinLines(8);
 
         VortexMobileUi.showModal(
@@ -1323,14 +1340,14 @@ public class EditorActivity extends Activity {
         TextView head = new TextView(this);
         head.setText("⚡ VORTEX FLOW — NO-CODE VISUAL LOGIC");
         head.setTextColor(Color.parseColor("#FFFFFF"));
-        head.setTextSize(15.5f);
+        head.setTextSize(16.5f);
         head.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(head);
 
         TextView desc = new TextView(this);
         desc.setText("Build complete 2D & 3D game rules without writing code (like Construct / GDevelop), then compile 1-to-1 into clean Lua 5.2 anytime!");
         desc.setTextColor(Color.parseColor("#94A3B8"));
-        desc.setTextSize(11.5f);
+        desc.setTextSize(13.0f);
         desc.setPadding(0, dp(3), 0, dp(10));
         box.addView(desc);
 
@@ -1411,7 +1428,7 @@ public class EditorActivity extends Activity {
         TextView addTitle = new TextView(this);
         addTitle.setText("➕ CREATE EVENT ➔ ACTION RULE");
         addTitle.setTextColor(VortexMobileUi.C_CYAN);
-        addTitle.setTextSize(12.5f);
+        addTitle.setTextSize(14.0f);
         addTitle.setTypeface(Typeface.DEFAULT_BOLD);
         builderCard.addView(addTitle);
 
@@ -1454,7 +1471,7 @@ public class EditorActivity extends Activity {
         TextView listHead = new TextView(this);
         listHead.setText("ACTIVE EVENT SHEET RULES:");
         listHead.setTextColor(Color.parseColor("#CBD5E1"));
-        listHead.setTextSize(12f);
+        listHead.setTextSize(13.5f);
         listHead.setTypeface(Typeface.DEFAULT_BOLD);
         listHead.setPadding(0, 0, 0, dp(6));
         box.addView(listHead);
@@ -1475,7 +1492,7 @@ public class EditorActivity extends Activity {
         TextView tv = new TextView(this);
         tv.setText(label);
         tv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-        tv.setTextSize(10.5f);
+        tv.setTextSize(12.0f);
         tv.setPadding(0, 0, 0, dp(3));
         col.addView(tv);
         EditText et = VortexMobileUi.createInput(this, val, false, false);
@@ -1491,7 +1508,7 @@ public class EditorActivity extends Activity {
             TextView empty = new TextView(this);
             empty.setText("No visual rules yet — add rules above or open 'Cyber Hunters AI Maze' to inspect a complete Flow sheet!");
             empty.setTextColor(Color.parseColor("#64748B"));
-            empty.setTextSize(12f);
+            empty.setTextSize(13.5f);
             flowRuleListContainer.addView(empty);
             return;
         }
@@ -1511,7 +1528,7 @@ public class EditorActivity extends Activity {
             TextView tv = new TextView(this);
             tv.setText((idx + 1) + ". " + r.describe());
             tv.setTextColor(Color.parseColor("#E2E8F0"));
-            tv.setTextSize(12f);
+            tv.setTextSize(13.5f);
             card.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
             TextView del = VortexMobileUi.makeButton(this, "✕", VortexMobileUi.ButtonVariant.DANGER, true);
@@ -1545,14 +1562,14 @@ public class EditorActivity extends Activity {
         TextView head = new TextView(this);
         head.setText("🔄 LRM P2P LIVE SYNC & VERSION CONTROL");
         head.setTextColor(Color.parseColor("#FFFFFF"));
-        head.setTextSize(15.5f);
+        head.setTextSize(16.5f);
         head.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(head);
 
         TextView desc = new TextView(this);
         desc.setText("Powered by hacvilke/lrm & hacvilke/lrm-mobile (PIE e_type:3 for Termux): sync your game peer-to-peer between Android, Windows & Linux with encrypted Port Keys (lrm1_...) and zero servers!");
         desc.setTextColor(Color.parseColor("#94A3B8"));
-        desc.setTextSize(11.5f);
+        desc.setTextSize(13.0f);
         desc.setPadding(0, dp(3), 0, dp(10));
         box.addView(desc);
 
@@ -1642,7 +1659,7 @@ public class EditorActivity extends Activity {
 
         lrmLogTv = new TextView(this);
         lrmLogTv.setTypeface(Typeface.MONOSPACE);
-        lrmLogTv.setTextSize(11.5f);
+        lrmLogTv.setTextSize(13.0f);
         lrmLogTv.setTextColor(Color.parseColor("#A7F3D0"));
         lrmLogTv.setBackgroundColor(Color.parseColor("#09090B"));
         lrmLogTv.setPadding(dp(12), dp(12), dp(12), dp(12));
@@ -1709,14 +1726,14 @@ public class EditorActivity extends Activity {
         TextView musicHead = new TextView(this);
         musicHead.setText("🎵 16-STEP CHIPTUNE MUSIC COMPOSER");
         musicHead.setTextColor(VortexMobileUi.C_CYAN);
-        musicHead.setTextSize(15.5f);
+        musicHead.setTextSize(16.5f);
         musicHead.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(musicHead);
 
         TextView musicSub = new TextView(this);
         musicSub.setText("4-Channel Polyphonic Synth (Square Lead + Triangle Bass + Kick/Hat). Loops in Android APKs, Desktop .exe & HTML5 Web exports with zero MP3 bloat!");
         musicSub.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-        musicSub.setTextSize(11.5f);
+        musicSub.setTextSize(13.0f);
         musicSub.setPadding(0, dp(3), 0, dp(8));
         box.addView(musicSub);
 
@@ -1824,14 +1841,14 @@ public class EditorActivity extends Activity {
         TextView head = new TextView(this);
         head.setText("🔊 PROCEDURAL RETRO SFX SYNTHESIZER");
         head.setTextColor(VortexMobileUi.C_CYAN);
-        head.setTextSize(15.5f);
+        head.setTextSize(16.5f);
         head.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(head);
 
         TextView desc = new TextView(this);
         desc.setText("Real-time 22.05kHz PCM wave synthesizer bundled inside every exported Android, Desktop & Web game. Tap any preset to audition or insert:");
         desc.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-        desc.setTextSize(11.5f);
+        desc.setTextSize(13.0f);
         desc.setPadding(0, dp(4), 0, dp(12));
         box.addView(desc);
 
@@ -1861,13 +1878,13 @@ public class EditorActivity extends Activity {
             t1.setText(pr[1]);
             t1.setTextColor(VortexMobileUi.C_TEXT);
             t1.setTypeface(Typeface.DEFAULT_BOLD);
-            t1.setTextSize(13f);
+            t1.setTextSize(14.5f);
             txtCol.addView(t1);
 
             TextView t2 = new TextView(this);
             t2.setText(pr[2]);
             t2.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-            t2.setTextSize(11f);
+            t2.setTextSize(12.5f);
             txtCol.addView(t2);
             row.addView(txtCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -1911,14 +1928,14 @@ public class EditorActivity extends Activity {
         TextView head = new TextView(this);
         head.setText("📦 MULTI-PLATFORM EXPORT (ANDROID APK + HTML5 WEB)");
         head.setTextColor(Color.parseColor("#FFFFFF"));
-        head.setTextSize(15.5f);
+        head.setTextSize(16.5f);
         head.setTypeface(Typeface.DEFAULT_BOLD);
         box.addView(head);
 
         TextView sub = new TextView(this);
         sub.setText("Export a 1-file playable HTML5 Web Game (.html for itch.io / Chrome / sharing) OR build a signed standalone Android .apk with LuaJ + JBox2D + Theta* AI + Tween Engine!");
         sub.setTextColor(Color.parseColor("#94A3B8"));
-        sub.setTextSize(12f);
+        sub.setTextSize(13.5f);
         sub.setPadding(0, dp(4), 0, dp(10));
         box.addView(sub);
 
@@ -2043,7 +2060,7 @@ public class EditorActivity extends Activity {
 
         buildLogTv = new TextView(this);
         buildLogTv.setTypeface(Typeface.MONOSPACE);
-        buildLogTv.setTextSize(11.5f);
+        buildLogTv.setTextSize(13.0f);
         buildLogTv.setTextColor(Color.parseColor("#FAFAFA"));
         buildLogTv.setBackgroundColor(Color.parseColor("#09090B"));
         buildLogTv.setPadding(dp(12), dp(12), dp(12), dp(12));
@@ -2162,16 +2179,13 @@ public class EditorActivity extends Activity {
         sfxPreview.stopAll();
         currentMode = mode;
 
+        boolean overflowMode = "PIXEL".equals(mode) || "SFX".equals(mode)
+                || "LRM".equals(mode) || "BUILD".equals(mode);
         for (TextView tb : tabButtons) {
-            boolean active = mode.equals(tb.getTag());
+            Object tag = tb.getTag();
+            boolean active = overflowMode ? "MORE".equals(tag) : mode.equals(tag);
             VortexMobileUi.applyButtonVariant(this, tb,
                     active ? VortexMobileUi.ButtonVariant.PRIMARY : VortexMobileUi.ButtonVariant.SECONDARY, true);
-            if (active && topTabScroll != null) {
-                topTabScroll.post(() -> {
-                    int targetX = (tb.getLeft() + tb.getRight()) / 2 - topTabScroll.getWidth() / 2;
-                    topTabScroll.smoothScrollTo(Math.max(0, targetX), 0);
-                });
-            }
         }
 
         sceneBottomToolbar.setVisibility("SCENE".equals(mode) ? View.VISIBLE : View.GONE);
@@ -2245,7 +2259,7 @@ public class EditorActivity extends Activity {
         TextView tv = new TextView(this);
         tv.setText(label);
         tv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-        tv.setTextSize(11.5f);
+        tv.setTextSize(13.0f);
         tv.setPadding(0, dp(8), 0, dp(3));
         parent.addView(tv);
 
@@ -2266,19 +2280,19 @@ public class EditorActivity extends Activity {
         tv.setText(label);
         tv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
-        tv.setTextSize(11f);
+        tv.setTextSize(12.5f);
         topHdr.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         final EditText et = VortexMobileUi.createInput(this, String.format(Locale.US, "%.2f", val), true, false);
         TextView minus = new TextView(this);
         minus.setText(" ◀ ");
         minus.setTextColor(VortexMobileUi.C_CYAN);
-        minus.setTextSize(10f);
+        minus.setTextSize(11.5f);
         minus.setOnClickListener(v -> et.setText(String.format(Locale.US, "%.2f", parseF(et, val) - 0.25f)));
         TextView plus = new TextView(this);
         plus.setText(" ▶ ");
         plus.setTextColor(VortexMobileUi.C_CYAN);
-        plus.setTextSize(10f);
+        plus.setTextSize(11.5f);
         plus.setOnClickListener(v -> et.setText(String.format(Locale.US, "%.2f", parseF(et, val) + 0.25f)));
         topHdr.addView(minus);
         topHdr.addView(plus);
@@ -2293,7 +2307,7 @@ public class EditorActivity extends Activity {
         TextView tv = new TextView(this);
         tv.setText(label);
         tv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-        tv.setTextSize(11.5f);
+        tv.setTextSize(13.0f);
         tv.setPadding(0, dp(8), 0, dp(3));
         parent.addView(tv);
 
@@ -2318,7 +2332,7 @@ public class EditorActivity extends Activity {
         TextView tv = new TextView(this);
         tv.setText(text);
         tv.setTextColor(Color.WHITE);
-        tv.setTextSize(11.5f);
+        tv.setTextSize(13.0f);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setSingleLine(true);
         tv.setPadding(dp(10), dp(6), dp(10), dp(6));

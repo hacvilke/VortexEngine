@@ -1,25 +1,37 @@
-# Vortex Engine Studio — v4.3.1 ("Monolith White Edition")
+# Vortex Engine Studio — v4.4.0 ("Monolith White Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
 
-## What's New in v4.3.1 (Studio Visual Hierarchy, Docking, Precision Inspector & Feedback Polish)
+## What's New in v4.4.0 (Godot/Unreal-Inspired IDE Rebuild, Real Physics & Readable Type)
 
-### 1. Distinct 5-Tier Panel Hierarchy & High-Contrast Readability
-- **Clear Panel Separation**: Upgraded the neutral dark studio palette into a 5-tier luminance ramp (`#070709` recessed canvas/code/console wells, `#15151A` primary Hierarchy/Explorer docks, `#1C1C23` alternating Inspector accordion cards, `#212129` elevated Dock Header bars with `3px` crisp `#FFFFFF` accent bars) framed by `#40404F` structural borders and `9px` dual-bevel grip splitters.
-- **Zero-Strain Typography**: Boosted property label and secondary metadata contrast (`#E2E2EB` / `#B8B8C6` on dark surfaces) across both Desktop and Android Inspectors.
+### 1. Readable Typography Everywhere (no more 8–10pt micro text)
+- **14pt editorial scale**: the Desktop Studio now renders at a true **14pt UI scale with 14pt code**, using the first installed quality face (`Inter → Segoe UI → Ubuntu → Cantarell → DejaVu Sans`) and true monospace (`JetBrains Mono → Cascadia Mono → Consolas → DejaVu Sans Mono`). LCD/ClearType hinting is enabled so glyphs stay sharp instead of blurry.
+- **Menu → Toolbar → Dock hierarchy** with generous spacing, so labels stop colliding and nothing clips at `1366×768`.
+- **Android** got the same treatment: every Studio text size was raised (≈+1.5sp, dialog inputs to 14.5sp, buttons 13–14sp) for real phone readability.
 
-### 2. Full Workspace Customization (Collapse, Undock, Focus Mode & Seamless File Tabs)
-- **Collapse, Expand, Undock & Viewport Focus Mode**: Collapse or restore the Left Hierarchy/Inspector, File Explorer (`FILES`), Bottom Console/Terminal, or Right Tools dock with one click (or double-click any splitter rail), enter **1-Click Full-Viewport Focus Mode**, or **Undock** the Multi-File Code Editor or Console/Shell into independent floating OS windows.
-- **First-Class Multi-File Code Tabs (`VortexCodeTab`)**: Open file tabs (`main.js`, `swarm_director.js`, etc.) feature an unmistakable `2.6px` crisp `#FFFFFF` top active-tab bar, status dot, middle-click close, drag-onto-Viewport split snapping, and dedicated hover-highlighted `×` close buttons.
+### 2. Honest, Engine-Shaped Layout (fewer, purposeful tabs)
+- **Menu bar** (`File · Edit · Create · View · Tools · Help`) plus a compact **icon-first tool strip** — the same shape as Godot/Unreal, instead of one long row of duplicate buttons.
+- Only **9 verbs** fill the whole IDE: File · Edit · Create · View · Tools · Help, plus icon actions (New, Open, Save, Undo, Redo, 2D/3D, Gizmo, Colliders, Snap, Play) and two CTAs (`Play`, `Build`).
+- Right dock consolidated **7 tabs → 6** (`Scene · Script · Logic · AI · Assets · Build`), with `Blueprint`/`Event Flow` nested under **Logic** and `Forge AI`/`LRM Sync` nested under **AI** — nothing removed, just de-duplicated.
+- The **Viewport is now always the Viewport** (no tab next to a Blueprint graph), which frees the whole center column for the scene.
+- **Godot-style property rows**: fixed-width label column + stretchable control (see `createPropertyRow`), so the Inspector reads like a real DCC tool.
+- Phone layout rebuilt: cramped top tab strip replaced with a **thumb-reachable bottom navigation bar** (Scene · Inspect · Code · Logic · Play + More), giving the viewport ~34dp more height.
 
-### 3. Visual Numeric Scrubbers & Collapsible Accordion Inspector
-- **Draggable Numeric Scrubbers + Mouse Wheel Tweaking (`VortexNumberField`)**: Coordinates (`X`, `Y`, `Z`), scale (`W`, `H`, `D`), rotation, bounce, friction, and animation FPS feature horizontal drag-scrub handles, clickable/draggable `◀` / `▶` stepper arrows, and mouse scroll wheel support (`Shift` = fine, `Ctrl` = coarse) with live 2D/3D viewport updates.
-- **Collapsible Accordion Property Folders**: Grouped Entity & Physics Inspector fields into collapsible accordion sections (**Transform**, **Rendering & Sprites**, **Physics & Collisions**, **Identity & Custom Tags**) on both Desktop and Android.
+### 3. Godot/Unreal-inspired Viewport, Gizmos & Physics Tooling
+- **Transform gizmos** in the viewport: `MOVE` (X/Y arrows), `SCALE` (handles), `SELECT`, with `Shift` for vertical axis drags, plus **grid snapping** and **collider overlay** (solid green = solid, dashed amber = trigger) and velocity vectors.
+- **New physics solver (Unreal-Chaos-inspired)**, replacing the naive AABB-push resolver:
+  - **Substepped integration** (4 substeps; **6 with CCD** for bullets/fast projectiles) so fast objects no longer tunnel through walls.
+  - **Impulse + restitution + Coulomb tangential friction** resolution with **Baumgarte positional correction** (slop `5mm`, `0.82` percent).
+  - **Sphere vs Sphere / Sphere vs Box / Capsule / AABB (SAT)** manifolds, deep-penetration axis fallback.
+  - **Collision layers & masks** (`collisionLayer` / `collisionMask`) on every entity — the Unreal channel system, now in your scene JSON.
+  - **Mass-aware impulses**, **coyote-time grounding** (`Entity.canJump()`), slope-normal deflection & friction on **FastNoiseLite 3D terrain**, and **JBox2D CCD bullets** in 2D with `World.setContinuousPhysics(true)`.
+  - New script APIs: `applyForce`, `applyRadialImpulse` (shockwaves), `setGravityScale`, `setBounce`, `setFriction`, `setMass`, `raycastDist`, and a rewritten `raycast` (sphere + AABB + terrain) — mirrored in **JS, Java, Lua and HTML5 exports**.
 
-### 4. Color-Coded Build/Script Logs & Live Confirmation Pills
-- **Semantic Console & Terminal Highlighting (`VortexLogPane` + `StatusPill`)**: Build confirmations, saves, exports, and `exit 0` shell commands pop out in **bright emerald green (`#00E676`)**, syntax/runtime errors and non-zero exits pop out in **soft coral red (`#FF6B6B`)**, and warnings appear in **warm amber (`#FBBF24`)**, paired with a live status confirmation pill in the Studio header and terminal bar.
+### 4. Cleaner, Reticent Console & Chrome Copy
+- Removed tutorial-style walls of text: the terminal banner and Studio console now emit a single-line status instead of three paragraphs of instructions.
+- Kept the color-coded log semantics (emerald success / coral error / amber warning) and the live status pill.
 
 ---
 

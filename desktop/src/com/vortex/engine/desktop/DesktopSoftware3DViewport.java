@@ -98,6 +98,9 @@ public class DesktopSoftware3DViewport extends JPanel {
     private final Set<Integer> heldKeys = new HashSet<>();
     private Point lastMouse = null;
     private boolean draggingEntity = false;
+    private String gizmoMode = "MOVE"; // SELECT, MOVE, SCALE
+    private boolean gridSnap = false;
+    private boolean showColliders = false;
 
     private long lastTickNs = System.nanoTime();
     private int frameCount = 0;
@@ -216,6 +219,12 @@ public class DesktopSoftware3DViewport extends JPanel {
     public GameProject getActiveProject() { return activeProject; }
     public String getSelectedEntityId() { return selectedEntityId; }
     public void setSelectedEntityId(String id) { this.selectedEntityId = id; repaint(); }
+    public String getGizmoMode() { return gizmoMode; }
+    public void setGizmoMode(String mode) { this.gizmoMode = mode == null ? "MOVE" : mode.toUpperCase(); repaint(); }
+    public boolean isGridSnap() { return gridSnap; }
+    public void setGridSnap(boolean snap) { this.gridSnap = snap; repaint(); }
+    public boolean isShowColliders() { return showColliders; }
+    public void setShowColliders(boolean show) { this.showColliders = show; repaint(); }
 
     public void resetCamera() {
         editorYawDeg = 35f; editorPitchDeg = 26f; editorDist = 19f;
@@ -272,10 +281,16 @@ public class DesktopSoftware3DViewport extends JPanel {
                 lastMouse = e.getPoint();
 
                 boolean is3D = "3D".equalsIgnoreCase(activeProject.dimensionMode);
-                if (draggingEntity && selectedEntityId != null && SwingUtilities.isLeftMouseButton(e)) {
+                if (draggingEntity && selectedEntityId != null && SwingUtilities.isLeftMouseButton(e) && !"SELECT".equals(gizmoMode)) {
                     Entity sel = activeProject.findById(selectedEntityId);
                     if (sel != null) {
-                        if (is3D) {
+                        if ("SCALE".equals(gizmoMode)) {
+                            float sDeltaX = dx * 0.025f;
+                            float sDeltaY = -dy * 0.025f;
+                            sel.scaleX = Math.max(0.15f, sel.scaleX + sDeltaX);
+                            sel.scaleY = Math.max(0.15f, sel.scaleY + sDeltaY);
+                            if (is3D && e.isShiftDown()) sel.scaleZ = Math.max(0.15f, sel.scaleZ + sDeltaY);
+                        } else if (is3D) {
                             double yaw = Math.toRadians(editorYawDeg);
                             float scale = editorDist * 0.0022f;
                             sel.x += (float) (Math.cos(yaw) * dx) * scale;
@@ -286,11 +301,21 @@ public class DesktopSoftware3DViewport extends JPanel {
                                 sel.x += (float) (Math.sin(yaw) * dy) * scale;
                                 sel.z += (float) (Math.cos(yaw) * dy) * scale;
                             }
+                            if (gridSnap) {
+                                sel.x = Math.round(sel.x * 2f) * 0.5f;
+                                sel.y = Math.round(sel.y * 2f) * 0.5f;
+                                sel.z = Math.round(sel.z * 2f) * 0.5f;
+                            }
                         } else {
                             float worldPerPx = editor2DZoom / Math.max(1f, getHeight());
                             sel.x += dx * worldPerPx;
                             sel.y -= dy * worldPerPx;
+                            if (gridSnap) {
+                                sel.x = Math.round(sel.x * 4f) * 0.25f;
+                                sel.y = Math.round(sel.y * 4f) * 0.25f;
+                            }
                         }
+                        sel.transformDirty = true;
                         if (listener != null) listener.onEntityMoved(sel);
                     }
                 } else {
@@ -843,12 +868,51 @@ public class DesktopSoftware3DViewport extends JPanel {
                 }
             }
 
+            if (showColliders && !"NONE".equalsIgnoreCase(e.collider) && !"NONE".equalsIgnoreCase(e.bodyType)) {
+                g2.setColor(e.isTrigger ? new Color(250, 204, 21, 215) : new Color(0, 230, 118, 215));
+                g2.setStroke(e.isTrigger
+                        ? new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 1f, new float[]{4f, 4f}, 0f)
+                        : new BasicStroke(1.4f));
+                if ("SPHERE".equalsIgnoreCase(e.collider) || "CIRCLE".equals(prim) || "SPRITE_COIN".equals(prim)) {
+                    int d = Math.max(pw, ph);
+                    g2.drawOval(-d / 2, -d / 2, d, d);
+                } else {
+                    g2.drawRect(-pw / 2, -ph / 2, pw, ph);
+                }
+            }
+
             if (!playing && e.id.equals(selectedEntityId)) {
-                g2.setColor(new Color(255, 255, 255));
-                g2.setStroke(new BasicStroke(2.2f));
+                g2.setColor(new Color(255, 255, 255, 225));
+                g2.setStroke(new BasicStroke(1.8f));
                 g2.drawRect(-pw / 2 - 3, -ph / 2 - 3, pw + 6, ph + 6);
+                g2.setTransform(old);
+                // Godot / Unreal X & Y Transform Gizmo Arrows
+                int gx = Math.round(sx), gy = Math.round(sy);
+                int gizLen = 36;
+                g2.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g2.setColor(new Color(255, 107, 107)); // X axis
+                g2.drawLine(gx, gy, gx + gizLen, gy);
+                if ("SCALE".equals(gizmoMode)) {
+                    g2.fillRect(gx + gizLen - 3, gy - 3, 7, 7);
+                } else {
+                    g2.fillPolygon(new int[]{gx + gizLen + 6, gx + gizLen - 2, gx + gizLen - 2}, new int[]{gy, gy - 4, gy + 4}, 3);
+                }
+                g2.setColor(new Color(74, 222, 128)); // Y axis
+                g2.drawLine(gx, gy, gx, gy - gizLen);
+                if ("SCALE".equals(gizmoMode)) {
+                    g2.fillRect(gx - 3, gy - gizLen - 4, 7, 7);
+                } else {
+                    g2.fillPolygon(new int[]{gx, gx - 4, gx + 4}, new int[]{gy - gizLen - 6, gy - gizLen + 2, gy - gizLen + 2}, 3);
+                }
+                continue;
             }
             g2.setTransform(old);
+            if (showColliders && (Math.abs(e.vx) > 0.1f || Math.abs(e.vy) > 0.1f)) {
+                g2.setColor(new Color(255, 255, 255, 180));
+                g2.setStroke(new BasicStroke(1.4f));
+                g2.drawLine(Math.round(sx), Math.round(sy),
+                        Math.round(sx + e.vx * 4f), Math.round(sy - e.vy * 4f));
+            }
         }
 
         for (Particle pt : particles) {
@@ -860,30 +924,31 @@ public class DesktopSoftware3DViewport extends JPanel {
     }
 
     private void paintHudOverlay(Graphics2D g2, GameProject p, int w, int h) {
-        int barW = Math.min(w - 24, 410);
-        g2.setColor(new Color(14, 14, 17, 210));
-        g2.fill(new RoundRectangle2D.Float(12, 10, barW, 34, 9, 9));
-        g2.setColor(new Color(58, 58, 66, 200));
-        g2.setStroke(new BasicStroke(1f));
-        g2.draw(new RoundRectangle2D.Float(12, 10, barW, 34, 9, 9));
-
-        g2.setFont(new Font("SansSerif", Font.BOLD, 12));
+        DesktopUiKit.enableAA(g2);
         if (playing) {
+            int barW = Math.min(w - 24, 340);
+            g2.setColor(new Color(14, 14, 17, 210));
+            g2.fill(new RoundRectangle2D.Float(12, 10, barW, 32, 8, 8));
+            g2.setColor(new Color(58, 58, 66, 200));
+            g2.setStroke(new BasicStroke(1f));
+            g2.draw(new RoundRectangle2D.Float(12, 10, barW, 32, 8, 8));
+
+            g2.setFont(DesktopUiKit.FONT_UI_BOLD);
             g2.setColor(new Color(255, 255, 255));
-            g2.drawString("SCORE " + scriptEngine.score, 22, 31);
+            g2.drawString("SCORE " + scriptEngine.score, 22, 30);
             g2.setColor(scriptEngine.health > 30 ? new Color(134, 239, 172) : new Color(252, 165, 165));
-            g2.drawString("HP " + scriptEngine.health, 128, 31);
+            g2.drawString("HP " + scriptEngine.health, 128, 30);
             g2.setColor(new Color(185, 185, 194));
-            g2.drawString(currentFps + " FPS • WASD + Space(A) / Shift(B)", 202, 31);
+            g2.drawString(currentFps + " FPS", 218, 30);
 
             if (scriptEngine.hudBanner != null && !scriptEngine.hudBanner.isEmpty()) {
-                g2.setFont(new Font("SansSerif", Font.BOLD, 16));
+                g2.setFont(DesktopUiKit.FONT_TITLE);
                 FontMetrics fm = g2.getFontMetrics();
                 int bw = fm.stringWidth(scriptEngine.hudBanner);
                 g2.setColor(new Color(14, 14, 17, 220));
-                g2.fillRoundRect((w - bw) / 2 - 14, 52, bw + 28, 30, 8, 8);
+                g2.fillRoundRect((w - bw) / 2 - 14, 50, bw + 28, 30, 8, 8);
                 g2.setColor(new Color(255, 255, 255));
-                g2.drawString(scriptEngine.hudBanner, (w - bw) / 2, 72);
+                g2.drawString(scriptEngine.hudBanner, (w - bw) / 2, 70);
             }
 
             // In-Game Custom GUI Widgets (Labels & Progress/Chart Bars)
@@ -896,7 +961,7 @@ public class DesktopSoftware3DViewport extends JPanel {
                     int bh = 14;
                     int bx = wx - bw / 2;
                     float ratio = Math.max(0f, Math.min(1f, wg.value / Math.max(0.0001f, wg.maxValue)));
-                    g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+                    g2.setFont(DesktopUiKit.FONT_SMALL_BOLD);
                     g2.setColor(new Color(245, 245, 248));
                     g2.drawString(wg.text + " (" + Math.round(wg.value) + "/" + Math.round(wg.maxValue) + ")", bx, wy - 4);
                     g2.setColor(new Color(14, 14, 18, 220));
@@ -906,7 +971,7 @@ public class DesktopSoftware3DViewport extends JPanel {
                     g2.setColor(new Color(255, 255, 255, 95));
                     g2.drawRoundRect(bx, wy, bw, bh, 6, 6);
                 } else {
-                    g2.setFont(new Font("SansSerif", Font.BOLD, Math.round(wg.fontSize)));
+                    g2.setFont(new Font(DesktopUiKit.UI_FAMILY, Font.BOLD, Math.max(12, Math.round(wg.fontSize))));
                     FontMetrics fm = g2.getFontMetrics();
                     int tw = fm.stringWidth(wg.text);
                     g2.setColor(new Color(10, 10, 13, 185));
@@ -930,44 +995,39 @@ public class DesktopSoftware3DViewport extends JPanel {
                 g2.drawRoundRect(dx, dy, dw, dh, 12, 12);
 
                 if (dlg.speaker != null && !dlg.speaker.isEmpty()) {
-                    g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+                    g2.setFont(DesktopUiKit.FONT_SMALL_BOLD);
                     int sw = g2.getFontMetrics().stringWidth(dlg.speaker) + 20;
                     g2.setColor(Color.WHITE);
                     g2.fillRoundRect(dx + 14, dy - 11, sw, 20, 6, 6);
                     g2.setColor(new Color(10, 10, 12));
                     g2.drawString(dlg.speaker.toUpperCase(), dx + 24, dy + 3);
                 }
-                g2.setFont(new Font("SansSerif", Font.PLAIN, 14));
+                g2.setFont(DesktopUiKit.FONT_UI);
                 g2.setColor(new Color(248, 248, 250));
                 drawWrappedText(g2, dlg.message, dx + 18, dy + 32, dw - 36, 19);
             }
-        } else {
-            g2.setColor(new Color(255, 255, 255));
-            g2.drawString("EDITOR (" + p.dimensionMode + " • " + p.scriptLanguage + ")", 22, 31);
-            g2.setColor(new Color(175, 175, 184));
-            g2.drawString("Drag: Move • Right-Drag: Orbit/Pan • Wheel: Zoom", 168, 31);
         }
 
         // Visual Code-Tab Drag/Drop Snap Zone Highlight
         if (snapPreviewZone != null) {
             int zx = 8, zy = 8, zw = w - 16, zh = h - 16;
-            String label = "SNAP CODE SPLIT";
+            String label = "Split Code";
             if ("RIGHT".equals(snapPreviewZone)) {
                 zx = w / 2 + 4; zw = w / 2 - 12;
-                label = "DROP TO SNAP CODE RIGHT OF VIEWPORT";
+                label = "Split Right";
             } else if ("LEFT".equals(snapPreviewZone)) {
                 zx = 8; zw = w / 2 - 12;
-                label = "DROP TO SNAP CODE LEFT OF VIEWPORT";
+                label = "Split Left";
             } else if ("BOTTOM".equals(snapPreviewZone)) {
                 zy = h / 2 + 4; zh = h / 2 - 12;
-                label = "DROP TO SNAP CODE BELOW VIEWPORT";
+                label = "Split Bottom";
             }
             g2.setColor(new Color(255, 255, 255, 34));
             g2.fillRoundRect(zx, zy, zw, zh, 12, 12);
             g2.setColor(new Color(255, 255, 255, 225));
             g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 1f, new float[]{8f, 6f}, 0f));
             g2.drawRoundRect(zx, zy, zw, zh, 12, 12);
-            g2.setFont(new Font("SansSerif", Font.BOLD, 13));
+            g2.setFont(DesktopUiKit.FONT_UI_BOLD);
             FontMetrics fm = g2.getFontMetrics();
             int lw = fm.stringWidth(label);
             g2.setColor(new Color(12, 12, 15, 230));

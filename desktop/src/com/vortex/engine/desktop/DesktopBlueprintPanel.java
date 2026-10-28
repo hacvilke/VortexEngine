@@ -496,7 +496,7 @@ public final class DesktopBlueprintPanel extends JPanel {
             wg.dispose();
 
             // Corner HUD Hint
-            g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
+            g2.setFont(DesktopUiKit.FONT_SMALL);
             g2.setColor(new Color(161, 161, 170, 210));
             g2.drawString("Blueprint Graph (" + project.blueprintNodes.size() + " blocks, "
                     + project.blueprintLinks.size() + " wires) • Drag ▶ pin to connect • Right-click pin to unwire • Wheel zoom", 12, h - 10);
@@ -561,11 +561,11 @@ public final class DesktopBlueprintPanel extends JPanel {
             g2.draw(card);
 
             // Title + Category Pill
-            g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+            g2.setFont(DesktopUiKit.FONT_SMALL_BOLD);
             g2.setColor(Color.WHITE);
             g2.drawString(trimToWidth(g2, n.title, NODE_W - 52), n.x + 10f, n.y + 17f);
 
-            g2.setFont(new Font("SansSerif", Font.BOLD, 9));
+            g2.setFont(new Font(DesktopUiKit.UI_FAMILY, Font.BOLD, Math.max(10, DesktopUiKit.FONT_SMALL.getSize() - 1)));
             int cw = g2.getFontMetrics().stringWidth(cat) + 8;
             g2.setColor(new Color(255, 255, 255, 32));
             g2.fillRoundRect(Math.round(n.x + NODE_W - cw - 7), Math.round(n.y + 6), cw, 14, 5, 5);
@@ -584,7 +584,7 @@ public final class DesktopBlueprintPanel extends JPanel {
                 Point2D.Float pf = outputPinPos(n, "FALSE");
                 drawExecPin(g2, pt.x, pt.y, new Color(134, 239, 172));
                 drawExecPin(g2, pf.x, pf.y, new Color(252, 165, 165));
-                g2.setFont(new Font("SansSerif", Font.BOLD, 9));
+                g2.setFont(new Font(DesktopUiKit.UI_FAMILY, Font.BOLD, Math.max(10, DesktopUiKit.FONT_SMALL.getSize() - 1)));
                 g2.setColor(new Color(134, 239, 172));
                 g2.drawString("TRUE", pt.x - 36f, pt.y + 3.5f);
                 g2.setColor(new Color(252, 165, 165));
@@ -595,7 +595,7 @@ public final class DesktopBlueprintPanel extends JPanel {
             }
 
             // Node Parameter Summary Preview
-            g2.setFont(new Font("Monospaced", Font.PLAIN, 10));
+            g2.setFont(DesktopUiKit.FONT_MONO);
             g2.setColor(new Color(212, 212, 220));
             String line1 = n.param1 == null ? "" : n.param1;
             String line2 = n.param2 == null ? "" : n.param2;

@@ -62,7 +62,7 @@ public final class DesktopTerminalPanel extends JPanel {
                 BorderFactory.createEmptyBorder(4, 10, 4, 10)));
 
         cwdLabel = new JLabel();
-        cwdLabel.setFont(new Font("Monospaced", Font.BOLD, 11));
+        cwdLabel.setFont(DesktopUiKit.FONT_MONO);
         cwdLabel.setForeground(DesktopUiKit.C_WHITE);
         cwdLabel.setMinimumSize(new Dimension(60, 22));
         updateCwdLabel();
@@ -123,10 +123,7 @@ public final class DesktopTerminalPanel extends JPanel {
         topBar.add(quickBox, BorderLayout.EAST);
         add(topBar, BorderLayout.NORTH);
 
-        outputArea.appendColoredLine("✓ [SUCCESS] Vortex Studio Interactive Shell (" + System.getProperty("os.name") + " • "
-                + (isWindows() ? "PowerShell" : "POSIX sh") + ")");
-        outputArea.appendColoredLine("• Active JDK, Go, and LRM directories are automatically injected into PATH.");
-        outputArea.appendColoredLine("• Type any command (cd, java, javac, go, lrm, git, irm, curl) and press Enter. Up/Down = History.");
+        outputArea.appendColoredLine("✓ Shell Ready (" + (isWindows() ? "PowerShell" : "POSIX sh") + ")");
 
         JScrollPane scroll = DesktopUiKit.createScrollPane(outputArea);
         add(scroll, BorderLayout.CENTER);
@@ -138,12 +135,12 @@ public final class DesktopTerminalPanel extends JPanel {
                 BorderFactory.createEmptyBorder(5, 10, 5, 10)));
 
         JLabel promptGlyph = new JLabel(isWindows() ? "PS>" : "$");
-        promptGlyph.setFont(new Font("Monospaced", Font.BOLD, 13));
+        promptGlyph.setFont(DesktopUiKit.FONT_MONO);
         promptGlyph.setForeground(DesktopUiKit.C_WHITE);
         inputBar.add(promptGlyph, BorderLayout.WEST);
 
         inputField = DesktopUiKit.createField("");
-        inputField.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        inputField.setFont(DesktopUiKit.FONT_MONO);
         inputField.setPreferredSize(new Dimension(320, 28));
         inputField.addActionListener(e -> submitTypedCommand());
         inputField.addKeyListener(new KeyAdapter() {

@@ -58,20 +58,20 @@ public class MainActivity extends Activity {
         TextView title = new TextView(this);
         title.setText("VORTEX ENGINE");
         title.setTextColor(VortexMobileUi.C_CYAN);
-        title.setTextSize(19.5f);
+        title.setTextSize(20.5f);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setLetterSpacing(0.03f);
         title.setSingleLine(true);
         brandRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView verChip = VortexMobileUi.makeBadge(this, "v4.3.1 STUDIO", true);
+        TextView verChip = VortexMobileUi.makeBadge(this, "v4.4.0 STUDIO", true);
         brandRow.addView(verChip);
         header.addView(brandRow);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("Native Java • ES6 JS • Lua 5.2 • LRM P2P • Forge AI • 2D/3D Studio");
+        subtitle.setText("2D & 3D game studio — Java • JS • Lua");
         subtitle.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-        subtitle.setTextSize(11.5f);
+        subtitle.setTextSize(13.0f);
         subtitle.setSingleLine(true);
         subtitle.setEllipsize(TextUtils.TruncateAt.END);
         subtitle.setPadding(0, dp(3), 0, dp(11));
@@ -107,7 +107,7 @@ public class MainActivity extends Activity {
         statusCard.setBackgroundColor(VortexMobileUi.C_PANEL);
 
         termuxPrimaryStatus = new TextView(this);
-        termuxPrimaryStatus.setTextSize(11.8f);
+        termuxPrimaryStatus.setTextSize(13.3f);
         termuxPrimaryStatus.setTypeface(Typeface.DEFAULT_BOLD);
         statusCard.addView(termuxPrimaryStatus);
 
@@ -117,12 +117,12 @@ public class MainActivity extends Activity {
         permRow.setPadding(0, dp(3), 0, 0);
 
         termuxPermStatus = new TextView(this);
-        termuxPermStatus.setTextSize(11f);
+        termuxPermStatus.setTextSize(12.5f);
         permRow.addView(termuxPermStatus, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         permActionBtn = VortexMobileUi.makeButton(this, "ENABLE 1-TAP", VortexMobileUi.ButtonVariant.ACCENT, true);
         permActionBtn.setPadding(dp(9), dp(4), dp(9), dp(4));
-        permActionBtn.setTextSize(10f);
+        permActionBtn.setTextSize(11.5f);
         permActionBtn.setOnClickListener(v -> showRunCommandPermissionHelper());
         permRow.addView(permActionBtn);
 
@@ -224,7 +224,7 @@ public class MainActivity extends Activity {
         TextView secHead = new TextView(this);
         secHead.setText("YOUR GAME PROJECTS (" + projects.size() + ")");
         secHead.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-        secHead.setTextSize(11f);
+        secHead.setTextSize(12.5f);
         secHead.setTypeface(Typeface.DEFAULT_BOLD);
         secHead.setLetterSpacing(0.06f);
         secHead.setPadding(dp(2), 0, 0, dp(8));
@@ -273,7 +273,7 @@ public class MainActivity extends Activity {
             TextView nameTv = new TextView(this);
             nameTv.setText(p.title);
             nameTv.setTextColor(VortexMobileUi.C_TEXT);
-            nameTv.setTextSize(15f);
+            nameTv.setTextSize(16.0f);
             nameTv.setTypeface(Typeface.DEFAULT_BOLD);
             nameTv.setSingleLine(true);
             nameTv.setEllipsize(TextUtils.TruncateAt.END);
@@ -285,7 +285,7 @@ public class MainActivity extends Activity {
                     + (p.musicEnabled ? " • Synth" : "")
                     + " • " + p.packageName);
             metaTv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-            metaTv.setTextSize(11f);
+            metaTv.setTextSize(12.5f);
             metaTv.setSingleLine(true);
             metaTv.setEllipsize(TextUtils.TruncateAt.END);
             infoCol.addView(metaTv);
@@ -419,7 +419,7 @@ public class MainActivity extends Activity {
         TextView tv = new TextView(this);
         tv.setText(text);
         tv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-        tv.setTextSize(11.5f);
+        tv.setTextSize(13.0f);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setPadding(0, dp(10), 0, dp(4));
         return tv;

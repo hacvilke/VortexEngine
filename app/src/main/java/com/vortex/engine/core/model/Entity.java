@@ -30,19 +30,23 @@ public class Entity {
     public float scaleZ = 1f;
 
     // Appearance
-    public String colorHex = "#00E5FF";
-    public String secondaryColorHex = "#1A2639";
+    public String colorHex = "#FFFFFF";
+    public String secondaryColorHex = "#27272A";
     public float alpha = 1.0f;
     public boolean checkerTexture = false;
     public boolean emissive = false;
     public boolean visible = true;
 
-    // Physics & Motion (JBox2D + 3D Solver)
+    // Physics & Motion (JBox2D + Unreal-Inspired Substepped 3D Rigid-Body Solver)
     public String bodyType = "STATIC"; // STATIC, DYNAMIC, KINEMATIC, NONE
-    public String collider = "BOX";    // BOX, SPHERE, NONE
+    public String collider = "BOX";    // BOX, SPHERE, CAPSULE, NONE
     public boolean isTrigger = false;
     public boolean fixedRotation = true;
+    public boolean ccdBullet = false;  // Continuous Collision Detection (TOI / fast substepping)
+    public float mass = 1.0f;
     public float density = 1.0f;
+    public int collisionLayer = 1;
+    public int collisionMask = 0xFFFF;
     public float vx = 0f;
     public float vy = 0f;
     public float vz = 0f;
@@ -52,6 +56,7 @@ public class Entity {
     public float friction = 0.65f;
     public float drag = 0.02f;
     public boolean isGrounded = false;
+    public transient float coyoteTimer = 0f;
     public boolean alive = true;
     public transient boolean transformDirty = false;
 
@@ -166,6 +171,10 @@ public class Entity {
         }
     }
 
+    public boolean canJump() {
+        return isGrounded || coyoteTimer > 0.001f;
+    }
+
     public JSONObject toJson() throws JSONException {
         JSONObject o = new JSONObject();
         o.put("id", id);
@@ -196,7 +205,11 @@ public class Entity {
         o.put("collider", collider);
         o.put("isTrigger", isTrigger);
         o.put("fixedRotation", fixedRotation);
+        o.put("ccdBullet", ccdBullet);
+        o.put("mass", mass);
         o.put("density", density);
+        o.put("collisionLayer", collisionLayer);
+        o.put("collisionMask", collisionMask);
         o.put("vx", vx);
         o.put("vy", vy);
         o.put("vz", vz);
@@ -231,8 +244,8 @@ public class Entity {
         e.scaleX = (float) o.optDouble("scaleX", 1.0);
         e.scaleY = (float) o.optDouble("scaleY", 1.0);
         e.scaleZ = (float) o.optDouble("scaleZ", 1.0);
-        e.colorHex = o.optString("colorHex", "#00E5FF");
-        e.secondaryColorHex = o.optString("secondaryColorHex", "#1A2639");
+        e.colorHex = o.optString("colorHex", "#FFFFFF");
+        e.secondaryColorHex = o.optString("secondaryColorHex", "#27272A");
         e.alpha = (float) o.optDouble("alpha", 1.0);
         e.checkerTexture = o.optBoolean("checkerTexture", false);
         e.emissive = o.optBoolean("emissive", false);
@@ -241,7 +254,11 @@ public class Entity {
         e.collider = o.optString("collider", "BOX");
         e.isTrigger = o.optBoolean("isTrigger", false);
         e.fixedRotation = o.optBoolean("fixedRotation", true);
+        e.ccdBullet = o.optBoolean("ccdBullet", false);
+        e.mass = (float) o.optDouble("mass", 1.0);
         e.density = (float) o.optDouble("density", 1.0);
+        e.collisionLayer = o.optInt("collisionLayer", 1);
+        e.collisionMask = o.optInt("collisionMask", 0xFFFF);
         e.vx = (float) o.optDouble("vx", 0.0);
         e.vy = (float) o.optDouble("vy", 0.0);
         e.vz = (float) o.optDouble("vz", 0.0);
