@@ -3,6 +3,7 @@ package com.vortex.engine.desktop;
 import com.vortex.engine.core.model.Entity;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.model.PixelSpriteCodec;
+import com.vortex.engine.core.noise.FastNoiseLite;
 import com.vortex.engine.core.noise.TerrainGenerator;
 import com.vortex.engine.core.physics.PhysicsWorld;
 import com.vortex.engine.core.script.VortexScriptEngine;
@@ -560,6 +561,45 @@ public class DesktopSoftware3DViewport extends JPanel {
             }
         }
 
+        // Soft contact shadows: a cheap projected blob under every solid, offset away from the sun.
+        if (p.shadows && p.shadowStrength > 0.01f) {
+            float sYaw = (float) Math.toRadians(p.sunYawDeg);
+            float sPitch = (float) Math.toRadians(Math.max(12f, p.sunPitchDeg));
+            float sxDir = (float) (Math.sin(sYaw) * Math.cos(sPitch));
+            float szDir = (float) (Math.cos(sYaw) * Math.cos(sPitch));
+            for (Entity se : p.entities) {
+                if (!se.alive || !se.visible) continue;
+                if ("TERRAIN".equalsIgnoreCase(se.primitive) || "PLANE".equalsIgnoreCase(se.primitive)) continue;
+                // Giant set-dressing meshes would smear into a lake of black - skip them.
+                if (Math.max(Math.abs(se.scaleX), Math.abs(se.scaleZ)) > 8f) continue;
+                float groundY = 0f;
+                Entity terrain = null;
+                for (Entity te : p.entities) {
+                    if (te.alive && "TERRAIN".equalsIgnoreCase(te.primitive)) { terrain = te; break; }
+                }
+                if (terrain != null) {
+                    groundY = TerrainGenerator.sampleWorldHeight(terrain, getNoise(p), se.x, se.z);
+                }
+                float height = Math.max(0f, se.y - Math.abs(se.scaleY) * 0.5f - groundY);
+                float falloff = (float) Math.max(0.15, 1.0 - height / 12.0);
+                float offX = sxDir * height * 0.55f;
+                float offZ = szDir * height * 0.55f;
+                float[] c = project3D(se.x + offX, groundY + 0.02f, se.z + offZ,
+                        camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH);
+                if (c == null) continue;
+                float radius = Math.max(Math.abs(se.scaleX), Math.abs(se.scaleZ)) * (fovScale * halfH) / Math.max(1f, c[2]) * 0.62f;
+                if (radius < 1.5f) continue;
+                int alpha = (int) (255 * p.shadowStrength * falloff * Math.min(1f, 9f / Math.max(2f, c[2])));
+                alpha = Math.min(110, alpha);
+                radius = Math.min(radius, 90f);
+                if (alpha <= 3) continue;
+                java.awt.geom.Ellipse2D.Float sh = new java.awt.geom.Ellipse2D.Float(
+                        c[0] - radius, c[1] - radius * 0.42f, radius * 2f, radius * 0.84f);
+                g2.setColor(new Color(0, 0, 0, Math.min(150, alpha)));
+                g2.fill(sh);
+            }
+        }
+
         // Selection Gizmo in Edit Mode
         if (!playing && selectedEntityId != null) {
             Entity sel = p.findById(selectedEntityId);
@@ -617,7 +657,10 @@ public class DesktopSoftware3DViewport extends JPanel {
                 float z2 = e.z + cachedTerrainVerts[b + 18] * e.scaleZ;
 
                 Color c = (e.checkerTexture && ((t / 2) % 2 == 0)) ? baseCol : (e.checkerTexture ? secCol : baseCol);
-                pushProjectedTri(x0, y0, z0, x1, y1, z1, x2, y2, z2, nx, ny, nz, c, false, null,
+                // Edge stroke matches the fill so adjacent terrain triangles stitch without cracks.
+                Color seam = new Color(Math.round(c.getRed() * 0.93f), Math.round(c.getGreen() * 0.93f),
+                        Math.round(c.getBlue() * 0.93f), 255);
+                pushProjectedTri(x0, y0, z0, x1, y1, z1, x2, y2, z2, nx, ny, nz, c, false, seam,
                         camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH, skyCol, p.fogNear, p.fogFar);
             }
             return;
@@ -679,12 +722,70 @@ public class DesktopSoftware3DViewport extends JPanel {
         float depth = (s0[2] + s1[2] + s2[2]) / 3f;
         if (depth > 140f) return;
 
-        float light = Math.max(0f, nx * 0.45f + ny * 0.80f + nz * 0.40f);
-        float shade = emissive ? (0.82f + light * 0.30f) : (0.38f + light * 0.65f);
+        // ------------------------------------------------------------------
+        // v4.6.0 lighting: directional key light + hemisphere ambient + wrap
+        // diffuse + Blinn-Phong specular + rim. All driven by the project's
+        // light rig, so the Scene dock can retune the whole mood live.
+        // ------------------------------------------------------------------
+        GameProject lp = activeProject;
+        float lYaw = (float) Math.toRadians(lp != null ? lp.sunYawDeg : 42f);
+        float lPitch = (float) Math.toRadians(lp != null ? lp.sunPitchDeg : 54f);
+        float lx = (float) (Math.sin(lYaw) * Math.cos(lPitch));
+        float ly = (float) Math.sin(lPitch);
+        float lz = (float) (Math.cos(lYaw) * Math.cos(lPitch));
+        float ll = (float) Math.sqrt(lx * lx + ly * ly + lz * lz);
+        if (ll > 1e-5f) { lx /= ll; ly /= ll; lz /= ll; }
+
+        float sunI = lp == null ? 1f : Math.max(0f, Math.min(2f, lp.sunIntensity));
+        float amb = lp == null ? 0.34f : Math.max(0f, Math.min(1f, lp.ambientStrength));
+        Color sunCol = lp == null ? Color.WHITE : toAwtColor(lp.sunColorHex, 255);
+
+        // Two-sided lighting: flip the normal toward the camera so triangles wound either way
+        // receive the same light (this is what kept spheres rendering nearly black).
+        float camDx = camX - (x0 + x1 + x2) / 3f;
+        float camDy = camY - (y0 + y1 + y2) / 3f;
+        float camDz = camZ - (z0 + z1 + z2) / 3f;
+        if (nx * camDx + ny * camDy + nz * camDz < 0f) { nx = -nx; ny = -ny; nz = -nz; }
+
+        float ndl = nx * lx + ny * ly + nz * lz;
+        float wrap = Math.max(0f, (ndl + 0.32f) / 1.32f);          // half-Lambert: soft terminator
+        float skyFill = 0.5f + 0.5f * ny;                          // up-facing gets sky, down gets bounce
+
+        // view vector (surface -> camera) for the specular lobe
+        float faceCx = (x0 + x1 + x2) / 3f, faceCy = (y0 + y1 + y2) / 3f, faceCz = (z0 + z1 + z2) / 3f;
+        float vx1 = camX - faceCx, vy1 = camY - faceCy, vz1 = camZ - faceCz;
+        float vl = (float) Math.sqrt(vx1 * vx1 + vy1 * vy1 + vz1 * vz1);
+        float spec = 0f;
+        if (vl > 1e-4f) {
+            vx1 /= vl; vy1 /= vl; vz1 /= vl;
+            float hx1 = lx + vx1, hy1 = ly + vy1, hz1 = lz + vz1;
+            float hl = (float) Math.sqrt(hx1 * hx1 + hy1 * hy1 + hz1 * hz1);
+            if (hl > 1e-4f) {
+                float nh = Math.max(0f, (nx * hx1 + ny * hy1 + nz * hz1) / hl);
+                spec = (float) Math.pow(nh, 26.0) * 0.45f * sunI;
+            }
+        }
+        float rim = emissive ? 0f : (float) Math.pow(1f - Math.max(0f, Math.abs(ndl)), 3.0) * 0.10f;
+
+        float shade = emissive
+                ? (1.02f + wrap * 0.18f)
+                : (amb * (0.72f + 0.28f * skyFill) + wrap * sunI * 0.86f + spec + rim);
+        shade = Math.max(0.06f, Math.min(2.4f, shade));
 
         int r = Math.min(255, Math.round(col.getRed() * shade));
         int g = Math.min(255, Math.round(col.getGreen() * shade));
         int b = Math.min(255, Math.round(col.getBlue() * shade));
+        if (!emissive) {
+            // warm the lit side toward the light colour, cool the shadow side
+            float litMix = (float) Math.min(0.30, wrap * sunI * 0.26);
+            r = Math.round(r * (1f - litMix) + sunCol.getRed() * litMix);
+            g = Math.round(g * (1f - litMix) + sunCol.getGreen() * litMix);
+            b = Math.round(b * (1f - litMix) + sunCol.getBlue() * litMix);
+            float coolMix = (float) Math.min(0.16, (1f - wrap) * 0.16f);
+            r = Math.round(r * (1f - coolMix) + 24 * coolMix);
+            g = Math.round(g * (1f - coolMix) + 28 * coolMix);
+            b = Math.round(b * (1f - coolMix) + 40 * coolMix);
+        }
 
         if (fogFar > fogNear && depth > fogNear) {
             float ft = Math.min(0.85f, (depth - fogNear) / (fogFar - fogNear));
@@ -730,6 +831,20 @@ public class DesktopSoftware3DViewport extends JPanel {
         if (a != null && b != null) {
             g2.drawLine(Math.round(a[0]), Math.round(a[1]), Math.round(b[0]), Math.round(b[1]));
         }
+    }
+
+    private FastNoiseLite cachedNoise = null;
+    private int cachedNoiseSeed = Integer.MIN_VALUE;
+
+    /** Shared terrain noise so shadows + terrain mesh agree on the ground height. */
+    private FastNoiseLite getNoise(GameProject p) {
+        if (cachedNoise == null || cachedNoiseSeed != p.terrainSeed) {
+            cachedNoise = new FastNoiseLite(p.terrainSeed);
+            cachedNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+            cachedNoise.SetFrequency(p.terrainFreq);
+            cachedNoiseSeed = p.terrainSeed;
+        }
+        return cachedNoise;
     }
 
     private static float[][] CUBE_TRIS;

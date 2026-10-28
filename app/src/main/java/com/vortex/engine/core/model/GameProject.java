@@ -61,6 +61,15 @@ public class GameProject {
     public float cameraDistance = 11f;
     public float cameraHeight = 5.5f;
     public float cameraFov = 60f;
+
+    // ---- v4.6.0 Godot/Unreal-style lighting rig (DirectionalLight3D + ambient hemisphere) ----
+    public float sunYawDeg = 42f;          // compass direction of the key light
+    public float sunPitchDeg = 54f;        // elevation (90 = straight overhead)
+    public float sunIntensity = 1.0f;      // 0 = flat, 1 = default, 2 = harsh
+    public float ambientStrength = 0.34f;  // hemisphere fill so shadowed faces never go black
+    public String sunColorHex = "#FFF6E5";
+    public boolean shadows = true;         // soft contact shadows under objects
+    public float shadowStrength = 0.38f;
     public float zoom2D = 18f;
 
     // Controls & Editor Settings
@@ -274,6 +283,13 @@ public class GameProject {
             o.put("cameraDistance", cameraDistance);
             o.put("cameraHeight", cameraHeight);
             o.put("cameraFov", cameraFov);
+            o.put("sunYawDeg", sunYawDeg);
+            o.put("sunPitchDeg", sunPitchDeg);
+            o.put("sunIntensity", sunIntensity);
+            o.put("ambientStrength", ambientStrength);
+            o.put("sunColorHex", sunColorHex);
+            o.put("shadows", shadows);
+            o.put("shadowStrength", shadowStrength);
             o.put("zoom2D", zoom2D);
             o.put("showGrid", showGrid);
             o.put("showJoystick", showJoystick);
@@ -348,6 +364,13 @@ public class GameProject {
         p.cameraDistance = (float) o.optDouble("cameraDistance", 11.0);
         p.cameraHeight = (float) o.optDouble("cameraHeight", 5.5);
         p.cameraFov = (float) o.optDouble("cameraFov", 60.0);
+        p.sunYawDeg = (float) o.optDouble("sunYawDeg", 42.0);
+        p.sunPitchDeg = (float) o.optDouble("sunPitchDeg", 54.0);
+        p.sunIntensity = (float) o.optDouble("sunIntensity", 1.0);
+        p.ambientStrength = (float) o.optDouble("ambientStrength", 0.34);
+        p.sunColorHex = o.optString("sunColorHex", "#FFF6E5");
+        p.shadows = o.optBoolean("shadows", true);
+        p.shadowStrength = (float) o.optDouble("shadowStrength", 0.38);
         p.zoom2D = (float) o.optDouble("zoom2D", 18.0);
         p.showGrid = o.optBoolean("showGrid", true);
         p.showJoystick = o.optBoolean("showJoystick", true);

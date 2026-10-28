@@ -1,8 +1,28 @@
-# Vortex Engine Studio — v4.5.0 ("Monolith White Edition")
+# Vortex Engine Studio — v4.6.0 ("Monolith White Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
+
+## What's New in v4.6.0 (Honest Forge AI, Real Lighting Rig & Compact Chat)
+
+### 1. Forge AI that answers instead of thinking out loud
+- **No more scratchpad leaks.** Reasoning models (gpt-oss / qwen3 / deepseek-r1) used to dump their planning ("We need answer user. Need parse. We are Vortex Forge AI, JSON only…") into the chat bubble. The client now requests `reasoning.exclude`, only accepts `reasoning` text when it actually contains the JSON answer, and `sanitizeReply()` strips fenced blocks, JSON scaffolding and planning sentences. If a model still returns nothing usable you get one short line with a retry suggestion — never a monologue.
+- **1-tap questions.** The agent can now return `questions: [{text, options[], allowText}]`, rendered as answer chips plus a text box inside the chat. Answering a chip sends it straight back as the next turn, so "make a game" becomes *2D or 3D?* → *Explorer / Platformer / Shooter / Survival* instead of a guess. Wired on desktop **and** phone.
+- **Prompt rules enforced**: one JSON object, terse `reply`, act when the request is clear, ask when it is genuinely ambiguous, never invent API names.
+- **Robust parsing**: brace-walking JSON extraction plus trailing-comma repair; empty/broken model answers fall back to the offline generator instead of an error wall. Small talk ("hello", "thanks") is answered like a person, with a next-step question card.
+- **Compact chat UI**: bubbles are measured and wrapped to the live dock width (no more giant half-empty boxes), user messages are right-aligned, tool executions render as `✓ create_file: objects/boss.js` badges with **Undo changes** / **Playtest** buttons.
+
+### 2. Control chrome that actually scales
+- Hover pills, borders, icon sizes and corner radii now derive from `scaledF(...)` and the control's own height, so nothing turns into a tiny circle inside a big button when the UI is resized; buttons gained a soft outer hover glow, dropdowns/fields/tabs scale their radii too.
+
+### 3. Unreal-inspired lighting rig for 3D
+- New project-level rig: **sun yaw / elevation / power / colour, ambient fill, contact shadows**. Scene dock gets Day / Dusk / Night presets plus numeric scrubbers (Godot's `DirectionalLight3D` + environment ambient, without the renderer rewrite).
+- Shading is now **two-sided normal-corrected, half-Lambert** with hemisphere ambient, Blinn-Phong specular, rim light, warm highlights and cool shadow tint — plus **soft projected contact shadows** that fall off with height. Spheres and back faces no longer render nearly black; terrain triangle seams no longer show as black cracks.
+- All settings persist in the project JSON and are exported with the game.
+
+### 4. New starter: **3D Explorer — Green Hollow Valley**
+- Walkable FastNoiseLite valley with a daylight rig, a cabin (roof parented to the house), fence, five spinning gems, a patrolling critter and a live HUD — a working "explorer" template you can grow into a full game.
 
 ## What's New in v4.5.0 (Godot-Style Scene Tree, Real Parenting & Mobile Tree Inspect)
 

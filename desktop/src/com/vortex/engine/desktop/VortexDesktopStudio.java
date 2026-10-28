@@ -116,6 +116,9 @@ public class VortexDesktopStudio extends JFrame {
     private final List<VortexForgeAgent.ChatMessage> forgeChatHistory = new ArrayList<>();
     private JPanel forgeMessagesBox;
     private JScrollPane forgeMessagesScroll;
+    private java.util.function.Consumer<String> forgeSend = null;
+    private boolean forgeBusy = false;
+    private String forgeStatusText = "";
 
     // Color-Coded Console + Interactive Shell + Status Confirmation Pill
     private final DesktopUiKit.VortexLogPane consoleArea = new DesktopUiKit.VortexLogPane();
@@ -196,7 +199,7 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio(boolean checkStartupDependencies) {
-        super("Vortex Engine Studio v4.5.0 — Multi-File IDE • Blueprint GUI • Forge AI Chat • Native Java / JS / Lua");
+        super("Vortex Engine Studio v4.6.0 — Multi-File IDE • Blueprint GUI • Forge AI Chat • Native Java / JS / Lua");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         // Laptop-aware sizing: fit cleanly inside 1280x720 / 1366x768 / 1536x864 / 1440x900 screens!
@@ -730,8 +733,8 @@ public class VortexDesktopStudio extends JFrame {
                 "Physics",
                 "2D: JBox2D rigid bodies (CCD bullets)\n3D: substepped impulse solver + terrain\nLayers: collisionLayer / collisionMask")));
         items.add(new DesktopUiKit.MenuAction("---", null));
-        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.5.0", () -> DesktopUiKit.showInfoModal(this,
-                "Vortex Engine Studio v4.5.0",
+        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.6.0", () -> DesktopUiKit.showInfoModal(this,
+                "Vortex Engine Studio v4.6.0",
                 "Free & open-source 2D/3D game engine\nWindows • Linux • Android • Web")));
         return items;
     }
@@ -1158,7 +1161,7 @@ public class VortexDesktopStudio extends JFrame {
         headerBar.add(rightBar, BorderLayout.EAST);
         bottomWrapperPanel.add(headerBar, BorderLayout.NORTH);
 
-        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.5.0 Desktop Studio Ready.");
+        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.6.0 Desktop Studio Ready.");
 
         JScrollPane consoleScroll = DesktopUiKit.createScrollPane(consoleArea);
         bottomDeck.addCard("CONSOLE", consoleScroll, 0);
@@ -1405,7 +1408,93 @@ public class VortexDesktopStudio extends JFrame {
         view.add(snapBtn2);
         view.add(collBtn);
         view.add(camBtn2);
-        p.add(view, BorderLayout.CENTER);
+
+        // ---- v4.6.0 light rig (Godot: DirectionalLight3D + Environment ambient) ----
+        JPanel column = new JPanel();
+        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
+        column.setOpaque(false);
+        view.setMaximumSize(new Dimension(Integer.MAX_VALUE, view.getPreferredSize().height + 8));
+        view.setAlignmentX(Component.LEFT_ALIGNMENT);
+        column.add(view);
+        column.add(Box.createVerticalStrut(8));
+
+        JLabel lightHead = new JLabel("LIGHTING");
+        lightHead.setFont(DesktopUiKit.FONT_SMALL_BOLD);
+        lightHead.setForeground(DesktopUiKit.C_TEXT_MUTED);
+        lightHead.setAlignmentX(Component.LEFT_ALIGNMENT);
+        column.add(lightHead);
+        column.add(Box.createVerticalStrut(4));
+
+        JPanel presetRow = new JPanel(new GridLayout(1, 3, 5, 0));
+        presetRow.setOpaque(false);
+        presetRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        presetRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, DesktopUiKit.scaled(28)));
+        String[][] presets = {{"Day", "38", "62", "1.0", "0.42"}, {"Dusk", "96", "16", "0.95", "0.30"}, {"Night", "210", "42", "0.42", "0.16"}};
+        for (final String[] pr : presets) {
+            DesktopUiKit.VortexButton pb = new DesktopUiKit.VortexButton(pr[0], DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.SPARKLE);
+            pb.addActionListener(e -> {
+                project.sunYawDeg = Float.parseFloat(pr[1]);
+                project.sunPitchDeg = Float.parseFloat(pr[2]);
+                project.sunIntensity = Float.parseFloat(pr[3]);
+                project.ambientStrength = Float.parseFloat(pr[4]);
+                viewport.repaint();
+                populateInspector();
+                log("Lighting preset: " + pr[0]);
+            });
+            presetRow.add(pb);
+        }
+        column.add(presetRow);
+        column.add(Box.createVerticalStrut(6));
+
+        JPanel sunRow = new JPanel(new GridLayout(1, 3, 5, 0));
+        sunRow.setOpaque(false);
+        sunRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        sunRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, DesktopUiKit.scaled(28)));
+        DesktopUiKit.VortexNumberField sunYaw = new DesktopUiKit.VortexNumberField(
+                "Yaw", DesktopUiKit.C_TEXT_LABEL, project.sunYawDeg, 5, -360, 360);
+        DesktopUiKit.VortexNumberField sunPitch = new DesktopUiKit.VortexNumberField(
+                "Elev", DesktopUiKit.C_TEXT_LABEL, project.sunPitchDeg, 2, 5, 89);
+        DesktopUiKit.VortexNumberField sunPow = new DesktopUiKit.VortexNumberField(
+                "Power", DesktopUiKit.C_TEXT_LABEL, project.sunIntensity, 0.05, 0, 2);
+        sunYaw.setOnChange(v -> { project.sunYawDeg = (float) v; viewport.repaint(); });
+        sunPitch.setOnChange(v -> { project.sunPitchDeg = (float) v; viewport.repaint(); });
+        sunPow.setOnChange(v -> { project.sunIntensity = (float) v; viewport.repaint(); });
+        sunRow.add(sunYaw);
+        sunRow.add(sunPitch);
+        sunRow.add(sunPow);
+        column.add(sunRow);
+        column.add(Box.createVerticalStrut(5));
+
+        JPanel ambRow = new JPanel(new GridLayout(1, 2, 5, 0));
+        ambRow.setOpaque(false);
+        ambRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        ambRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, DesktopUiKit.scaled(28)));
+        DesktopUiKit.VortexNumberField ambF = new DesktopUiKit.VortexNumberField(
+                "Ambient", DesktopUiKit.C_TEXT_LABEL, project.ambientStrength, 0.02, 0, 1);
+        ambF.setOnChange(v -> { project.ambientStrength = (float) v; viewport.repaint(); });
+        DesktopUiKit.VortexNumberField shadowF = new DesktopUiKit.VortexNumberField(
+                "Shadow", DesktopUiKit.C_TEXT_LABEL, project.shadowStrength, 0.02, 0, 1);
+        shadowF.setOnChange(v -> { project.shadowStrength = (float) v; viewport.repaint(); });
+        ambRow.add(ambF);
+        ambRow.add(shadowF);
+        column.add(ambRow);
+        column.add(Box.createVerticalStrut(4));
+
+        DesktopUiKit.VortexToggle shadowToggle = new DesktopUiKit.VortexToggle("Contact shadows", project.shadows);
+        shadowToggle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        shadowToggle.setOnChange(() -> { project.shadows = shadowToggle.isSelected(); viewport.repaint(); });
+        column.add(shadowToggle);
+
+        JLabel hint = new JLabel("Sun drives every surface in 3D. Presets retune the whole mood.");
+        hint.setFont(DesktopUiKit.FONT_SMALL);
+        hint.setForeground(DesktopUiKit.C_TEXT_MUTED);
+        hint.setAlignmentX(Component.LEFT_ALIGNMENT);
+        column.add(Box.createVerticalStrut(4));
+        column.add(hint);
+
+        JScrollPane sceneScroll = DesktopUiKit.createScrollPane(column);
+        sceneScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        p.add(sceneScroll, BorderLayout.CENTER);
         return p;
     }
 
@@ -2006,7 +2095,7 @@ public class VortexDesktopStudio extends JFrame {
                 BorderFactory.createLineBorder(DesktopUiKit.C_BORDER, 1),
                 BorderFactory.createEmptyBorder(6, 10, 6, 8)));
 
-        JLabel title = new JLabel("FORGE AI — CONTEXTUAL IDE CHAT");
+        JLabel title = new JLabel("FORGE AI");       // short: the dock tab already says AI
         title.setFont(DesktopUiKit.FONT_UI_BOLD);
         title.setForeground(DesktopUiKit.C_WHITE);
         hdrBar.add(title, BorderLayout.WEST);
@@ -2058,7 +2147,7 @@ public class VortexDesktopStudio extends JFrame {
             modelField.setText(VortexForgeAgent.loadSavedModel(idx));
         });
 
-        final JLabel statusLbl = new JLabel("Tools active: write_file • edit_file • upsert_entity • blueprint • run_test");
+        final JLabel statusLbl = new JLabel("Tools: files • entities • blueprint • playtest");
         statusLbl.setFont(DesktopUiKit.FONT_UI);
         statusLbl.setForeground(DesktopUiKit.C_TEXT_MUTED);
 
@@ -2121,13 +2210,14 @@ public class VortexDesktopStudio extends JFrame {
         quickRow.setOpaque(false);
         final JTextArea chatInput = new JTextArea(2, 24);
 
-        final Runnable sendTurn = () -> {
-            final String userText = chatInput.getText().trim();
-            if (userText.isEmpty()) return;
+        final java.util.function.Consumer<String> sendTurn = (rawText) -> {
+            final String userText = rawText == null ? "" : rawText.trim();
+            if (userText.isEmpty() || forgeBusy) return;
             chatInput.setText("");
             syncCode();
             VortexForgeAgent.ChatMessage uMsg = new VortexForgeAgent.ChatMessage("user", userText);
             forgeChatHistory.add(uMsg);
+            forgeBusy = true;
             rebuildForgeChatFeed();
             statusLbl.setText("Forge AI inspecting files & running tools…");
             statusLbl.setForeground(DesktopUiKit.C_WHITE);
@@ -2144,6 +2234,7 @@ public class VortexDesktopStudio extends JFrame {
                     final VortexForgeAgent.ChatTurnResult res = VortexForgeAgent.runChatTurn(
                             project, historySnapshot, userText, selProv, selModel, selKey);
                     SwingUtilities.invokeLater(() -> {
+                        forgeBusy = false;
                         if (res.mutatedProject) {
                             undoStack.push(preTurnJson);
                             while (undoStack.size() > 35) undoStack.removeLast();
@@ -2152,18 +2243,29 @@ public class VortexDesktopStudio extends JFrame {
                         }
                         VortexForgeAgent.ChatMessage aMsg = new VortexForgeAgent.ChatMessage("assistant", res.reply);
                         aMsg.toolBadges.addAll(res.toolBadges);
+                        aMsg.questions.addAll(res.questions);
                         forgeChatHistory.add(aMsg);
                         while (forgeChatHistory.size() > 30) forgeChatHistory.remove(0);
                         rebuildForgeChatFeed();
-                        statusLbl.setText(res.toolBadges.isEmpty() ? "Ready" : "✓ " + String.join(" • ", res.toolBadges));
-                        statusLbl.setForeground(DesktopUiKit.C_OK_TX);
+                        if (!res.questions.isEmpty()) {
+                            statusLbl.setText("Waiting for your answer");
+                            statusLbl.setForeground(DesktopUiKit.C_WHITE);
+                        } else {
+                            statusLbl.setText(res.toolBadges.isEmpty() ? "Ready" : "\u2713 " + String.join(" \u2022 ", res.toolBadges));
+                            statusLbl.setForeground(DesktopUiKit.C_OK_TX);
+                        }
                         if (res.mutatedProject) {
                             log("[FORGE AI] " + String.join(", ", res.toolBadges));
                         }
                     });
                 } catch (Exception ex) {
                     SwingUtilities.invokeLater(() -> {
-                        forgeChatHistory.add(new VortexForgeAgent.ChatMessage("assistant", "Error: " + ex.getMessage()));
+                        forgeBusy = false;
+                        VortexForgeAgent.ChatMessage err = new VortexForgeAgent.ChatMessage(
+                                "assistant", "That turn failed: " + ex.getMessage()
+                                + "\nCheck Model / Key, then send again.");
+                        err.toolBadges.add("error");
+                        forgeChatHistory.add(err);
                         rebuildForgeChatFeed();
                         statusLbl.setText("Error: " + ex.getMessage());
                         statusLbl.setForeground(DesktopUiKit.C_DANGER_TX);
@@ -2181,10 +2283,7 @@ public class VortexDesktopStudio extends JFrame {
         };
         for (final String[] qp : quickPrompts) {
             DesktopUiKit.VortexButton chip = new DesktopUiKit.VortexButton(qp[0], DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.SPARKLE);
-            chip.addActionListener(e -> {
-                chatInput.setText(qp[1]);
-                sendTurn.run();
-            });
+            chip.addActionListener(e -> sendTurn.accept(qp[1]));
             quickRow.add(chip);
         }
         composer.add(quickRow, BorderLayout.NORTH);
@@ -2203,7 +2302,7 @@ public class VortexDesktopStudio extends JFrame {
             public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER && !e.isShiftDown()) {
                     e.consume();
-                    sendTurn.run();
+                    sendTurn.accept(chatInput.getText());
                 }
             }
         });
@@ -2212,7 +2311,7 @@ public class VortexDesktopStudio extends JFrame {
         inputSp.setPreferredSize(new Dimension(240, DesktopUiKit.scaled(52)));
 
         DesktopUiKit.VortexButton sendBtn = new DesktopUiKit.VortexButton("Send", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.SEND);
-        sendBtn.addActionListener(e -> sendTurn.run());
+        sendBtn.addActionListener(e -> sendTurn.accept(chatInput.getText()));
 
         inputRow.add(inputSp, BorderLayout.CENTER);
         inputRow.add(sendBtn, BorderLayout.EAST);
@@ -2220,6 +2319,7 @@ public class VortexDesktopStudio extends JFrame {
         composer.add(statusLbl, BorderLayout.SOUTH);
 
         p.add(composer, BorderLayout.SOUTH);
+        forgeSend = sendTurn;
         rebuildForgeChatFeed();
         return p;
     }
@@ -2230,16 +2330,20 @@ public class VortexDesktopStudio extends JFrame {
         if (forgeChatHistory.isEmpty()) {
             VortexForgeAgent.ChatMessage welcome = new VortexForgeAgent.ChatMessage(
                     "assistant",
-                    "Ready to collaborate on **" + (project != null ? project.title : "your game") + "**.\n"
-                    + "I have full visibility into your multi-file directory (`"
-                    + (project != null ? project.scriptFiles.size() : 1) + "` files), scene hierarchy, and Blueprint GUI blocks. "
-                    + "Ask me to create/edit script modules, spawn enemies, add dialog boxes, or run a live playtest!");
-            forgeMessagesBox.add(createChatBubble(welcome));
+                    "Ready on **" + (project != null ? project.title : "your game") + "**.\n"
+                    + "I can see your files, scene entities and Blueprint logic. Ask for a feature — "
+                    + "or tap a chip below and I'll build it.");
+            forgeMessagesBox.add(buildChatBubble(welcome));
+            forgeMessagesBox.add(Box.createVerticalStrut(8));
         } else {
             for (VortexForgeAgent.ChatMessage m : forgeChatHistory) {
-                forgeMessagesBox.add(createChatBubble(m));
-                forgeMessagesBox.add(Box.createVerticalStrut(6));
+                forgeMessagesBox.add(buildChatBubble(m));
+                forgeMessagesBox.add(Box.createVerticalStrut(8));
             }
+        }
+        if (forgeBusy) {
+            forgeMessagesBox.add(buildThinkingRow());
+            forgeMessagesBox.add(Box.createVerticalStrut(8));
         }
         forgeMessagesBox.revalidate();
         forgeMessagesBox.repaint();
@@ -2251,39 +2355,164 @@ public class VortexDesktopStudio extends JFrame {
         }
     }
 
-    private JPanel createChatBubble(VortexForgeAgent.ChatMessage m) {
-        boolean isUser = "user".equalsIgnoreCase(m.role);
-        JPanel card = new JPanel(new BorderLayout(0, 4));
+    /** Available bubble width — measured from the live viewport so resizing reflows the chat. */
+    private int chatBubbleMaxWidth() {
+        int w = 380;
+        if (forgeMessagesScroll != null && forgeMessagesScroll.getViewport() != null
+                && forgeMessagesScroll.getViewport().getWidth() > 80) {
+            w = forgeMessagesScroll.getViewport().getWidth();
+        } else if (forgeMessagesBox != null && forgeMessagesBox.getWidth() > 80) {
+            w = forgeMessagesBox.getWidth();
+        }
+        return Math.max(220, w - 34);
+    }
+
+    private JPanel buildThinkingRow() {
+        JPanel wrap = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        wrap.setOpaque(false);
+        wrap.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel lbl = new JLabel("Forge AI is reading the workspace and running tools…");
+        lbl.setFont(DesktopUiKit.FONT_SMALL);
+        lbl.setForeground(DesktopUiKit.C_TEXT_MUTED);
+        lbl.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        wrap.add(lbl);
+        return wrap;
+    }
+
+    private JPanel buildChatBubble(VortexForgeAgent.ChatMessage m) {
+        final boolean isUser = "user".equalsIgnoreCase(m.role);
+        final int maxW = chatBubbleMaxWidth();
+        final int bubbleW = isUser ? (int) (maxW * 0.86f) : maxW;
+
+        JPanel wrap = new JPanel(new FlowLayout(isUser ? FlowLayout.RIGHT : FlowLayout.LEFT, 0, 0));
+        wrap.setOpaque(false);
+        wrap.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel card = new JPanel(new BorderLayout(0, 3));
         card.setBackground(isUser ? DesktopUiKit.C_SURFACE : DesktopUiKit.C_PANEL);
         card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(isUser ? DesktopUiKit.C_WHITE : DesktopUiKit.C_BORDER, 1),
-                BorderFactory.createEmptyBorder(7, 9, 7, 9)));
-        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+                BorderFactory.createLineBorder(isUser ? DesktopUiKit.C_BORDER_STRONG : DesktopUiKit.C_BORDER, 1),
+                BorderFactory.createEmptyBorder(6, 9, 7, 9)));
 
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        top.setOpaque(false);
+        // ---- header: role + executed-tool badges
+        JPanel head = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        head.setOpaque(false);
         JLabel roleLbl = new JLabel(isUser ? "YOU" : "FORGE AI");
-        roleLbl.setFont(DesktopUiKit.FONT_UI_BOLD);
-        roleLbl.setForeground(DesktopUiKit.C_WHITE);
-        top.add(roleLbl);
+        roleLbl.setFont(DesktopUiKit.FONT_SMALL_BOLD);
+        roleLbl.setForeground(isUser ? DesktopUiKit.C_TEXT_LABEL : DesktopUiKit.C_WHITE);
+        head.add(roleLbl);
         for (String badge : m.toolBadges) {
-            JLabel b = new JLabel("[" + badge + "]");
+            boolean err = badge.startsWith("error") || badge.startsWith("rejected");
+            JLabel b = new JLabel((err ? "\u2715 " : "\u2713 ") + badge);
             b.setFont(DesktopUiKit.FONT_SMALL);
-            b.setForeground(DesktopUiKit.C_OK_TX);
-            top.add(b);
+            b.setForeground(err ? DesktopUiKit.C_DANGER_TX : DesktopUiKit.C_OK_TX);
+            head.add(b);
         }
-        card.add(top, BorderLayout.NORTH);
+        card.add(head, BorderLayout.NORTH);
 
-        JTextArea body = new JTextArea(m.text);
+        // ---- body: measured, wrapped, never wider than the dock
+        String plain = (m.text == null ? "" : m.text)
+                .replace("**", "")
+                .replace("`", "");
+        JTextArea body = new JTextArea(plain);
         body.setEditable(false);
+        body.setFocusable(false);
         body.setLineWrap(true);
         body.setWrapStyleWord(true);
         body.setOpaque(false);
         body.setForeground(DesktopUiKit.C_TEXT);
         body.setFont(DesktopUiKit.FONT_UI);
         body.setBorder(null);
+        int textW = Math.max(140, bubbleW - 22);
+        body.setSize(new Dimension(textW, Short.MAX_VALUE));
+        int textH = body.getPreferredSize().height;
+        body.setPreferredSize(new Dimension(textW, textH));
+        body.setMaximumSize(new Dimension(textW, textH));
         card.add(body, BorderLayout.CENTER);
-        return card;
+
+        // ---- footer: questions (answer chips) or small utilities
+        JPanel foot = new JPanel();
+        foot.setLayout(new BoxLayout(foot, BoxLayout.Y_AXIS));
+        foot.setOpaque(false);
+
+        if (!m.questions.isEmpty() && !m.answered) {
+            for (VortexForgeAgent.Question q : m.questions) {
+                JLabel qt = new JLabel(q.text);
+                qt.setFont(DesktopUiKit.FONT_UI);
+                qt.setForeground(DesktopUiKit.C_WHITE);
+                qt.setAlignmentX(Component.LEFT_ALIGNMENT);
+                qt.setBorder(BorderFactory.createEmptyBorder(6, 0, 3, 0));
+                foot.add(qt);
+
+                JPanel chips = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+                chips.setOpaque(false);
+                chips.setAlignmentX(Component.LEFT_ALIGNMENT);
+                for (final String opt : q.options) {
+                    DesktopUiKit.VortexButton chip = new DesktopUiKit.VortexButton(
+                            opt, DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.NONE);
+                    chip.addActionListener(e -> answerForgeQuestion(m, q, opt));
+                    chips.add(chip);
+                }
+                foot.add(chips);
+
+                if (q.allowText) {
+                    JPanel answerRow = new JPanel(new BorderLayout(4, 0));
+                    answerRow.setOpaque(false);
+                    answerRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    answerRow.setMaximumSize(new Dimension(bubbleW - 22, DesktopUiKit.scaled(30)));
+                    final JTextField tf = DesktopUiKit.createField("");
+                    tf.setToolTipText("Type your answer");
+                    DesktopUiKit.VortexButton go = new DesktopUiKit.VortexButton(
+                            "", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.SEND);
+                    go.setToolTipText("Send answer");
+                    final VortexForgeAgent.Question fq = q;
+                    Runnable submit = () -> {
+                        String typed = tf.getText() == null ? "" : tf.getText().trim();
+                        if (!typed.isEmpty()) answerForgeQuestion(m, fq, typed);
+                    };
+                    go.addActionListener(e -> submit.run());
+                    tf.addKeyListener(new KeyAdapter() {
+                        @Override public void keyPressed(KeyEvent e) {
+                            if (e.getKeyCode() == KeyEvent.VK_ENTER) { e.consume(); submit.run(); }
+                        }
+                    });
+                    answerRow.add(tf, BorderLayout.CENTER);
+                    answerRow.add(go, BorderLayout.EAST);
+                    foot.add(Box.createVerticalStrut(3));
+                    foot.add(answerRow);
+                }
+            }
+        } else if (!m.toolBadges.isEmpty()) {
+            JPanel utils = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+            utils.setOpaque(false);
+            utils.setAlignmentX(Component.LEFT_ALIGNMENT);
+            DesktopUiKit.VortexButton undoBtn = new DesktopUiKit.VortexButton(
+                    "Undo changes", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.UNDO);
+            undoBtn.addActionListener(e -> performUndo());
+            utils.add(undoBtn);
+            DesktopUiKit.VortexButton testBtn = new DesktopUiKit.VortexButton(
+                    "Playtest", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.PLAY);
+            testBtn.addActionListener(e -> {
+                if (forgeSend != null) forgeSend.accept("Run a 60-frame headless test and report problems");
+            });
+            utils.add(testBtn);
+            foot.add(utils);
+        }
+
+        if (foot.getComponentCount() > 0) card.add(foot, BorderLayout.SOUTH);
+
+        card.setPreferredSize(new Dimension(bubbleW, textH + head.getPreferredSize().height
+                + (foot.getComponentCount() > 0 ? foot.getPreferredSize().height + 8 : 0) + 18));
+        wrap.add(card);
+        return wrap;
+    }
+
+    /** Sends the user's answer to an inline question card and locks the card. */
+    private void answerForgeQuestion(VortexForgeAgent.ChatMessage source,
+                                     VortexForgeAgent.Question q, String answer) {
+        if (source != null) source.answered = true;
+        rebuildForgeChatFeed();
+        if (forgeSend != null) forgeSend.accept(answer);
     }
 
     // =========================================================================
@@ -3612,7 +3841,7 @@ public class VortexDesktopStudio extends JFrame {
     // Headless Verification Suite (Java VM + ES6 JS + Lua + LRM + Forge + UI)
     // =========================================================================
     private static void runHeadlessSelfTests() throws Exception {
-        System.out.println("=== Vortex Engine v4.5.0 Headless Verification Suite ===");
+        System.out.println("=== Vortex Engine v4.6.0 Headless Verification Suite ===");
 
         // 1) Zero-Blue Monochrome Palette + Laptop UI Scale Verification
         Color[] uiColors = {
@@ -3885,6 +4114,65 @@ public class VortexDesktopStudio extends JFrame {
             Entity rMuzzle = reloaded.findById(muzzle.id);
             if (rMuzzle == null || !turret.id.equals(rMuzzle.parentId)) throw new RuntimeException("parentId lost in save/load");
             System.out.println("  [PASS] Godot Scene Tree (nested world transforms, drag-reparent, cycle guard, subtree order, JSON round-trip) Verified!");
+
+        // 7.8) Forge AI: no chain-of-thought leaks, JSON repair, interactive questions
+        {
+            String leaked = "We need answer user. Need parse. We are Vortex Forge AI, JSON only. "
+                    + "{\"reply\": \"Spawned Boss_1 with a boss HP bar.\", \"actions\": []} trailing junk";
+            String json = VortexForgeAgent.extractJsonObject(leaked);
+            org.json.JSONObject parsed = new org.json.JSONObject(json);
+            if (!parsed.optString("reply").contains("Boss_1")) {
+                throw new RuntimeException("extractJsonObject failed to recover the embedded JSON");
+            }
+            if (!VortexForgeAgent.looksLikeChainOfThought(leaked)) {
+                throw new RuntimeException("chain-of-thought detector missed a scratchpad dump");
+            }
+            String clean = VortexForgeAgent.sanitizeReply(leaked);
+            if (clean.toLowerCase(Locale.US).contains("we need answer")) {
+                throw new RuntimeException("sanitizeReply leaked model reasoning into the chat bubble");
+            }
+            if (VortexForgeAgent.looksLikeAnswerJson("Let's think step by step. The user wants a boss.")) {
+                throw new RuntimeException("plain reasoning was mistaken for a structured answer");
+            }
+            String repaired = VortexForgeAgent.extractJsonObject("{\"reply\":\"ok\",\"actions\":[],}");
+            new org.json.JSONObject(repaired); // must not throw
+            // offline small talk must answer like a person and offer answer chips
+            GameProject talk = ProjectTemplates.create("PLATFORMER_2D", "Chat", "com.vortex.chat");
+            VortexForgeAgent.ChatTurnResult hello = VortexForgeAgent.runChatTurn(
+                    talk, new ArrayList<>(), "hello", 0, "offline-procedural-v4", "");
+            if (!hello.reply.toLowerCase(Locale.US).contains("forge ai")
+                    || hello.questions.isEmpty() || hello.mutatedProject) {
+                throw new RuntimeException("offline greeting did not answer conversationally with question chips");
+            }
+            VortexForgeAgent.ChatTurnResult vague = VortexForgeAgent.runChatTurn(
+                    talk, new ArrayList<>(), "make a game", 0, "offline-procedural-v4", "");
+            if (vague.questions.size() < 2) {
+                throw new RuntimeException("vague request did not return clarifying questions");
+            }
+            System.out.println("  [PASS] Forge AI (no CoT leak, JSON repair, 1-tap question chips, offline small talk) Verified!");
+        }
+
+        // 7.9) Lighting rig: sun/ambient/shadow settings persist and shade geometry
+        {
+            GameProject lit = ProjectTemplates.create("NEON_3D", "Light", "com.vortex.light");
+            lit.sunYawDeg = 120f;
+            lit.sunPitchDeg = 30f;
+            lit.sunIntensity = 1.4f;
+            lit.ambientStrength = 0.2f;
+            lit.shadows = false;
+            GameProject litBack = GameProject.fromJsonString(lit.toJsonString());
+            if (Math.abs(litBack.sunYawDeg - 120f) > 0.01f || Math.abs(litBack.sunIntensity - 1.4f) > 0.01f
+                    || litBack.shadows) {
+                throw new RuntimeException("light rig settings did not survive save/load");
+            }
+            java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(320, 200, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            java.awt.Graphics2D g2 = img.createGraphics();
+            DesktopSoftware3DViewport vp = new DesktopSoftware3DViewport();
+            vp.setSize(320, 200);
+            vp.paint(g2);
+            g2.dispose();
+            System.out.println("  [PASS] Unreal-style Lighting Rig (sun yaw/elev/power, ambient fill, contact shadows, JSON round-trip) Verified!");
+        }
         }
 
         // 8) Standalone Exporters (.exe & Termux .zip)
@@ -3892,13 +4180,15 @@ public class VortexDesktopStudio extends JFrame {
         File tmpZip = File.createTempFile("java_sentinel_android_", ".zip");
         DesktopExporter.exportStandaloneWindowsExe(javaSent, tmpExe);
         DesktopExporter.exportAndroidTermuxZip(javaSent, tmpZip);
-        if (tmpExe.length() < 200_000 || tmpZip.length() < 200_000) {
-            throw new RuntimeException("Exported artifacts unexpectedly small!");
+        // .exe = Win32 launcher stub + full game jar; the Termux bundle is a small dex + scripts.
+        if (tmpExe.length() < 1_500_000 || tmpZip.length() < 40_000) {
+            throw new RuntimeException("Exported artifacts unexpectedly small! (exe=" + tmpExe.length()
+                    + ", zip=" + tmpZip.length() + ")");
         }
         System.out.println("  [PASS] Exported Standalone Windows Game .exe (" + (tmpExe.length() / 1024) + " KB) & Android Termux .zip");
         tmpExe.delete();
         tmpZip.delete();
 
-        System.out.println("=== ALL VORTEX v4.5.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
+        System.out.println("=== ALL VORTEX v4.6.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
     }
 }

@@ -170,7 +170,7 @@ KEYSTORE="$BUILD_DIR/studio-release.keystore"
     -keypass vortex123 \
     -dname "CN=Vortex Engine Studio, OU=GameEngine, O=VortexEngine, L=Global, S=Mobile, C=US" >/dev/null 2>&1
 
-OUT_APK="$DIST_DIR/VortexEngine-Studio-v4.5.0.apk"
+OUT_APK="$DIST_DIR/VortexEngine-Studio-v4.6.0.apk"
 "$APKSIGNER" sign \
     --ks "$KEYSTORE" \
     --ks-pass pass:vortex123 \
@@ -183,4 +183,4 @@ OUT_APK="$DIST_DIR/VortexEngine-Studio-v4.5.0.apk"
 
 "$APKSIGNER" verify --verbose "$OUT_APK" | head -n 10
 ls -lh "$OUT_APK"
-echo "[SUCCESS] Vortex Engine Studio v4.5.0 APK ready at: $OUT_APK"
+echo "[SUCCESS] Vortex Engine Studio v4.6.0 APK ready at: $OUT_APK"

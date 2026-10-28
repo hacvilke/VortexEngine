@@ -651,9 +651,24 @@ public class VortexForgeAgent {
         public final String role; // "user" or "assistant"
         public final String text;
         public final List<String> toolBadges = new ArrayList<>();
+        public final List<Question> questions = new ArrayList<>();
+        public boolean answered = false;
 
         public ChatMessage(String role, String text) {
             this.role = role;
+            this.text = text == null ? "" : text;
+        }
+    }
+
+    /** An interactive clarifying question rendered as answer chips + a text box in the chat feed. */
+    public static final class Question {
+        public final String id;
+        public final String text;
+        public final List<String> options = new ArrayList<>();
+        public boolean allowText = true;
+
+        public Question(String id, String text) {
+            this.id = id == null || id.isEmpty() ? "q" : id;
             this.text = text == null ? "" : text;
         }
     }
@@ -662,7 +677,10 @@ public class VortexForgeAgent {
         public String reply = "";
         public boolean mutatedProject = false;
         public final List<String> toolBadges = new ArrayList<>();
+        public final List<Question> questions = new ArrayList<>();
+        public String modelUsed = "";
         public VortexScriptEngine.PlaytestReport testReport = null;
+        public boolean usedOffline = false;
     }
 
     public static String buildWorkspaceContext(GameProject p) {
@@ -743,7 +761,8 @@ public class VortexForgeAgent {
                 + "You collaborate with the developer in a continuous multi-turn conversation and can inspect/modify their multi-file codebase, scene entities, visual Blueprint GUI nodes, and run headless playtests.\n"
                 + "Respond ONLY with a single valid JSON object (no markdown fences outside JSON) matching this schema:\n"
                 + "{\n"
-                + "  \"reply\": \"Clear, helpful explanation of what you did or answered\",\n"
+                + "  \"reply\": \"1-3 short sentences. What you did, in the user's language. No planning, no analysis.\",\n"
+                + "  \"questions\": [{\"id\":\"scope\", \"text\":\"Which camera style?\", \"options\":[\"Third person\",\"First person\",\"Top down\"], \"allowText\":true}],\n"
                 + "  \"actions\": [\n"
                 + "    {\"tool\":\"write_file\", \"path\":\"objects/enemy" + ext + "\", \"content\":\"<valid " + lang + " code>\"},\n"
                 + "    {\"tool\":\"edit_file\", \"path\":\"scripts/main" + ext + "\", \"find\":\"old text\", \"replace\":\"new text\"},\n"
@@ -756,7 +775,13 @@ public class VortexForgeAgent {
                 + "  ]\n"
                 + "}\n"
                 + "Engine API (`vortex.*`): joyX(), joyY(), exists(n), getX(n), getY(n), getZ(n), getVY(n), setPos(n,x,y[,z]), setVel(n,vx,vy[,vz]), jump(n,vy), applyImpulse(n,ix,iy), spawn2D(n,tag,prim,x,y,sx,sy,hex,body), spawn3D(n,tag,prim,x,y,z,sx,sy,sz,hex,body), destroy(n), chaseTagAI(tag,target,spd), findNearestTag(from,tag), particles(x,y,z,cnt,hex), playSound('laser'|'coin'|'jump'|'explosion'|'hit'|'powerup'), playMusic('CYBERPUNK'|'BOSS'|'DUNGEON',bpm), addScore(d), getScore(), addHealth(d), getHealth(), setBanner(txt), showDialog(speaker,msg,durSec), hideDialog(), setLabel(id,txt,xPct,yPct,fontSize,hex), setProgressBar(id,lbl,val,max,xPct,yPct,hex), removeUI(id), clearUI().\n"
-                + "NOTE: Multiple files in `scriptFiles` share scope AND every file's `onStart()`, `onUpdate(dt)`, `onButton(btn)`, `onCollide(a,b,tagA,tagB)` hooks are chained automatically! Organize separate objects/features into clean files like `objects/boss" + ext + "` or `ui/hud" + ext + "` when appropriate. If the user only asks a question, return `\"actions\": []`.\n\n"
+                + "NOTE: Multiple files in `scriptFiles` share scope AND every file's `onStart()`, `onUpdate(dt)`, `onButton(btn)`, `onCollide(a,b,tagA,tagB)` hooks are chained automatically! Organize separate objects/features into clean files like `objects/boss" + ext + "` or `ui/hud" + ext + "` when appropriate. If the user only asks a question, return `\"actions\": []`.\n"
+                + "OUTPUT RULES (strict):\n"
+                + "1. Emit ONE JSON object only. Never emit analysis, plans, drafts, or 'We need...' text.\n"
+                + "2. `reply` is the only text the human sees — keep it short and concrete, no markdown fences.\n"
+                + "3. If the request is ambiguous or needs a decision you cannot infer (camera, genre, art style, input, difficulty, save format...), return `actions: []` plus 1-3 `questions` with 2-4 `options` each so the user can answer with one click, then act on their answer next turn.\n"
+                + "4. If the request is clear, DO THE WORK with actions and do not ask questions.\n"
+                + "5. Prefer real, runnable code with the APIs listed above. Never invent API names.\n\n"
                 + "LIVE WORKSPACE SNAPSHOT:\n" + buildWorkspaceContext(p);
 
         String model = (customModelId != null && !customModelId.trim().isEmpty())
@@ -764,19 +789,54 @@ public class VortexForgeAgent {
                 : DEFAULT_MODELS[Math.min(providerIdx, DEFAULT_MODELS.length - 1)];
 
         String rawContent = callMultiTurnProvider(providerIdx, apiKey, model, sys, history, userPrompt);
+        if (rawContent == null || rawContent.trim().isEmpty()) {
+            ChatTurnResult local = runOfflineContextualTurn(p, history, userPrompt);
+            local.usedOffline = true;
+            local.reply = sanitizeReply(local.reply);
+            local.toolBadges.add("fallback: local generator (" + model + " returned no answer)");
+            return local;
+        }
         String cleanJson = extractJsonObject(rawContent);
         ChatTurnResult res = new ChatTurnResult();
+        res.modelUsed = model;
 
         JSONObject obj;
         try {
             obj = new JSONObject(cleanJson);
         } catch (Exception parseEx) {
-            // Model replied in plain conversational prose without JSON wrapper
-            res.reply = rawContent.replaceAll("(?s)<think>.*?</think>", "").trim();
+            // v4.6.0: never dump the model's raw scratchpad into the transcript. If there is no
+            // structured answer, say so in one line and keep the turn usable.
+            res.reply = sanitizeReply(rawContent);
+            if (res.reply.isEmpty() || looksLikeChainOfThought(rawContent)) {
+                res.reply = "I didn't get a usable answer from " + model + " that time. "
+                        + "Press Retry, or switch model with Model / Key (openai/gpt-oss-120b on Groq is the most reliable here).";
+                res.toolBadges.add("error: no valid JSON reply");
+            }
             return res;
         }
 
-        res.reply = obj.optString("reply", "Applied requested updates to your workspace.");
+        res.reply = sanitizeReply(obj.optString("reply", ""));
+        if (res.reply.isEmpty()) res.reply = "Done.";
+
+        JSONArray qs = obj.optJSONArray("questions");
+        if (qs != null) {
+            for (int i = 0; i < Math.min(3, qs.length()); i++) {
+                JSONObject qo = qs.optJSONObject(i);
+                if (qo == null) continue;
+                String qText = qo.optString("text", "").trim();
+                if (qText.isEmpty()) continue;
+                Question qq = new Question(qo.optString("id", "q" + i), qText);
+                qq.allowText = qo.optBoolean("allowText", true);
+                JSONArray opts = qo.optJSONArray("options");
+                if (opts != null) {
+                    for (int k = 0; k < Math.min(6, opts.length()); k++) {
+                        String o = opts.optString(k, "").trim();
+                        if (!o.isEmpty()) qq.options.add(o);
+                    }
+                }
+                res.questions.add(qq);
+            }
+        }
         JSONArray actions = obj.optJSONArray("actions");
         boolean ranExplicitTest = false;
         if (actions != null) {
@@ -877,7 +937,11 @@ public class VortexForgeAgent {
             body.put("temperature", 0.3);
             body.put("max_tokens", maxTokens);
             if (isGroq && model != null && model.startsWith("openai/gpt-oss")) {
-                body.put("reasoning_effort", "low");
+                body.put("reasoning_effort", "low");       // Groq: keep the thinking budget tiny
+                body.put("include_reasoning", false);      // and never send it back to us
+            } else {
+                // OpenRouter / OpenAI-compatible reasoning models: ask for the answer only.
+                body.put("reasoning", new JSONObject().put("exclude", true));
             }
         } catch (JSONException ignored) {}
         String resp;
@@ -895,9 +959,27 @@ public class VortexForgeAgent {
         JSONObject msgObj = rObj.getJSONArray("choices").getJSONObject(0).getJSONObject("message");
         String content = msgObj.optString("content", "");
         if (content == null || content.trim().isEmpty()) {
-            content = msgObj.optString("reasoning", "{}");
+            // v4.6.0: reasoning models (gpt-oss, qwen3, deepseek-r1) sometimes put everything in
+            // `reasoning`. Only reuse it when it actually holds the JSON answer — otherwise return
+            // empty so the caller shows a clean retry message instead of the model's inner monologue.
+            String reasoning = msgObj.optString("reasoning", "");
+            if (reasoning == null || reasoning.trim().isEmpty()) {
+                reasoning = msgObj.optString("reasoning_content", "");
+            }
+            content = looksLikeAnswerJson(reasoning) ? reasoning : "";
         }
-        return content;
+        return content == null ? "" : content;
+    }
+
+    /** True when the text carries a usable structured answer rather than free-form thinking. */
+    public static boolean looksLikeAnswerJson(String text) {
+        if (text == null) return false;
+        String t = text.trim();
+        if (t.isEmpty()) return false;
+        int brace = t.indexOf('{');
+        if (brace < 0) return false;
+        String tail = t.substring(brace);
+        return tail.contains("\"reply\"") && tail.lastIndexOf('}') > brace;
     }
 
     private static void executeSingleTool(GameProject p, JSONObject act, ChatTurnResult res) {
@@ -1019,9 +1101,43 @@ public class VortexForgeAgent {
     private static ChatTurnResult runOfflineContextualTurn(
             GameProject p, List<ChatMessage> history, String rawPrompt) {
         ChatTurnResult res = new ChatTurnResult();
+        res.usedOffline = true;
+        res.modelUsed = "offline";
         String q = rawPrompt == null ? "" : rawPrompt.trim();
         String low = q.toLowerCase(Locale.US);
         String ext = p.getScriptExtension();
+
+        // Small talk stays small talk — answer like a person instead of running a generator.
+        if (low.matches("^(hi|hey|hello|yo|sup|hallo|good (morning|evening))[!. ]*$")
+                || low.matches("^(thanks|thank you|ty|cheers)[!. ]*$")
+                || low.matches("^(ok|okay|cool|nice|great)[!. ]*$")) {
+            res.reply = low.startsWith("thank") || low.equals("ty") || low.equals("cheers")
+                    ? "Anytime. Want me to keep building — gameplay, UI, or a playtest?"
+                    : "Hey! I'm Forge AI. I can spawn enemies, write modular scripts, build HUD/dialog UI, "
+                      + "edit scene entities and run headless playtests. What should we build first?";
+            Question q1 = new Question("start", "What should I build next?");
+            q1.options.add("A boss fight");
+            q1.options.add("HUD + dialog");
+            q1.options.add("Run a playtest");
+            res.questions.add(q1);
+            return res;
+        }
+
+        // Vague asks get a short question card instead of a guess.
+        if (low.matches("^(make|build|create|start|design)?\\s*(me\\s+)?(a\\s+|an\\s+)?(game|project|level|something|stuff)[!. ]*$")) {
+            res.reply = "Happy to. Two quick choices and I'll build the whole loop.";
+            Question q1 = new Question("dim", "2D or 3D?");
+            q1.options.add("2D");
+            q1.options.add("3D");
+            Question q2 = new Question("genre", "What kind of game?");
+            q2.options.add("Explorer / adventure");
+            q2.options.add("Platformer");
+            q2.options.add("Top-down shooter");
+            q2.options.add("Survival / farming");
+            res.questions.add(q1);
+            res.questions.add(q2);
+            return res;
+        }
 
         if (low.contains("test") || low.contains("check") || low.contains("diagnos") || low.contains("verify")) {
             res.testReport = VortexScriptEngine.runHeadlessPlaytest(p, 60);
@@ -1150,15 +1266,104 @@ public class VortexForgeAgent {
         if (raw == null) return "{}";
         // Strip <think>...</think> blocks emitted by reasoning models (GPT-OSS, Qwen3, DeepSeek-R1)
         String cleaned = raw.replaceAll("(?s)<think>.*?</think>", "").trim();
-        if (cleaned.startsWith("```")) {
-            cleaned = cleaned.replaceFirst("^```[a-zA-Z]*\\s*", "").replaceFirst("\\s*```$", "").trim();
-        }
+        cleaned = cleaned.replaceAll("(?s)```(?:json)?\\s*", "").trim();
         int firstBrace = cleaned.indexOf('{');
-        int lastBrace = cleaned.lastIndexOf('}');
-        if (firstBrace >= 0 && lastBrace > firstBrace) {
-            return cleaned.substring(firstBrace, lastBrace + 1);
+        if (firstBrace < 0) return cleaned;
+        // Walk the braces so trailing prose after the object can never break the parse.
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = firstBrace; i < cleaned.length(); i++) {
+            char c = cleaned.charAt(i);
+            if (inString) {
+                if (escaped) escaped = false;
+                else if (c == '\\') escaped = true;
+                else if (c == '"') inString = false;
+                continue;
+            }
+            if (c == '"') inString = true;
+            else if (c == '{') depth++;
+            else if (c == '}') {
+                depth--;
+                if (depth == 0) return repairJson(cleaned.substring(firstBrace, i + 1));
+            }
         }
-        return cleaned;
+        int lastBrace = cleaned.lastIndexOf('}');
+        return lastBrace > firstBrace ? repairJson(cleaned.substring(firstBrace, lastBrace + 1)) : cleaned;
+    }
+
+    /** Fixes the two things local models most often get wrong: trailing commas and stray newlines. */
+    static String repairJson(String json) {
+        String j = json;
+        j = j.replaceAll(",\\s*([}\\]])", "$1");
+        try {
+            new JSONObject(j);
+            return j;
+        } catch (Exception ignored) {
+            return j;
+        }
+    }
+
+    /** True when text reads like an internal scratchpad rather than an answer. */
+    public static boolean looksLikeChainOfThought(String text) {
+        if (text == null) return false;
+        String low = text.toLowerCase(Locale.US).trim();
+        if (low.isEmpty()) return false;
+        if (low.contains("we need") || low.contains("let's think") || low.contains("let me plan")
+                || low.contains("the user asks") || low.contains("the user wants")
+                || low.contains("need parse") || low.contains("we should") && low.contains("json")) {
+            return true;
+        }
+        // Long walls of "X. Y. Z." with no punctuation variety are usually reasoning dumps.
+        return text.length() > 1200 && !text.contains("\n");
+    }
+
+    /**
+     * Turns whatever the model produced into something safe to show a human: no thinking blocks,
+     * no JSON scaffolding, no "```" fences, no runaway monologues.
+     */
+    public static String sanitizeReply(String raw) {
+        if (raw == null) return "";
+        String t = raw.replaceAll("(?s)<think>.*?</think>", " ")
+                      .replaceAll("(?s)<reasoning>.*?</reasoning>", " ");
+        // 1) If the text embeds a structured answer, that answer is the reply - drop everything else.
+        String embedded = extractJsonObject(t);
+        if (looksLikeAnswerJson(embedded)) {
+            try {
+                JSONObject o = new JSONObject(embedded);
+                String r = o.optString("reply", "").trim();
+                if (!r.isEmpty()) return finalizeReply(r);
+            } catch (Exception ignored) { }
+        }
+        // 2) Strip fenced blocks and JSON scaffolding.
+        t = t.replaceAll("(?s)```(?:json|js|javascript|java|lua)?", " ")
+             .replaceAll("\\s*\"(reply|actions|questions|tool|path|content|find|replace)\"\\s*:\\s*", " ")
+             .replaceAll("[{}\\[\\]]", " ");
+        // 3) Drop planning sentences line by line (reasoning models think in "We need..." / "Let's...").
+        StringBuilder kept = new StringBuilder();
+        for (String line : t.split("\\r?\\n")) {
+            String low = line.toLowerCase(Locale.US);
+            if (low.contains("we need") || low.contains("need parse") || low.contains("we should")
+                    || low.contains("let's") || low.contains("let me") || low.contains("the user asks")
+                    || low.contains("the user wants") || low.contains("must return") || low.contains("must be valid")
+                    || low.contains("we have live workspace") || low.contains("we can include")
+                    || low.contains("since task") || low.contains("we should probably")
+                    || low.contains("final answer should") || low.contains("json only")
+                    || low.contains("we are vortex forge") || low.contains("no markdown fences")) {
+                continue;
+            }
+            kept.append(line).append(' ');
+        }
+        return finalizeReply(kept.toString());
+    }
+
+    private static String finalizeReply(String text) {
+        String t = text.replaceAll("[ \\t]{2,}", " ").replaceAll("\\n{3,}", "\n\n").trim();
+        if (t.length() > 900) {
+            int cut = t.indexOf(". ", 600);
+            t = (cut > 0 ? t.substring(0, cut + 1) : t.substring(0, 900)) + "\u2026";
+        }
+        return t.trim();
     }
 
     private static String getJson(String urlStr, String authHeader) throws Exception {

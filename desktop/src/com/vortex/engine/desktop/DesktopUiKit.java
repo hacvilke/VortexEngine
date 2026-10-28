@@ -163,6 +163,9 @@ public final class DesktopUiKit {
     public static float getUiScale() { return uiScale; }
     public static int getBaseFontPt() { return scaledFontPt(baseUiPt); }
 
+    /** Float-safe scaler for strokes, radii and icon sizes (so nothing looks stuck at 100%). */
+    public static float scaledF(float px) { return px * uiScale; }
+
     public static int scaled(int px) {
         return Math.max(1, Math.round(px * uiScale));
     }
@@ -707,12 +710,24 @@ public final class DesktopUiKit {
             if (pressT > 0.05f) bg = lerpColor(bg, C_VOID, pressT * 0.16f);
             Color bd = lerpColor(borderBase, borderHover, hoverT);
 
+            // v4.6.0: corner radius/stroke/icon all follow the UI scale, so the hover pill keeps
+            // hugging the button instead of turning into a small circle inside a big box.
+            float radius = Math.min(Math.max(scaledF(7f), 5f), Math.max(6f, (h - inset * 2f) * 0.5f));
             RoundRectangle2D.Float shape = new RoundRectangle2D.Float(
-                    inset, inset, w - inset * 2f - 0.5f, h - inset * 2f - 0.5f, 7f, 7f);
+                    inset, inset, w - inset * 2f - 0.5f, h - inset * 2f - 0.5f, radius, radius);
             g2.setColor(bg);
             g2.fill(shape);
+            if (hoverT > 0.02f) {
+                // Soft outer glow that grows with the control, never a fixed-size ring.
+                float gA = (0.16f * hoverT);
+                g2.setColor(new Color(255, 255, 255, (int) (255 * gA)));
+                float gr = Math.min(scaledF(3.2f), (h - inset * 2f) * 0.5f);
+                g2.setStroke(new BasicStroke(Math.max(1f, scaledF(2.0f))));
+                g2.draw(new RoundRectangle2D.Float(inset - scaledF(1f), inset - scaledF(1f),
+                        w - inset * 2f - 0.5f + scaledF(2f), h - inset * 2f - 0.5f + scaledF(2f), gr + scaledF(1f), gr + scaledF(1f)));
+            }
             g2.setColor(bd);
-            g2.setStroke(new BasicStroke(1.1f));
+            g2.setStroke(new BasicStroke(Math.max(1f, scaledF(1.15f))));
             g2.draw(shape);
 
             g2.setFont(getFont());
@@ -720,13 +735,13 @@ public final class DesktopUiKit {
             String txt = getText() == null ? "" : getText();
             int tw = fm.stringWidth(txt);
             boolean hasIcon = iconType != Icon.NONE;
-            int iconW = hasIcon ? 13 : 0;
-            int gap = (hasIcon && !txt.isEmpty()) ? 6 : 0;
+            int iconW = hasIcon ? scaled(14) : 0;
+            int gap = (hasIcon && !txt.isEmpty()) ? scaled(6) : 0;
             int totalW = iconW + gap + tw;
             int startX = (w - totalW) / 2;
 
             if (hasIcon) {
-                paintIcon(g2, iconType, startX + iconW * 0.5f, h * 0.5f, 12.5f, fg);
+                paintIcon(g2, iconType, startX + iconW * 0.5f, h * 0.5f, scaledF(13f), fg);
             }
             if (!txt.isEmpty()) {
                 g2.setColor(fg);
@@ -891,7 +906,8 @@ public final class DesktopUiKit {
             Color bg = lerpColor(C_INPUT_BG, C_SURFACE, Math.max(hoverT * 0.7f, openT));
             Color bd = lerpColor(C_BORDER, C_WHITE, Math.max(hoverT * 0.65f, openT));
 
-            RoundRectangle2D.Float box = new RoundRectangle2D.Float(0.5f, 0.5f, w - 1f, h - 1f, 7f, 7f);
+            float ddR = Math.min(Math.max(scaledF(7f), 5f), h * 0.44f);
+            RoundRectangle2D.Float box = new RoundRectangle2D.Float(0.5f, 0.5f, w - 1f, h - 1f, ddR, ddR);
             g2.setColor(bg);
             g2.fill(box);
             g2.setColor(bd);
@@ -1054,7 +1070,8 @@ public final class DesktopUiKit {
                 enableAA(g2);
                 Color bg = lerpColor(C_INPUT_BG, new Color(20, 20, 24), focusT);
                 Color bd = lerpColor(C_BORDER, C_WHITE, focusT);
-                RoundRectangle2D.Float r = new RoundRectangle2D.Float(0.5f, 0.5f, getWidth() - 1f, getHeight() - 1f, 6f, 6f);
+                float fieldR = Math.min(Math.max(scaledF(6f), 4f), getHeight() * 0.42f);
+                RoundRectangle2D.Float r = new RoundRectangle2D.Float(0.5f, 0.5f, getWidth() - 1f, getHeight() - 1f, fieldR, fieldR);
                 g2.setColor(bg);
                 g2.fill(r);
                 g2.setColor(bd);
@@ -1198,10 +1215,11 @@ public final class DesktopUiKit {
             }
 
             g2.setColor(C_ACCENT_TINT);
-            g2.fill(new RoundRectangle2D.Float(indicatorX, 4f, indicatorW, h - 8f, 6f, 6f));
+            float tabR = Math.max(4f, scaledF(6f));
+            g2.fill(new RoundRectangle2D.Float(indicatorX, 4f, indicatorW, h - 8f, tabR, tabR));
             g2.setColor(new Color(95, 95, 108));
             g2.setStroke(new BasicStroke(1f));
-            g2.draw(new RoundRectangle2D.Float(indicatorX, 4f, indicatorW, h - 8f, 6f, 6f));
+            g2.draw(new RoundRectangle2D.Float(indicatorX, 4f, indicatorW, h - 8f, tabR, tabR));
             g2.setColor(C_WHITE);
             g2.fill(new RoundRectangle2D.Float(indicatorX + 8f, h - 3f, Math.max(10f, indicatorW - 16f), 2.2f, 2f, 2f));
 

@@ -1260,6 +1260,45 @@ public class EditorActivity extends Activity {
         }
     }
 
+    /** One Forge AI turn on the phone, with inline follow-up questions. */
+    private void runMobileForgeTurn(final String prompt,
+                                    final int pIdx, final String apiKey, final String modelId,
+                                    final String preJson) {
+        if (prompt == null || prompt.trim().isEmpty()) return;
+        mobileForgeHistory.add(new VortexForgeAgent.ChatMessage("user", prompt));
+        final List<VortexForgeAgent.ChatMessage> snap = new ArrayList<>(mobileForgeHistory);
+        new Thread(() -> {
+            final VortexForgeAgent.ChatTurnResult res =
+                    VortexForgeAgent.runChatTurn(project, snap, prompt.trim(), pIdx, modelId, apiKey);
+            runOnUiThread(() -> {
+                VortexForgeAgent.ChatMessage am = new VortexForgeAgent.ChatMessage("assistant", res.reply);
+                am.toolBadges.addAll(res.toolBadges);
+                am.questions.addAll(res.questions);
+                mobileForgeHistory.add(am);
+                if (res.mutatedProject) {
+                    undoStack.push(preJson);
+                    while (undoStack.size() > 25) undoStack.removeLast();
+                    applyRestoredProject("Forge AI updated workspace");
+                }
+                showForgeAiDialog();
+                askMobileForgeQuestion(res, pIdx, apiKey, modelId);
+            });
+        }, "forge-mobile-turn").start();
+    }
+
+    /** Renders Forge's clarifying questions as one-tap chips (phone-friendly). */
+    private void askMobileForgeQuestion(final VortexForgeAgent.ChatTurnResult res,
+                                        final int pIdx, final String apiKey, final String modelId) {
+        if (res == null || res.questions.isEmpty()) return;
+        final VortexForgeAgent.Question q = res.questions.get(0);
+        if (q.options.isEmpty()) return;
+        String[] opts = q.options.toArray(new String[0]);
+        VortexMobileUi.showPickerModal(this, q.text, opts, 0, (which, val) -> {
+            if (which < 0 || which >= opts.length) return;
+            runMobileForgeTurn(opts[which], pIdx, apiKey, modelId, project.toJsonString());
+        });
+    }
+
     private void showForgeAiDialog() {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
@@ -1304,22 +1343,7 @@ public class EditorActivity extends Activity {
                     final String modelId = modelEt.getText().toString().trim();
                     final String prompt = promptEt.getText().toString().trim();
                     if (prompt.isEmpty()) return;
-                    mobileForgeHistory.add(new VortexForgeAgent.ChatMessage("user", prompt));
-                    final List<VortexForgeAgent.ChatMessage> snap = new ArrayList<>(mobileForgeHistory);
-                    new Thread(() -> {
-                        final VortexForgeAgent.ChatTurnResult res = VortexForgeAgent.runChatTurn(project, snap, prompt, pIdx, modelId, apiKey);
-                        runOnUiThread(() -> {
-                            VortexForgeAgent.ChatMessage am = new VortexForgeAgent.ChatMessage("assistant", res.reply);
-                            am.toolBadges.addAll(res.toolBadges);
-                            mobileForgeHistory.add(am);
-                            if (res.mutatedProject) {
-                                undoStack.push(preJson);
-                                while (undoStack.size() > 25) undoStack.removeLast();
-                                applyRestoredProject("Forge AI updated workspace");
-                            }
-                            showForgeAiDialog();
-                        });
-                    }).start();
+                    runMobileForgeTurn(prompt, pIdx, apiKey, modelId, preJson);
                 },
                 "Clear Chat",
                 mobileForgeHistory::clear,

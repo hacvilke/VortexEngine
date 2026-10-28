@@ -22,7 +22,8 @@ public class ProjectTemplates {
             "PLATFORMER_2D",
             "SHOOTER_2D",
             "BLANK_3D_LUA",
-            "BLANK_2D_LUA"
+            "BLANK_2D_LUA",
+            "EXPLORER_3D"
     };
 
     public static final String[] TEMPLATE_NAMES = {
@@ -38,7 +39,8 @@ public class ProjectTemplates {
             "2D Action: Starbound Cavern (Platformer + Slime AI)",
             "2D Arcade: Nova Blaster (Space Shooter + Plasma Lasers)",
             "3D Sandbox: Blank 3D Project (Java / ES6 JS / Lua 5.2)",
-            "2D Sandbox: Blank 2D Project (Java / ES6 JS / Lua 5.2 + JBox2D)"
+            "2D Sandbox: Blank 2D Project (Java / ES6 JS / Lua 5.2 + JBox2D)",
+            "3D Explorer: Green Hollow Valley (ES6 JS + sunlight rig + collecting + NPC patrol)"
     };
 
     public static GameProject create(String templateKey, String title, String pkgName) {
@@ -56,6 +58,7 @@ public class ProjectTemplates {
             case "SHOOTER_2D":              p = buildSpaceShooter2D(title, pkgName); break;
             case "BLANK_2D_LUA":            p = buildBlankLua(title, pkgName, false); break;
             case "BLANK_3D_LUA":            p = buildBlankLua(title, pkgName, true); break;
+            case "EXPLORER_3D":             p = buildExplorer3D(title, pkgName); break;
             case "NEON_3D":
             default:                        p = buildNeonHorizon3D(title, pkgName); break;
         }
@@ -281,6 +284,103 @@ public class ProjectTemplates {
                 "        vortex.playSound('explosion')\n" +
                 "    end\n" +
                 "end\n";
+        return p;
+    }
+
+    /**
+     * v4.6.0 starter: a walkable 3D valley with the sunlight rig, soft shadows, collectible gems,
+     * a patrolling critter and a live HUD — the shortest path to "explorer" style play.
+     */
+    private static GameProject buildExplorer3D(String title, String pkgName) {
+        GameProject p = new GameProject();
+        p.title = title;
+        p.packageName = pkgName;
+        p.dimensionMode = "3D";
+        p.scriptLanguage = "JS";
+        p.terrainSeed = 4711;
+        p.terrainFreq = 0.055f;
+        p.skyColorHex = "#101A22";
+        p.fogNear = 30f;
+        p.fogFar = 110f;
+        p.cameraDistance = 10f;
+        p.cameraHeight = 5.2f;
+        // Daylight rig: high sun, warm colour, gentle ambient fill, soft contact shadows.
+        p.sunYawDeg = 38f;
+        p.sunPitchDeg = 58f;
+        p.sunIntensity = 1.05f;
+        p.ambientStrength = 0.40f;
+        p.sunColorHex = "#FFF2D6";
+        p.shadows = true;
+        p.shadowStrength = 0.42f;
+
+        Entity terrain = Entity.create3D("Valley", "solid", "TERRAIN", 0f, 0f, 0f, 80f, 8.5f, 80f, "#3E7C4A", "STATIC");
+        terrain.checkerTexture = true;
+        terrain.secondaryColorHex = "#2E5E39";
+        p.entities.add(terrain);
+
+        Entity player = Entity.create3D("Hero", "player", "SPHERE", 0f, 4f, 0f, 1.2f, 1.2f, 1.2f, "#F5F3EF", "DYNAMIC");
+        player.fixedRotation = true;
+        p.entities.add(player);
+
+        // little hamlet
+        Entity house = Entity.create3D("Cabin", "solid", "CUBE", 9f, 2.2f, -6f, 4.2f, 3.4f, 4.2f, "#B98A5A", "STATIC");
+        p.entities.add(house);
+        Entity roof = Entity.create3D("CabinRoof", "decor", "PYRAMID", 9f, 4.6f, -6f, 4.8f, 2.4f, 4.8f, "#8C4A3C", "STATIC");
+        p.entities.add(roof);
+        com.vortex.engine.core.model.SceneHierarchy.reparent(p.entities, roof, house);
+
+        Entity fence = Entity.create3D("FencePost", "solid", "CUBE", -8f, 1.4f, 6f, 0.5f, 1.8f, 0.5f, "#8A6A45", "STATIC");
+        p.entities.add(fence);
+
+        // collectible gems scattered on the hills
+        float[][] gems = {{-12f, 4f, -9f}, {14f, 4f, 8f}, {-18f, 5f, 12f}, {5f, 6f, 17f}, {20f, 4f, -14f}};
+        String[] gemNames = new String[gems.length];
+        for (int i = 0; i < gems.length; i++) {
+            Entity gem = Entity.create3D("Gem_" + (i + 1), "coin", "PYRAMID",
+                    gems[i][0], gems[i][1], gems[i][2], 0.9f, 1.3f, 0.9f, "#7BE3C1", "STATIC");
+            gem.isTrigger = true;
+            gem.emissive = true;
+            gem.spinY = 110f;
+            p.entities.add(gem);
+            gemNames[i] = gem.name;
+        }
+
+        // one patrolling critter that chases the hero
+        Entity critter = Entity.create3D("Mossling", "enemy", "SPHERE", -14f, 3f, 4f, 1.4f, 1.4f, 1.4f, "#8BC34A", "DYNAMIC");
+        p.entities.add(critter);
+
+        p.scriptCode =
+                "// Green Hollow Valley - walk, jump, collect gems, dodge the mossling.\n" +
+                "function onStart() {\n" +
+                "  vortex.setBanner('GREEN HOLLOW - COLLECT THE GEMS');\n" +
+                "  vortex.setLabel('hud_gems', 'GEMS 0', 6, 6, 15, '#FFFFFF');\n" +
+                "}\n" +
+                "function onUpdate(dt) {\n" +
+                "  if (!vortex.exists('Hero')) return;\n" +
+                "  var run = vortex.btnB() ? 15.5 : 9.5;\n" +
+                "  vortex.setVel('Hero', vortex.joyX() * run, vortex.getVY('Hero'), -vortex.joyY() * run);\n" +
+                "  if (vortex.exists('Mossling')) vortex.chaseTagAI('enemy', 'Hero', 3.4);\n" +
+                "  if (vortex.getY('Hero') < -25) { vortex.setPos('Hero', 0, 6, 0); vortex.setVel('Hero', 0, 0, 0); }\n" +
+                "  vortex.setProgressBar('hud_hp', 'VIGOR', vortex.getHealth(), 100, 50, 94, '#7BE3C1');\n" +
+                "}\n" +
+                "function onButton(btn) {\n" +
+                "  if (btn === 'A') vortex.jump('Hero', 12.5);\n" +
+                "}\n" +
+                "function onCollide(a, b, tagA, tagB) {\n" +
+                "  if (a === 'Hero' && tagB === 'coin') {\n" +
+                "    vortex.particles(vortex.getX(b), vortex.getY(b), vortex.getZ(b), 24, '#7BE3C1');\n" +
+                "    vortex.destroy(b);\n" +
+                "    vortex.addScore(100);\n" +
+                "    vortex.playSound('coin');\n" +
+                "    vortex.setLabel('hud_gems', 'GEMS ' + vortex.countByTag('coin') + '  SCORE ' + vortex.getScore(), 6, 6, 15, '#FFFFFF');\n" +
+                "  }\n" +
+                "  if (a === 'Hero' && tagB === 'enemy') {\n" +
+                "    vortex.addHealth(-6);\n" +
+                "    vortex.playSound('hit');\n" +
+                "    vortex.setBanner('OUCH!');\n" +
+                "  }\n" +
+                "}\n";
+        p.putScriptFile("scripts/main.js", p.scriptCode);
         return p;
     }
 
