@@ -1,10 +1,29 @@
-# Vortex Engine Studio — v4.3.0 ("Monolith White Edition")
+# Vortex Engine Studio — v4.3.1 ("Monolith White Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
 
-## What's New in v4.3.0
+## What's New in v4.3.1 (Studio Visual Hierarchy, Docking, Precision Inspector & Feedback Polish)
+
+### 1. Distinct 5-Tier Panel Hierarchy & High-Contrast Readability
+- **Clear Panel Separation**: Upgraded the neutral dark studio palette into a 5-tier luminance ramp (`#070709` recessed canvas/code/console wells, `#15151A` primary Hierarchy/Explorer docks, `#1C1C23` alternating Inspector accordion cards, `#212129` elevated Dock Header bars with `3px` crisp `#FFFFFF` accent bars) framed by `#40404F` structural borders and `9px` dual-bevel grip splitters.
+- **Zero-Strain Typography**: Boosted property label and secondary metadata contrast (`#E2E2EB` / `#B8B8C6` on dark surfaces) across both Desktop and Android Inspectors.
+
+### 2. Full Workspace Customization (Collapse, Undock, Focus Mode & Seamless File Tabs)
+- **Collapse, Expand, Undock & Viewport Focus Mode**: Collapse or restore the Left Hierarchy/Inspector, File Explorer (`FILES`), Bottom Console/Terminal, or Right Tools dock with one click (or double-click any splitter rail), enter **1-Click Full-Viewport Focus Mode**, or **Undock** the Multi-File Code Editor or Console/Shell into independent floating OS windows.
+- **First-Class Multi-File Code Tabs (`VortexCodeTab`)**: Open file tabs (`main.js`, `swarm_director.js`, etc.) feature an unmistakable `2.6px` crisp `#FFFFFF` top active-tab bar, status dot, middle-click close, drag-onto-Viewport split snapping, and dedicated hover-highlighted `×` close buttons.
+
+### 3. Visual Numeric Scrubbers & Collapsible Accordion Inspector
+- **Draggable Numeric Scrubbers + Mouse Wheel Tweaking (`VortexNumberField`)**: Coordinates (`X`, `Y`, `Z`), scale (`W`, `H`, `D`), rotation, bounce, friction, and animation FPS feature horizontal drag-scrub handles, clickable/draggable `◀` / `▶` stepper arrows, and mouse scroll wheel support (`Shift` = fine, `Ctrl` = coarse) with live 2D/3D viewport updates.
+- **Collapsible Accordion Property Folders**: Grouped Entity & Physics Inspector fields into collapsible accordion sections (**Transform**, **Rendering & Sprites**, **Physics & Collisions**, **Identity & Custom Tags**) on both Desktop and Android.
+
+### 4. Color-Coded Build/Script Logs & Live Confirmation Pills
+- **Semantic Console & Terminal Highlighting (`VortexLogPane` + `StatusPill`)**: Build confirmations, saves, exports, and `exit 0` shell commands pop out in **bright emerald green (`#00E676`)**, syntax/runtime errors and non-zero exits pop out in **soft coral red (`#FF6B6B`)**, and warnings appear in **warm amber (`#FBBF24`)**, paired with a live status confirmation pill in the Studio header and terminal bar.
+
+---
+
+## Core Highlights from v4.3.0
 
 ### 1. Multi-File Code Directory Sidebar & Modular Hook Chaining
 - **Multi-File Script Organization (`scripts/main.*`, `objects/*`, `ui/*`)**: Replaced the single monolithic script buffer with a dedicated **File Directory Sidebar** (Desktop `FILES` explorer + open file tab bar; Android mobile horizontal file chips + `+ File`).

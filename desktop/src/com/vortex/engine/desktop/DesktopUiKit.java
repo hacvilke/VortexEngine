@@ -21,6 +21,7 @@ import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.awt.event.MouseWheelEvent;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Arc2D;
 import java.awt.geom.Ellipse2D;
@@ -32,8 +33,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.DoubleConsumer;
 import java.util.function.IntConsumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -52,6 +56,8 @@ import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextField;
+import javax.swing.JTextPane;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.event.PopupMenuEvent;
@@ -60,6 +66,10 @@ import javax.swing.plaf.basic.BasicButtonUI;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import javax.swing.plaf.basic.BasicSplitPaneDivider;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
 
 /**
  * DesktopUiKit v4.2 — Pure Monochrome Dark + Crisp White Custom Swing UI Engine (ZERO BLUE!).
@@ -73,20 +83,24 @@ import javax.swing.plaf.basic.BasicSplitPaneUI;
  */
 public final class DesktopUiKit {
 
-    // Pure Neutral Monochrome Dark + Crisp White Palette (ZERO BLUE!)
-    public static final Color C_VOID         = new Color(9, 9, 11);      // #09090B
-    public static final Color C_HEADER       = new Color(16, 16, 19);    // #101013
-    public static final Color C_PANEL        = new Color(21, 21, 24);    // #151518
-    public static final Color C_SURFACE      = new Color(30, 30, 34);    // #1E1E22
-    public static final Color C_SURFACE_HOV  = new Color(42, 42, 48);    // #2A2A30
-    public static final Color C_INPUT_BG     = new Color(13, 13, 16);    // #0D0D10
-    public static final Color C_BORDER       = new Color(48, 48, 55);    // #303037
-    public static final Color C_WHITE        = new Color(255, 255, 255); // #FFFFFF
-    public static final Color C_WHITE_SOFT   = new Color(238, 238, 242); // #EEEEF2
-    public static final Color C_ACCENT_TINT  = new Color(40, 40, 46);    // #28282E
-    public static final Color C_DARK_INK     = new Color(10, 10, 12);    // #0A0A0C
-    public static final Color C_TEXT         = new Color(250, 250, 250); // #FAFAFA
-    public static final Color C_TEXT_MUTED   = new Color(161, 161, 170); // #A1A1AA
+    // High-Contrast 5-Tier Neutral Dark + Crisp White Studio Palette (ZERO BLUE!)
+    public static final Color C_VOID          = new Color(7, 7, 9);       // #070709 Deep recessed canvas / code / console well
+    public static final Color C_INPUT_BG      = new Color(11, 11, 15);    // #0B0B0F Recessed numeric / text input well
+    public static final Color C_PANEL         = new Color(21, 21, 26);    // #15151A Primary dock surface (Hierarchy / Explorer)
+    public static final Color C_PANEL_ALT     = new Color(28, 28, 35);    // #1C1C23 Alternating card / Inspector accordion surface
+    public static final Color C_HEADER        = new Color(33, 33, 41);    // #212129 Elevated dock header bar
+    public static final Color C_SURFACE       = new Color(42, 42, 52);    // #2A2A34 Interactive controls & active tab surface
+    public static final Color C_SURFACE_HOV   = new Color(56, 56, 69);    // #383845 Hover state highlight
+    public static final Color C_BORDER_SUBTLE = new Color(46, 46, 57);    // #2E2E39 Subtle inner card divider
+    public static final Color C_BORDER        = new Color(64, 64, 79);    // #40404F Crisp structural panel separation border
+    public static final Color C_BORDER_STRONG = new Color(102, 102, 122); // #66667A Active splitter / input focus border
+    public static final Color C_WHITE         = new Color(255, 255, 255); // #FFFFFF Pure crisp accent white
+    public static final Color C_WHITE_SOFT    = new Color(240, 240, 245); // #F0F0F5
+    public static final Color C_ACCENT_TINT   = new Color(48, 48, 59);    // #30303B Selected item / active pill fill
+    public static final Color C_DARK_INK      = new Color(9, 9, 11);      // #09090B
+    public static final Color C_TEXT          = new Color(250, 250, 252); // #FAFAFC Primary readable text
+    public static final Color C_TEXT_LABEL    = new Color(226, 226, 235); // #E2E2EB High-contrast Inspector property labels
+    public static final Color C_TEXT_MUTED    = new Color(184, 184, 198); // #B8B8C6 Readable metadata & secondary labels (no eye strain)
 
     // Backwards-compatible aliases mapped strictly to Crisp White / Neutral Dark (ZERO BLUE!)
     public static final Color C_CYAN         = C_WHITE;
@@ -94,11 +108,16 @@ public final class DesktopUiKit {
     public static final Color C_CYAN_TINT    = C_ACCENT_TINT;
     public static final Color C_CYAN_DARK_TX = C_DARK_INK;
 
-    public static final Color C_DANGER_BG    = new Color(42, 20, 24);
-    public static final Color C_DANGER_HOV   = new Color(58, 26, 32);
-    public static final Color C_DANGER_BD    = new Color(120, 48, 58);
-    public static final Color C_DANGER_TX    = new Color(252, 165, 165);
-    public static final Color C_OK_TX        = new Color(134, 239, 172);
+    // Semantic Build / Script / Console Feedback Palette (Soft Red Errors + Bright Green Successes + Warm Amber)
+    public static final Color C_DANGER_BG    = new Color(48, 20, 25);
+    public static final Color C_DANGER_HOV   = new Color(66, 27, 34);
+    public static final Color C_DANGER_BD    = new Color(156, 56, 68);
+    public static final Color C_DANGER_TX    = new Color(255, 107, 107);  // #FF6B6B Soft coral red for errors
+    public static final Color C_OK_BG        = new Color(12, 42, 27);     // #0C2A1B Subtle emerald confirmation tint
+    public static final Color C_OK_BD        = new Color(22, 163, 74);    // #16A34A Emerald confirmation border
+    public static final Color C_OK_TX        = new Color(0, 230, 118);    // #00E676 Bright emerald green for successful builds
+    public static final Color C_WARN_BG      = new Color(45, 34, 12);
+    public static final Color C_WARN_TX      = new Color(251, 191, 36);   // #FBBF24 Warm amber warnings
 
     // Dynamic IDE UI Scale — auto-compacts on laptop screens (1366x768 / 1536x864 / 1440x900)
     private static float uiScale = detectOptimalLaptopScale();
@@ -142,7 +161,8 @@ public final class DesktopUiKit {
     public enum Icon {
         NONE, PLAY, STOP, PLUS, FOLDER, SAVE, UNDO, REDO, CUBE,
         CODE, FLOW, SPARKLE, SYNC, GRID, WAVE, EXPORT, TERMINAL, CHECK, CLOSE, REFRESH,
-        FILE, SPLIT, NODES, SEND, GUI
+        FILE, SPLIT, NODES, SEND, GUI,
+        COLLAPSE_LEFT, COLLAPSE_RIGHT, COLLAPSE_DOWN, COLLAPSE_UP, UNDOCK, MAXIMIZE
     }
 
     private DesktopUiKit() {}
@@ -152,6 +172,19 @@ public final class DesktopUiKit {
             UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
         } catch (Exception ignored) {}
         UIManager.put("Panel.background", C_VOID);
+        UIManager.put("SplitPane.background", new Color(25, 25, 32));
+        UIManager.put("Viewport.background", C_VOID);
+        UIManager.put("ScrollPane.background", C_VOID);
+        UIManager.put("List.background", C_VOID);
+        UIManager.put("List.foreground", C_TEXT);
+        UIManager.put("List.selectionBackground", C_ACCENT_TINT);
+        UIManager.put("List.selectionForeground", C_WHITE);
+        UIManager.put("TextArea.background", C_VOID);
+        UIManager.put("TextArea.foreground", C_TEXT);
+        UIManager.put("TextPane.background", C_VOID);
+        UIManager.put("TextPane.foreground", C_TEXT);
+        UIManager.put("TextField.background", C_INPUT_BG);
+        UIManager.put("TextField.foreground", C_WHITE);
         UIManager.put("Label.foreground", C_TEXT);
         UIManager.put("ToolTip.background", C_SURFACE);
         UIManager.put("ToolTip.foreground", C_WHITE);
@@ -373,6 +406,61 @@ public final class DesktopUiKit {
                 g.draw(new RoundRectangle2D.Float(cx - r * 0.74f, cy - r * 0.62f, r * 1.48f, r * 1.24f, 3f, 3f));
                 g.draw(new Line2D.Float(cx - r * 0.45f, cy - r * 0.18f, cx + r * 0.45f, cy - r * 0.18f));
                 g.draw(new Line2D.Float(cx - r * 0.45f, cy + r * 0.22f, cx + r * 0.18f, cy + r * 0.22f));
+                break;
+            }
+            case COLLAPSE_LEFT: {
+                g.draw(new Line2D.Float(cx - r * 0.62f, cy - r * 0.62f, cx - r * 0.62f, cy + r * 0.62f));
+                Path2D chev = new Path2D.Float();
+                chev.moveTo(cx + r * 0.48f, cy - r * 0.52f);
+                chev.lineTo(cx - r * 0.18f, cy);
+                chev.lineTo(cx + r * 0.48f, cy + r * 0.52f);
+                g.draw(chev);
+                break;
+            }
+            case COLLAPSE_RIGHT: {
+                g.draw(new Line2D.Float(cx + r * 0.62f, cy - r * 0.62f, cx + r * 0.62f, cy + r * 0.62f));
+                Path2D chev = new Path2D.Float();
+                chev.moveTo(cx - r * 0.48f, cy - r * 0.52f);
+                chev.lineTo(cx + r * 0.18f, cy);
+                chev.lineTo(cx - r * 0.48f, cy + r * 0.52f);
+                g.draw(chev);
+                break;
+            }
+            case COLLAPSE_DOWN: {
+                g.draw(new Line2D.Float(cx - r * 0.62f, cy + r * 0.62f, cx + r * 0.62f, cy + r * 0.62f));
+                Path2D chev = new Path2D.Float();
+                chev.moveTo(cx - r * 0.52f, cy - r * 0.38f);
+                chev.lineTo(cx, cy + r * 0.22f);
+                chev.lineTo(cx + r * 0.52f, cy - r * 0.38f);
+                g.draw(chev);
+                break;
+            }
+            case COLLAPSE_UP: {
+                g.draw(new Line2D.Float(cx - r * 0.62f, cy - r * 0.62f, cx + r * 0.62f, cy - r * 0.62f));
+                Path2D chev = new Path2D.Float();
+                chev.moveTo(cx - r * 0.52f, cy + r * 0.38f);
+                chev.lineTo(cx, cy - r * 0.22f);
+                chev.lineTo(cx + r * 0.52f, cy + r * 0.38f);
+                g.draw(chev);
+                break;
+            }
+            case UNDOCK: {
+                g.draw(new RoundRectangle2D.Float(cx - r * 0.72f, cy - r * 0.32f, r * 1.05f, r * 1.02f, 2f, 2f));
+                g.draw(new Line2D.Float(cx - r * 0.05f, cy + r * 0.05f, cx + r * 0.68f, cy - r * 0.68f));
+                g.draw(new Line2D.Float(cx + r * 0.18f, cy - r * 0.68f, cx + r * 0.68f, cy - r * 0.68f));
+                g.draw(new Line2D.Float(cx + r * 0.68f, cy - r * 0.68f, cx + r * 0.68f, cy - r * 0.18f));
+                break;
+            }
+            case MAXIMIZE: {
+                float s = r * 0.68f;
+                g.draw(new Line2D.Float(cx - s, cy - s, cx - s * 0.3f, cy - s));
+                g.draw(new Line2D.Float(cx - s, cy - s, cx - s, cy - s * 0.3f));
+                g.draw(new Line2D.Float(cx + s, cy - s, cx + s * 0.3f, cy - s));
+                g.draw(new Line2D.Float(cx + s, cy - s, cx + s, cy - s * 0.3f));
+                g.draw(new Line2D.Float(cx - s, cy + s, cx - s * 0.3f, cy + s));
+                g.draw(new Line2D.Float(cx - s, cy + s, cx - s, cy + s * 0.3f));
+                g.draw(new Line2D.Float(cx + s, cy + s, cx + s * 0.3f, cy + s));
+                g.draw(new Line2D.Float(cx + s, cy + s, cx + s, cy + s * 0.3f));
                 break;
             }
             default:
@@ -1070,14 +1158,17 @@ public final class DesktopUiKit {
     }
 
     /**
-     * Draggable 8px SplitPane with explicit minimum component bounds (so sidebars NEVER lock!)
-     * and an interactive white 3-dot grip handle.
+     * Draggable 9px Beveled SplitPane with crisp dual separation borders, glowing 3-dot grip handle,
+     * and double-click-to-collapse / restore memory!
      */
     public static JSplitPane createSplitPane(int orientation, Component a, Component b, int dividerLoc) {
-        if (a != null) a.setMinimumSize(new Dimension(130, 80));
-        if (b != null) b.setMinimumSize(new Dimension(130, 80));
+        if (a != null) a.setMinimumSize(new Dimension(0, 0));
+        if (b != null) b.setMinimumSize(new Dimension(0, 0));
 
-        JSplitPane sp = new JSplitPane(orientation, true, a, b);
+        final JSplitPane sp = new JSplitPane(orientation, true, a, b);
+        final int[] savedLoc = {dividerLoc};
+        sp.setOpaque(true);
+        sp.setBackground(new Color(25, 25, 32));
         sp.setBorder(BorderFactory.createEmptyBorder());
         sp.setUI(new BasicSplitPaneUI() {
             @Override
@@ -1092,6 +1183,22 @@ public final class DesktopUiKit {
                         addMouseListener(new MouseAdapter() {
                             @Override public void mouseEntered(MouseEvent e) { divHover = true; repaint(); }
                             @Override public void mouseExited(MouseEvent e) { divHover = false; repaint(); }
+                            @Override public void mouseClicked(MouseEvent e) {
+                                if (e.getClickCount() >= 2) {
+                                    int cur = sp.getDividerLocation();
+                                    int maxDim = orientation == JSplitPane.HORIZONTAL_SPLIT ? sp.getWidth() : sp.getHeight();
+                                    if (cur <= 18 || (maxDim > 80 && cur >= maxDim - 26)) {
+                                        sp.setDividerLocation(Math.max(120, savedLoc[0]));
+                                    } else {
+                                        savedLoc[0] = cur;
+                                        if (orientation == JSplitPane.VERTICAL_SPLIT) {
+                                            sp.setDividerLocation(Math.max(40, maxDim - 36));
+                                        } else {
+                                            sp.setDividerLocation(0);
+                                        }
+                                    }
+                                }
+                            }
                         });
                     }
                     @Override
@@ -1100,25 +1207,26 @@ public final class DesktopUiKit {
                         enableAA(g2);
                         int w = getWidth();
                         int h = getHeight();
-                        g2.setColor(divHover ? C_SURFACE_HOV : C_HEADER);
+                        g2.setColor(divHover ? C_SURFACE_HOV : new Color(25, 25, 32));
                         g2.fillRect(0, 0, w, h);
 
-                        // Center hairline
-                        g2.setColor(divHover ? new Color(120, 120, 132) : C_BORDER);
                         if (orientation == JSplitPane.HORIZONTAL_SPLIT) {
-                            g2.drawLine(w / 2, 0, w / 2, h);
-                            // 3-dot grip handle
+                            g2.setColor(divHover ? C_BORDER_STRONG : C_BORDER);
+                            g2.drawLine(0, 0, 0, h);
+                            g2.drawLine(w - 1, 0, w - 1, h);
                             g2.setColor(divHover ? C_WHITE : C_TEXT_MUTED);
                             int cy = h / 2;
-                            for (int dy = -6; dy <= 6; dy += 6) {
-                                g2.fill(new Ellipse2D.Float(w / 2f - 1.5f, cy + dy - 1.5f, 3f, 3f));
+                            for (int dy = -7; dy <= 7; dy += 7) {
+                                g2.fill(new Ellipse2D.Float(w / 2f - 1.6f, cy + dy - 1.6f, 3.2f, 3.2f));
                             }
                         } else {
-                            g2.drawLine(0, h / 2, w, h / 2);
+                            g2.setColor(divHover ? C_BORDER_STRONG : C_BORDER);
+                            g2.drawLine(0, 0, w, 0);
+                            g2.drawLine(0, h - 1, w, h - 1);
                             g2.setColor(divHover ? C_WHITE : C_TEXT_MUTED);
                             int cx = w / 2;
-                            for (int dx = -6; dx <= 6; dx += 6) {
-                                g2.fill(new Ellipse2D.Float(cx + dx - 1.5f, h / 2f - 1.5f, 3f, 3f));
+                            for (int dx = -7; dx <= 7; dx += 7) {
+                                g2.fill(new Ellipse2D.Float(cx + dx - 1.6f, h / 2f - 1.6f, 3.2f, 3.2f));
                             }
                         }
                         g2.dispose();
@@ -1127,7 +1235,7 @@ public final class DesktopUiKit {
             }
         });
         // Set dividerSize & dividerLocation AFTER setUI so BasicSplitPaneUI never resets them!
-        sp.setDividerSize(8);
+        sp.setDividerSize(9);
         sp.setDividerLocation(dividerLoc);
         return sp;
     }
@@ -1558,5 +1666,588 @@ public final class DesktopUiKit {
         dlg.setLocationRelativeTo(owner);
         dlg.setVisible(true);
         return chosen[0];
+    }
+
+    // =========================================================================
+    // 11. Distinct Panel Dock Header Bar (Accent Bar + Title + Count + Actions)
+    // =========================================================================
+    public static JPanel createDockHeader(String title, String badgeText, JComponent rightActions) {
+        JPanel hdr = new JPanel(new BorderLayout(6, 0)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                enableAA(g2);
+                g2.setColor(C_WHITE);
+                g2.fill(new RoundRectangle2D.Float(4, 6, 3f, Math.max(8, getHeight() - 12), 2f, 2f));
+                g2.dispose();
+            }
+        };
+        hdr.setBackground(C_HEADER);
+        hdr.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, C_BORDER),
+                BorderFactory.createEmptyBorder(scaled(4), scaled(12), scaled(4), scaled(6))));
+
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 1));
+        left.setOpaque(false);
+        JLabel t = new JLabel(title);
+        t.setFont(FONT_UI_BOLD);
+        t.setForeground(C_WHITE);
+        left.add(t);
+        if (badgeText != null && !badgeText.isEmpty()) {
+            JLabel b = new JLabel(" " + badgeText + " ");
+            b.setFont(new Font("SansSerif", Font.BOLD, Math.max(9, scaledFontPt(10))));
+            b.setOpaque(true);
+            b.setBackground(C_SURFACE);
+            b.setForeground(C_TEXT_LABEL);
+            b.setBorder(BorderFactory.createLineBorder(C_BORDER, 1));
+            left.add(b);
+        }
+        hdr.add(left, BorderLayout.CENTER);
+        if (rightActions != null) {
+            rightActions.setOpaque(false);
+            hdr.add(rightActions, BorderLayout.EAST);
+        }
+        return hdr;
+    }
+
+    // =========================================================================
+    // 12. VortexNumberField — Visual Drag Scrubber + Stepper Arrows + Mouse Wheel
+    // =========================================================================
+    public static final class VortexNumberField extends JPanel {
+        private double value;
+        private final double step;
+        private final double minVal;
+        private final double maxVal;
+        private final JTextField textField;
+        private DoubleConsumer onChange;
+        private boolean updatingText = false;
+
+        public VortexNumberField(String axisBadge, Color badgeColor, double initial, double step, double minVal, double maxVal) {
+            super(new BorderLayout(0, 0));
+            this.value = initial;
+            this.step = step > 0 ? step : 0.1;
+            this.minVal = minVal;
+            this.maxVal = maxVal;
+
+            setBackground(C_INPUT_BG);
+            setBorder(BorderFactory.createLineBorder(C_BORDER, 1));
+            setPreferredSize(new Dimension(scaled(86), scaled(26)));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, scaled(28)));
+
+            // Left: Draggable Axis / Scrub Handle Badge
+            if (axisBadge != null && !axisBadge.isEmpty()) {
+                JLabel scrub = new JLabel(axisBadge, JLabel.CENTER);
+                scrub.setOpaque(true);
+                scrub.setBackground(new Color(26, 26, 34));
+                scrub.setForeground(badgeColor != null ? badgeColor : C_TEXT_LABEL);
+                scrub.setFont(new Font("SansSerif", Font.BOLD, Math.max(10, scaledFontPt(10))));
+                scrub.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createMatteBorder(0, 0, 0, 1, C_BORDER_SUBTLE),
+                        BorderFactory.createEmptyBorder(0, scaled(5), 0, scaled(5))));
+                scrub.setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
+                scrub.setToolTipText("Drag left/right to scrub value (Shift = fine, Ctrl = coarse) or use mouse wheel");
+                installDragScrub(scrub);
+                add(scrub, BorderLayout.WEST);
+            }
+
+            // Center: Direct Numeric Input
+            textField = new JTextField(formatVal(initial));
+            textField.setBackground(C_INPUT_BG);
+            textField.setForeground(C_WHITE);
+            textField.setCaretColor(C_WHITE);
+            textField.setSelectionColor(C_ACCENT_TINT);
+            textField.setSelectedTextColor(C_WHITE);
+            textField.setFont(new Font("Monospaced", Font.PLAIN, Math.max(10, scaledFontPt(11))));
+            textField.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 3));
+            textField.setToolTipText("Type value + Enter, scroll mouse wheel, or drag arrows to tweak");
+            textField.addActionListener(e -> commitTyped());
+            textField.addFocusListener(new FocusAdapter() {
+                @Override public void focusGained(FocusEvent e) {
+                    setBorder(BorderFactory.createLineBorder(C_WHITE, 1));
+                    SwingUtilities.invokeLater(textField::selectAll);
+                }
+                @Override public void focusLost(FocusEvent e) {
+                    setBorder(BorderFactory.createLineBorder(C_BORDER, 1));
+                    commitTyped();
+                }
+            });
+            add(textField, BorderLayout.CENTER);
+
+            // Right: Draggable & Clickable Stepper Arrows (◀ / ▶)
+            JComponent arrows = new JComponent() {
+                private int hoverPart = 0; // -1 left, +1 right
+                {
+                    setPreferredSize(new Dimension(scaled(22), scaled(24)));
+                    setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
+                    setToolTipText("Click ◀ / ▶ to step, or drag horizontally to scrub");
+                    addMouseListener(new MouseAdapter() {
+                        private Point pressPt;
+                        private boolean dragged;
+                        @Override public void mousePressed(MouseEvent e) {
+                            pressPt = e.getPoint();
+                            dragged = false;
+                        }
+                        @Override public void mouseReleased(MouseEvent e) {
+                            if (!dragged && pressPt != null) {
+                                double mult = e.isShiftDown() ? 0.1 : (e.isControlDown() ? 10.0 : 1.0);
+                                double dir = e.getX() < getWidth() / 2 ? -1.0 : 1.0;
+                                setValueInternal(value + dir * VortexNumberField.this.step * mult, true);
+                            }
+                        }
+                        @Override public void mouseExited(MouseEvent e) { hoverPart = 0; repaint(); }
+                    });
+                    addMouseMotionListener(new MouseMotionAdapter() {
+                        private int lastX = Integer.MIN_VALUE;
+                        @Override public void mouseMoved(MouseEvent e) {
+                            hoverPart = e.getX() < getWidth() / 2 ? -1 : 1;
+                            repaint();
+                            lastX = Integer.MIN_VALUE;
+                        }
+                        @Override public void mouseDragged(MouseEvent e) {
+                            if (lastX != Integer.MIN_VALUE) {
+                                int dx = e.getX() - lastX;
+                                if (dx != 0) {
+                                    double mult = e.isShiftDown() ? 0.1 : (e.isControlDown() ? 5.0 : 1.0);
+                                    setValueInternal(value + dx * VortexNumberField.this.step * 0.5 * mult, true);
+                                }
+                            }
+                            lastX = e.getX();
+                        }
+                    });
+                }
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    enableAA(g2);
+                    int w = getWidth(), h = getHeight();
+                    g2.setColor(new Color(22, 22, 29));
+                    g2.fillRect(0, 0, w, h);
+                    g2.setColor(C_BORDER_SUBTLE);
+                    g2.drawLine(0, 0, 0, h);
+                    int mid = w / 2;
+                    int cy = h / 2;
+                    // Left arrow ◀
+                    Path2D l = new Path2D.Float();
+                    l.moveTo(mid - 2, cy - 3.2f);
+                    l.lineTo(mid - 6, cy);
+                    l.lineTo(mid - 2, cy + 3.2f);
+                    l.closePath();
+                    g2.setColor(hoverPart == -1 ? C_WHITE : C_TEXT_MUTED);
+                    g2.fill(l);
+                    // Right arrow ▶
+                    Path2D r = new Path2D.Float();
+                    r.moveTo(mid + 2, cy - 3.2f);
+                    r.lineTo(mid + 6, cy);
+                    r.lineTo(mid + 2, cy + 3.2f);
+                    r.closePath();
+                    g2.setColor(hoverPart == 1 ? C_WHITE : C_TEXT_MUTED);
+                    g2.fill(r);
+                    g2.dispose();
+                }
+            };
+            add(arrows, BorderLayout.EAST);
+
+            // Mouse Wheel Tweaking across entire control!
+            java.awt.event.MouseWheelListener wheel = (MouseWheelEvent e) -> {
+                double rot = -e.getPreciseWheelRotation();
+                if (rot == 0) rot = -e.getWheelRotation();
+                double mult = e.isShiftDown() ? 0.1 : (e.isControlDown() ? 10.0 : 1.0);
+                setValueInternal(value + (rot > 0 ? 1 : -1) * this.step * mult, true);
+                e.consume();
+            };
+            this.addMouseWheelListener(wheel);
+            textField.addMouseWheelListener(wheel);
+            arrows.addMouseWheelListener(wheel);
+        }
+
+        private void installDragScrub(JComponent c) {
+            final int[] prevX = {Integer.MIN_VALUE};
+            c.addMouseListener(new MouseAdapter() {
+                @Override public void mousePressed(MouseEvent e) { prevX[0] = e.getXOnScreen(); }
+                @Override public void mouseReleased(MouseEvent e) { prevX[0] = Integer.MIN_VALUE; }
+            });
+            c.addMouseMotionListener(new MouseMotionAdapter() {
+                @Override public void mouseDragged(MouseEvent e) {
+                    int cur = e.getXOnScreen();
+                    if (prevX[0] != Integer.MIN_VALUE) {
+                        int dx = cur - prevX[0];
+                        if (dx != 0) {
+                            double mult = e.isShiftDown() ? 0.1 : (e.isControlDown() ? 5.0 : 1.0);
+                            setValueInternal(value + dx * step * 0.5 * mult, true);
+                        }
+                    }
+                    prevX[0] = cur;
+                }
+            });
+        }
+
+        private void commitTyped() {
+            if (updatingText) return;
+            try {
+                double parsed = Double.parseDouble(textField.getText().trim());
+                setValueInternal(parsed, true);
+            } catch (Exception ignored) {
+                updatingText = true;
+                textField.setText(formatVal(value));
+                updatingText = false;
+            }
+        }
+
+        private void setValueInternal(double next, boolean notify) {
+            double clamped = Math.max(minVal, Math.min(maxVal, next));
+            if (Math.abs(clamped) < 1e-6) clamped = 0.0;
+            this.value = clamped;
+            updatingText = true;
+            textField.setText(formatVal(clamped));
+            updatingText = false;
+            if (notify && onChange != null) onChange.accept(clamped);
+        }
+
+        private static String formatVal(double v) {
+            if (Math.abs(v - Math.round(v)) < 0.001 && Math.abs(v) >= 100) {
+                return String.format(Locale.US, "%.0f", v);
+            }
+            return String.format(Locale.US, "%.2f", v);
+        }
+
+        public float getFloatValue() {
+            commitTyped();
+            return (float) value;
+        }
+
+        public void setValue(double v) {
+            setValueInternal(v, false);
+        }
+
+        public void setOnChange(DoubleConsumer c) {
+            this.onChange = c;
+        }
+    }
+
+    // =========================================================================
+    // 13. AccordionSection — Collapsible Inspector Property Folder
+    // =========================================================================
+    public static final class AccordionSection extends JPanel {
+        private boolean expanded;
+        private final JPanel bodyPanel;
+        private Consumer<Boolean> onToggle;
+
+        public AccordionSection(String title, boolean initiallyExpanded) {
+            super(new BorderLayout(0, 0));
+            this.expanded = initiallyExpanded;
+            setOpaque(true);
+            setBackground(C_PANEL_ALT);
+            setBorder(BorderFactory.createLineBorder(C_BORDER, 1));
+            setAlignmentX(Component.LEFT_ALIGNMENT);
+
+            JPanel header = new JPanel(new BorderLayout(6, 0)) {
+                private boolean hov = false;
+                {
+                    setOpaque(true);
+                    setBackground(C_HEADER);
+                    setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                    setBorder(BorderFactory.createEmptyBorder(scaled(6), scaled(9), scaled(6), scaled(9)));
+                    addMouseListener(new MouseAdapter() {
+                        @Override public void mouseEntered(MouseEvent e) { hov = true; setBackground(C_SURFACE); repaint(); }
+                        @Override public void mouseExited(MouseEvent e) { hov = false; setBackground(C_HEADER); repaint(); }
+                        @Override public void mousePressed(MouseEvent e) {
+                            setExpanded(!expanded);
+                            if (onToggle != null) onToggle.accept(expanded);
+                        }
+                    });
+                }
+                @Override
+                protected void paintComponent(Graphics g) {
+                    super.paintComponent(g);
+                    if (expanded) {
+                        g.setColor(C_BORDER_SUBTLE);
+                        g.drawLine(0, getHeight() - 1, getWidth(), getHeight() - 1);
+                    }
+                }
+            };
+
+            final JLabel chev = new JLabel(expanded ? "▼" : "▶");
+            chev.setFont(new Font("SansSerif", Font.BOLD, Math.max(9, scaledFontPt(10))));
+            chev.setForeground(C_WHITE);
+            header.add(chev, BorderLayout.WEST);
+
+            JLabel ttl = new JLabel(title.toUpperCase(Locale.US));
+            ttl.setFont(FONT_UI_BOLD);
+            ttl.setForeground(C_WHITE);
+            header.add(ttl, BorderLayout.CENTER);
+
+            add(header, BorderLayout.NORTH);
+
+            bodyPanel = new JPanel();
+            bodyPanel.setLayout(new BoxLayout(bodyPanel, BoxLayout.Y_AXIS));
+            bodyPanel.setBackground(C_PANEL_ALT);
+            bodyPanel.setBorder(BorderFactory.createEmptyBorder(scaled(7), scaled(9), scaled(9), scaled(9)));
+            bodyPanel.setVisible(expanded);
+            add(bodyPanel, BorderLayout.CENTER);
+
+            header.addMouseListener(new MouseAdapter() {
+                @Override public void mousePressed(MouseEvent e) {
+                    chev.setText(expanded ? "▼" : "▶");
+                }
+            });
+        }
+
+        public JPanel getBody() { return bodyPanel; }
+        public boolean isExpanded() { return expanded; }
+
+        public void setExpanded(boolean exp) {
+            this.expanded = exp;
+            bodyPanel.setVisible(exp);
+            revalidate();
+            if (getParent() != null) {
+                getParent().revalidate();
+                getParent().repaint();
+            }
+            repaint();
+        }
+
+        public void setOnToggle(Consumer<Boolean> listener) {
+            this.onToggle = listener;
+        }
+
+        @Override
+        public Dimension getMaximumSize() {
+            Dimension pref = getPreferredSize();
+            return new Dimension(Integer.MAX_VALUE, pref.height);
+        }
+    }
+
+    // =========================================================================
+    // 14. VortexCodeTab — Seamless IDE File Tab (Active Top Bar + Clear × Close)
+    // =========================================================================
+    public static final class VortexCodeTab extends JComponent {
+        private final String filePath;
+        private final String shortName;
+        private final boolean active;
+        private final boolean closable;
+        private boolean tabHover = false;
+        private boolean closeHover = false;
+
+        public VortexCodeTab(String filePath, boolean active, boolean closable,
+                             Runnable onSelect, Runnable onClose) {
+            this.filePath = filePath;
+            this.shortName = filePath.contains("/") ? filePath.substring(filePath.lastIndexOf('/') + 1) : filePath;
+            this.active = active;
+            this.closable = closable;
+            setOpaque(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setToolTipText(filePath + " — Click to switch • Middle-click or × to close • Drag onto Viewport to snap split");
+
+            addMouseListener(new MouseAdapter() {
+                @Override public void mouseEntered(MouseEvent e) { tabHover = true; repaint(); }
+                @Override public void mouseExited(MouseEvent e) { tabHover = false; closeHover = false; repaint(); }
+                @Override public void mouseClicked(MouseEvent e) {
+                    if (SwingUtilities.isMiddleMouseButton(e) && closable && onClose != null) {
+                        onClose.run();
+                        return;
+                    }
+                    if (closable && getCloseRect().contains(e.getPoint())) {
+                        if (onClose != null) onClose.run();
+                        return;
+                    }
+                    if (onSelect != null) onSelect.run();
+                }
+            });
+            addMouseMotionListener(new MouseMotionAdapter() {
+                @Override public void mouseMoved(MouseEvent e) {
+                    boolean overX = closable && getCloseRect().contains(e.getPoint());
+                    if (overX != closeHover) {
+                        closeHover = overX;
+                        repaint();
+                    }
+                }
+            });
+        }
+
+        private Rectangle getCloseRect() {
+            int s = scaled(16);
+            return new Rectangle(getWidth() - s - scaled(6), (getHeight() - s) / 2, s, s);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            FontMetrics fm = getFontMetrics(active ? FONT_UI_BOLD : FONT_UI);
+            int w = scaled(16) + fm.stringWidth(shortName) + (closable ? scaled(21) : scaled(8));
+            return new Dimension(w, scaled(28));
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            enableAA(g2);
+            int w = getWidth(), h = getHeight();
+
+            Color bg = active ? C_SURFACE : (tabHover ? new Color(29, 29, 37) : new Color(16, 16, 21));
+            g2.setColor(bg);
+            g2.fill(new RoundRectangle2D.Float(0, 1, w - 1, h + 4, 6, 6));
+
+            g2.setColor(active ? C_BORDER_STRONG : C_BORDER_SUBTLE);
+            g2.draw(new RoundRectangle2D.Float(0.5f, 1.5f, w - 1.5f, h + 3f, 6, 6));
+
+            if (active) {
+                // Obvious crisp white active-tab top indicator bar!
+                g2.setColor(C_WHITE);
+                g2.fill(new RoundRectangle2D.Float(1, 1, w - 2, 2.6f, 2, 2));
+            }
+
+            // File dot indicator
+            g2.setColor(active ? C_OK_TX : C_TEXT_MUTED);
+            g2.fill(new Ellipse2D.Float(scaled(8), h / 2f - 2.5f, 5f, 5f));
+
+            g2.setFont(active ? FONT_UI_BOLD : FONT_UI);
+            g2.setColor(active ? C_WHITE : (tabHover ? C_TEXT : C_TEXT_MUTED));
+            FontMetrics fm = g2.getFontMetrics();
+            g2.drawString(shortName, scaled(17), (h - fm.getHeight()) / 2 + fm.getAscent() + 1);
+
+            if (closable) {
+                Rectangle xr = getCloseRect();
+                if (closeHover) {
+                    g2.setColor(C_DANGER_BG);
+                    g2.fill(new RoundRectangle2D.Float(xr.x, xr.y, xr.width, xr.height, 5, 5));
+                    g2.setColor(C_DANGER_BD);
+                    g2.draw(new RoundRectangle2D.Float(xr.x, xr.y, xr.width, xr.height, 5, 5));
+                }
+                paintIcon(g2, Icon.CLOSE, xr.x + xr.width * 0.5f, xr.y + xr.height * 0.5f,
+                        9.5f, closeHover ? C_DANGER_TX : (active ? C_TEXT_LABEL : C_TEXT_MUTED));
+            }
+            g2.dispose();
+        }
+    }
+
+    // =========================================================================
+    // 15. VortexLogPane & StatusPill — Color-Coded Build/Script Feedback
+    // =========================================================================
+    public static final class VortexLogPane extends JTextPane {
+        private static final int MAX_DOC_CHARS = 26_000;
+
+        public VortexLogPane() {
+            setEditable(false);
+            setBackground(C_VOID);
+            setForeground(C_TEXT);
+            setCaretColor(C_WHITE);
+            setFont(FONT_MONO);
+            setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+        }
+
+        public void appendColoredLine(String line) {
+            if (line == null) return;
+            StyledDocument doc = getStyledDocument();
+            try {
+                if (doc.getLength() > MAX_DOC_CHARS) {
+                    doc.remove(0, doc.getLength() - 16_000);
+                }
+                for (String sub : line.split("\n", -1)) {
+                    appendSingleLine(doc, sub);
+                }
+                setCaretPosition(doc.getLength());
+            } catch (BadLocationException ignored) {}
+        }
+
+        private void appendSingleLine(StyledDocument doc, String s) throws BadLocationException {
+            String u = s.toUpperCase(Locale.US);
+            SimpleAttributeSet attr = new SimpleAttributeSet();
+            StyleConstants.setFontFamily(attr, "Monospaced");
+            StyleConstants.setFontSize(attr, Math.max(11, scaledFontPt(12)));
+
+            boolean isErr = u.contains("[ERROR]") || u.contains("[FAIL") || u.contains("[CRASH]")
+                    || s.startsWith("✕") || u.contains("SYNTAXERROR") || u.contains("EXCEPTION")
+                    || u.contains("FAILED:") || u.contains("ERROR:");
+            boolean isOk = !isErr && (u.contains("[SUCCESS]") || u.contains("[PASS]") || s.contains("✓")
+                    || u.contains("[SAVED]") || u.contains("[EXPORT]") || u.contains("STARTED LIVE PLAY")
+                    || u.contains("COMPILE OK") || u.contains("EXIT 0"));
+            boolean isWarn = !isErr && !isOk && (u.contains("[WARN") || u.contains("STOPPED PLAY")
+                    || u.contains("UNDID") || u.contains("REDID"));
+
+            if (isErr) {
+                StyleConstants.setForeground(attr, C_DANGER_TX);
+                StyleConstants.setBackground(attr, new Color(36, 13, 17));
+                StyleConstants.setBold(attr, true);
+            } else if (isOk) {
+                StyleConstants.setForeground(attr, C_OK_TX);
+                StyleConstants.setBold(attr, true);
+            } else if (isWarn) {
+                StyleConstants.setForeground(attr, C_WARN_TX);
+            } else if (s.trim().startsWith("•")) {
+                StyleConstants.setForeground(attr, C_TEXT_LABEL);
+            } else {
+                StyleConstants.setForeground(attr, C_TEXT);
+            }
+            doc.insertString(doc.getLength(), s + "\n", attr);
+        }
+
+        public void clearLogs() {
+            super.setText("");
+        }
+    }
+
+    public static final class StatusPill extends JComponent {
+        public enum State { NEUTRAL, SUCCESS, ERROR, WARNING }
+        private State state = State.SUCCESS;
+        private String text = "✓ Ready";
+
+        public StatusPill(String initialText, State initialState) {
+            this.text = initialText;
+            this.state = initialState;
+            setOpaque(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        }
+
+        public void setStatus(String message, State nextState) {
+            this.text = message == null ? "" : message;
+            this.state = nextState == null ? State.NEUTRAL : nextState;
+            revalidate();
+            repaint();
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            FontMetrics fm = getFontMetrics(FONT_UI_BOLD);
+            int w = Math.min(scaled(310), fm.stringWidth(text) + scaled(22));
+            return new Dimension(Math.max(scaled(90), w), scaled(25));
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            enableAA(g2);
+            int w = getWidth(), h = getHeight();
+            Color bg, bd, fg;
+            switch (state) {
+                case SUCCESS:
+                    bg = C_OK_BG; bd = C_OK_BD; fg = C_OK_TX; break;
+                case ERROR:
+                    bg = C_ERR_BG_SAFE(); bd = C_DANGER_BD; fg = C_DANGER_TX; break;
+                case WARNING:
+                    bg = C_WARN_BG; bd = C_WARN_TX; fg = C_WARN_TX; break;
+                default:
+                    bg = C_SURFACE; bd = C_BORDER; fg = C_TEXT_LABEL; break;
+            }
+            g2.setColor(bg);
+            g2.fill(new RoundRectangle2D.Float(0.5f, 0.5f, w - 1f, h - 1f, h, h));
+            g2.setColor(bd);
+            g2.setStroke(new BasicStroke(1.1f));
+            g2.draw(new RoundRectangle2D.Float(0.5f, 0.5f, w - 1f, h - 1f, h, h));
+
+            g2.setFont(FONT_UI_BOLD);
+            g2.setColor(fg);
+            FontMetrics fm = g2.getFontMetrics();
+            String drawTxt = text;
+            int maxW = w - scaled(16);
+            while (drawTxt.length() > 4 && fm.stringWidth(drawTxt) > maxW) {
+                drawTxt = drawTxt.substring(0, drawTxt.length() - 2) + "…";
+            }
+            g2.drawString(drawTxt, (w - fm.stringWidth(drawTxt)) / 2, (h - fm.getHeight()) / 2 + fm.getAscent());
+            g2.dispose();
+        }
+
+        private static Color C_ERR_BG_SAFE() {
+            return new Color(46, 16, 21);
+        }
     }
 }

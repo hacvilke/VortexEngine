@@ -30,7 +30,9 @@ import javax.swing.SwingUtilities;
  */
 public final class DesktopTerminalPanel extends JPanel {
 
-    private final JTextArea outputArea = new JTextArea();
+    private final DesktopUiKit.VortexLogPane outputArea = new DesktopUiKit.VortexLogPane();
+    private final DesktopUiKit.StatusPill statusPill =
+            new DesktopUiKit.StatusPill("● Shell Ready", DesktopUiKit.StatusPill.State.NEUTRAL);
     private final JTextField inputField;
     private final JLabel cwdLabel;
     private final DesktopUiKit.VortexButton stopBtn;
@@ -108,8 +110,9 @@ public final class DesktopTerminalPanel extends JPanel {
         stopBtn.addActionListener(e -> killActiveProcess());
 
         DesktopUiKit.VortexButton clearBtn = new DesktopUiKit.VortexButton("Clear", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.CLOSE);
-        clearBtn.addActionListener(e -> outputArea.setText(""));
+        clearBtn.addActionListener(e -> outputArea.clearLogs());
 
+        quickBox.add(statusPill);
         quickBox.add(javaVerBtn);
         quickBox.add(goVerBtn);
         quickBox.add(lrmBtn);
@@ -120,16 +123,10 @@ public final class DesktopTerminalPanel extends JPanel {
         topBar.add(quickBox, BorderLayout.EAST);
         add(topBar, BorderLayout.NORTH);
 
-        outputArea.setEditable(false);
-        outputArea.setBackground(DesktopUiKit.C_VOID);
-        outputArea.setForeground(new Color(240, 240, 244));
-        outputArea.setCaretColor(DesktopUiKit.C_WHITE);
-        outputArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        outputArea.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
-        outputArea.setText("Vortex Studio Interactive Shell (" + System.getProperty("os.name") + " • "
-                + (isWindows() ? "PowerShell" : "POSIX sh") + ")\n"
-                + "• Active JDK, Go, and LRM directories are automatically injected into PATH.\n"
-                + "• Type any command (cd, java, javac, go, lrm, git, irm, curl) and press Enter. Up/Down = History.\n");
+        outputArea.appendColoredLine("✓ [SUCCESS] Vortex Studio Interactive Shell (" + System.getProperty("os.name") + " • "
+                + (isWindows() ? "PowerShell" : "POSIX sh") + ")");
+        outputArea.appendColoredLine("• Active JDK, Go, and LRM directories are automatically injected into PATH.");
+        outputArea.appendColoredLine("• Type any command (cd, java, javac, go, lrm, git, irm, curl) and press Enter. Up/Down = History.");
 
         JScrollPane scroll = DesktopUiKit.createScrollPane(outputArea);
         add(scroll, BorderLayout.CENTER);
@@ -217,7 +214,8 @@ public final class DesktopTerminalPanel extends JPanel {
         appendLine("\n" + shortCwd() + (isWindows() ? " PS> " : " $ ") + cmd);
 
         if ("clear".equalsIgnoreCase(cmd) || "cls".equalsIgnoreCase(cmd)) {
-            outputArea.setText("");
+            outputArea.clearLogs();
+            statusPill.setStatus("● Cleared", DesktopUiKit.StatusPill.State.NEUTRAL);
             return;
         }
         if ("pwd".equalsIgnoreCase(cmd)) {
@@ -249,19 +247,22 @@ public final class DesktopTerminalPanel extends JPanel {
             if (cand.isDirectory()) {
                 cwd = cand;
                 updateCwdLabel();
-                appendLine("cwd -> " + cwd.getAbsolutePath());
+                appendLine("✓ [SUCCESS] cwd -> " + cwd.getAbsolutePath());
+                statusPill.setStatus("✓ cd OK", DesktopUiKit.StatusPill.State.SUCCESS);
             } else {
-                appendLine("cd: directory not found: " + cand.getAbsolutePath());
+                appendLine("✕ [ERROR] cd: directory not found: " + cand.getAbsolutePath());
+                statusPill.setStatus("✕ Not Found", DesktopUiKit.StatusPill.State.ERROR);
             }
             return;
         }
 
         if (activeProcess != null && activeProcess.isAlive()) {
-            appendLine("[busy] Another command is still running — click Stop first.");
+            appendLine("[WARN] Another command is still running — click Stop first.");
             return;
         }
 
         stopBtn.setEnabled(true);
+        statusPill.setStatus("● Running…", DesktopUiKit.StatusPill.State.WARNING);
         Thread worker = new Thread(() -> {
             try {
                 ProcessBuilder pb;
@@ -305,11 +306,22 @@ public final class DesktopTerminalPanel extends JPanel {
                     }
                 }
                 int code = proc.waitFor();
-                if (code != 0) {
-                    SwingUtilities.invokeLater(() -> appendLine("[exit " + code + "]"));
+                if (code == 0) {
+                    SwingUtilities.invokeLater(() -> {
+                        statusPill.setStatus("✓ Exit 0 • OK", DesktopUiKit.StatusPill.State.SUCCESS);
+                        appendLine("✓ [SUCCESS] Command finished (exit 0)");
+                    });
+                } else {
+                    SwingUtilities.invokeLater(() -> {
+                        statusPill.setStatus("✕ Exit " + code, DesktopUiKit.StatusPill.State.ERROR);
+                        appendLine("✕ [ERROR] Command failed (exit " + code + ")");
+                    });
                 }
             } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> appendLine("[error] " + ex.getMessage()));
+                SwingUtilities.invokeLater(() -> {
+                    statusPill.setStatus("✕ Exec Error", DesktopUiKit.StatusPill.State.ERROR);
+                    appendLine("✕ [ERROR] " + ex.getMessage());
+                });
             } finally {
                 activeProcess = null;
                 SwingUtilities.invokeLater(() -> stopBtn.setEnabled(false));
@@ -323,14 +335,14 @@ public final class DesktopTerminalPanel extends JPanel {
         Process p = activeProcess;
         if (p != null && p.isAlive()) {
             p.destroyForcibly();
-            appendLine("[terminated]");
+            appendLine("[WARN] Process terminated by user.");
+            statusPill.setStatus("■ Stopped", DesktopUiKit.StatusPill.State.WARNING);
         }
         stopBtn.setEnabled(false);
     }
 
     private void appendLine(String text) {
-        outputArea.append(text + "\n");
-        outputArea.setCaretPosition(outputArea.getDocument().getLength());
+        outputArea.appendColoredLine(text);
     }
 
     private void updateCwdLabel() {

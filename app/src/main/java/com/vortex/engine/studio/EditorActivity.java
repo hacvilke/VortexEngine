@@ -602,14 +602,50 @@ public class EditorActivity extends Activity {
     private ScrollView buildInspectorDrawer() {
         ScrollView sv = new ScrollView(this);
         GradientDrawable drawerBg = new GradientDrawable();
-        drawerBg.setColor(Color.argb(246, 13, 19, 32));
+        drawerBg.setColor(Color.argb(250, 22, 22, 28));
         drawerBg.setStroke(dp(1), VortexMobileUi.C_BORDER);
         sv.setBackground(drawerBg);
         inspectorContent = new LinearLayout(this);
         inspectorContent.setOrientation(LinearLayout.VERTICAL);
-        inspectorContent.setPadding(dp(14), dp(10), dp(14), dp(26));
+        inspectorContent.setPadding(dp(12), dp(10), dp(12), dp(26));
         sv.addView(inspectorContent);
         return sv;
+    }
+
+    private LinearLayout createMobileAccordion(LinearLayout parent, String title, boolean defaultOpen) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#1D1D25"));
+        bg.setCornerRadius(dp(6));
+        bg.setStroke(dp(1), VortexMobileUi.C_BORDER);
+        card.setBackground(bg);
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        cardLp.topMargin = dp(8);
+
+        final TextView hdr = new TextView(this);
+        hdr.setText((defaultOpen ? "▼  " : "▶  ") + title.toUpperCase());
+        hdr.setTextColor(VortexMobileUi.C_CYAN);
+        hdr.setTypeface(Typeface.DEFAULT_BOLD);
+        hdr.setTextSize(11.5f);
+        hdr.setBackgroundColor(VortexMobileUi.C_HEADER);
+        hdr.setPadding(dp(10), dp(8), dp(10), dp(8));
+        card.addView(hdr);
+
+        final LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(10), dp(6), dp(10), dp(10));
+        body.setVisibility(defaultOpen ? View.VISIBLE : View.GONE);
+        card.addView(body);
+
+        hdr.setOnClickListener(v -> {
+            boolean next = body.getVisibility() != View.VISIBLE;
+            body.setVisibility(next ? View.VISIBLE : View.GONE);
+            hdr.setText((next ? "▼  " : "▶  ") + title.toUpperCase());
+        });
+        parent.addView(card, cardLp);
+        return body;
     }
 
     private void populateInspector() {
@@ -672,55 +708,52 @@ public class EditorActivity extends Activity {
             return;
         }
 
-        EditText nameEt = addLabeledEdit(inspectorContent, "Name", e.name, false);
-        EditText tagEt = addLabeledEdit(inspectorContent, "Tag (player/solid/coin/enemy/goal)", e.tag, false);
-
-        String[] prims = "3D".equalsIgnoreCase(project.dimensionMode)
-                ? new String[]{"CUBE", "SPHERE", "PYRAMID", "CYLINDER", "PLANE", "TERRAIN", "CUSTOM_OBJ"}
-                : new String[]{"RECT", "CIRCLE", "TRIANGLE", "CUSTOM_SPRITE", "SPRITE_HERO", "SPRITE_SLIME", "SPRITE_COIN", "SPRITE_SHIP"};
-        VortexMobileUi.VortexDropdown primSpin = addLabeledSpinner(inspectorContent, "Visual / Mesh", prims, e.primitive);
-
+        LinearLayout transformAcc = createMobileAccordion(inspectorContent, "Transform (Pos • Scale • Rot)", true);
         LinearLayout posRow = new LinearLayout(this);
         posRow.setOrientation(LinearLayout.HORIZONTAL);
         EditText xEt = addCompactNum(posRow, "X", e.x);
         EditText yEt = addCompactNum(posRow, "Y", e.y);
         EditText zEt = addCompactNum(posRow, "Z", e.z);
-        inspectorContent.addView(posRow);
+        transformAcc.addView(posRow);
 
         LinearLayout sclRow = new LinearLayout(this);
         sclRow.setOrientation(LinearLayout.HORIZONTAL);
         EditText sxEt = addCompactNum(sclRow, "ScaleX", e.scaleX);
         EditText syEt = addCompactNum(sclRow, "ScaleY", e.scaleY);
         EditText szEt = addCompactNum(sclRow, "ScaleZ", e.scaleZ);
-        inspectorContent.addView(sclRow);
+        transformAcc.addView(sclRow);
 
         LinearLayout rotRow = new LinearLayout(this);
         rotRow.setOrientation(LinearLayout.HORIZONTAL);
         EditText ryEt = addCompactNum(rotRow, "RotY/Z", "3D".equalsIgnoreCase(project.dimensionMode) ? e.rotY : e.rotZ);
         EditText bncEt = addCompactNum(rotRow, "Bounce", e.bounce);
         EditText frcEt = addCompactNum(rotRow, "Friction", e.friction);
-        inspectorContent.addView(rotRow);
+        transformAcc.addView(rotRow);
 
-        EditText colorEt = addLabeledEdit(inspectorContent, "Color Hex (#RRGGBB)", e.colorHex, false);
-
-        // Multi-Frame Flipbook Sprite Animation Row (2D)
-        EditText framesEt = addLabeledEdit(inspectorContent, "Sprite Flipbook Frames (e.g. knight_1,knight_2)", e.spriteFrames, false);
-        EditText animFpsEt = addLabeledEdit(inspectorContent, "Flipbook Animation FPS", String.valueOf(e.animFps), true);
-
-        String[] bodies = {"NONE", "STATIC", "DYNAMIC", "KINEMATIC"};
-        VortexMobileUi.VortexDropdown bodySpin = addLabeledSpinner(inspectorContent, "Physics Body Type", bodies, e.bodyType);
-
-        VortexMobileUi.VortexToggle triggerCb = new VortexMobileUi.VortexToggle(this, "Trigger Sensor", e.isTrigger);
-        inspectorContent.addView(triggerCb);
-
-        VortexMobileUi.VortexToggle fixedRotCb = new VortexMobileUi.VortexToggle(this, "Lock Rotation (Platformer Hero)", e.fixedRotation);
-        inspectorContent.addView(fixedRotCb);
-
+        LinearLayout renderAcc = createMobileAccordion(inspectorContent, "Rendering, Color & Sprites", true);
+        String[] prims = "3D".equalsIgnoreCase(project.dimensionMode)
+                ? new String[]{"CUBE", "SPHERE", "PYRAMID", "CYLINDER", "PLANE", "TERRAIN", "CUSTOM_OBJ"}
+                : new String[]{"RECT", "CIRCLE", "TRIANGLE", "CUSTOM_SPRITE", "SPRITE_HERO", "SPRITE_SLIME", "SPRITE_COIN", "SPRITE_SHIP"};
+        VortexMobileUi.VortexDropdown primSpin = addLabeledSpinner(renderAcc, "Visual / Mesh", prims, e.primitive);
+        EditText colorEt = addLabeledEdit(renderAcc, "Color Hex (#RRGGBB)", e.colorHex, false);
+        EditText framesEt = addLabeledEdit(renderAcc, "Sprite Flipbook Frames (e.g. knight_1,knight_2)", e.spriteFrames, false);
+        EditText animFpsEt = addLabeledEdit(renderAcc, "Flipbook Animation FPS", String.valueOf(e.animFps), true);
         VortexMobileUi.VortexToggle checkerCb = new VortexMobileUi.VortexToggle(this, "Procedural Checker Texture", e.checkerTexture);
-        inspectorContent.addView(checkerCb);
+        renderAcc.addView(checkerCb);
+        VortexMobileUi.VortexToggle glowCb = new VortexMobileUi.VortexToggle(this, "Emissive Shading", e.emissive);
+        renderAcc.addView(glowCb);
 
-        VortexMobileUi.VortexToggle glowCb = new VortexMobileUi.VortexToggle(this, "Neon Emissive Shading", e.emissive);
-        inspectorContent.addView(glowCb);
+        LinearLayout physAcc = createMobileAccordion(inspectorContent, "Physics & Collisions", false);
+        String[] bodies = {"NONE", "STATIC", "DYNAMIC", "KINEMATIC"};
+        VortexMobileUi.VortexDropdown bodySpin = addLabeledSpinner(physAcc, "Physics Body Type", bodies, e.bodyType);
+        VortexMobileUi.VortexToggle triggerCb = new VortexMobileUi.VortexToggle(this, "Trigger Sensor", e.isTrigger);
+        physAcc.addView(triggerCb);
+        VortexMobileUi.VortexToggle fixedRotCb = new VortexMobileUi.VortexToggle(this, "Lock Rotation (Platformer Hero)", e.fixedRotation);
+        physAcc.addView(fixedRotCb);
+
+        LinearLayout idAcc = createMobileAccordion(inspectorContent, "Identity & Custom Tags", false);
+        EditText nameEt = addLabeledEdit(idAcc, "Name", e.name, false);
+        EditText tagEt = addLabeledEdit(idAcc, "Tag (player/solid/coin/enemy/goal)", e.tag, false);
 
         TextView applyBtn = VortexMobileUi.makeButton(this, "✓ APPLY ENTITY CHANGES", VortexMobileUi.ButtonVariant.PRIMARY, false);
         LinearLayout.LayoutParams apLp = new LinearLayout.LayoutParams(
@@ -748,6 +781,7 @@ public class EditorActivity extends Activity {
                 e.checkerTexture = checkerCb.isChecked();
                 e.emissive = glowCb.isChecked();
             }
+            viewportSurface.requestEditorRender();
             saveProjectQuiet();
             Toast.makeText(this, "✓ Updated " + e.name, Toast.LENGTH_SHORT).show();
         });
@@ -2107,7 +2141,20 @@ public class EditorActivity extends Activity {
     }
 
     private void appendBuildLog(String msg) {
-        if (buildLogTv != null) buildLogTv.append("\n" + msg);
+        if (buildLogTv == null || msg == null) return;
+        String u = msg.toUpperCase(Locale.US);
+        int col = Color.parseColor("#FAFAFC");
+        if (u.contains("[ERROR]") || u.contains("[FAIL") || msg.contains("✕") || u.contains("EXCEPTION")) {
+            col = VortexMobileUi.C_DANGER_TX;
+        } else if (u.contains("[SUCCESS]") || u.contains("[PASS]") || msg.contains("✓") || u.contains("[DONE]")) {
+            col = VortexMobileUi.C_OK_TX;
+        } else if (u.contains("[WARN")) {
+            col = Color.parseColor("#FBBF24");
+        }
+        android.text.SpannableString span = new android.text.SpannableString("\n" + msg);
+        span.setSpan(new android.text.style.ForegroundColorSpan(col),
+                0, span.length(), android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        buildLogTv.append(span);
     }
 
     private void switchMode(String mode) {
@@ -2211,14 +2258,31 @@ public class EditorActivity extends Activity {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(0, dp(6), dp(5), 0);
+
+        LinearLayout topHdr = new LinearLayout(this);
+        topHdr.setOrientation(LinearLayout.HORIZONTAL);
+        topHdr.setGravity(Gravity.CENTER_VERTICAL);
         TextView tv = new TextView(this);
         tv.setText(label);
         tv.setTextColor(VortexMobileUi.C_TEXT_MUTED);
-        tv.setTextSize(10.5f);
-        tv.setPadding(0, 0, 0, dp(3));
-        col.addView(tv);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setTextSize(11f);
+        topHdr.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        EditText et = VortexMobileUi.createInput(this, String.format(Locale.US, "%.2f", val), true, false);
+        final EditText et = VortexMobileUi.createInput(this, String.format(Locale.US, "%.2f", val), true, false);
+        TextView minus = new TextView(this);
+        minus.setText(" ◀ ");
+        minus.setTextColor(VortexMobileUi.C_CYAN);
+        minus.setTextSize(10f);
+        minus.setOnClickListener(v -> et.setText(String.format(Locale.US, "%.2f", parseF(et, val) - 0.25f)));
+        TextView plus = new TextView(this);
+        plus.setText(" ▶ ");
+        plus.setTextColor(VortexMobileUi.C_CYAN);
+        plus.setTextSize(10f);
+        plus.setOnClickListener(v -> et.setText(String.format(Locale.US, "%.2f", parseF(et, val) + 0.25f)));
+        topHdr.addView(minus);
+        topHdr.addView(plus);
+        col.addView(topHdr);
         col.addView(et);
 
         row.addView(col, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
