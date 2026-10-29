@@ -64,7 +64,7 @@ public class MainActivity extends Activity {
         title.setSingleLine(true);
         brandRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView verChip = VortexMobileUi.makeBadge(this, "v4.8.0 STUDIO", true);
+        TextView verChip = VortexMobileUi.makeBadge(this, "v4.8.1 STUDIO", true);
         brandRow.addView(verChip);
         header.addView(brandRow);
 
@@ -91,6 +91,24 @@ public class MainActivity extends Activity {
         actionRow.addView(newBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         header.addView(actionRow);
+
+        // One-tap play: the block world is the flagship demo, so it must not hide in a dropdown.
+        TextView playVoxel = VortexMobileUi.makeButton(this,
+                "▶  PLAY BLOCKFALL  ·  3D VOXEL", VortexMobileUi.ButtonVariant.PRIMARY, false);
+        playVoxel.setOnClickListener(v -> launchBlockfall(false));
+        LinearLayout.LayoutParams pvLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        pvLp.topMargin = dp(8);
+        header.addView(playVoxel, pvLp);
+
+        TextView editVoxel = VortexMobileUi.makeButton(this,
+                "Open Blockfall in the editor", VortexMobileUi.ButtonVariant.SECONDARY, true);
+        editVoxel.setOnClickListener(v -> launchBlockfall(true));
+        LinearLayout.LayoutParams evLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        evLp.topMargin = dp(6);
+        header.addView(editVoxel, evLp);
+
         root.addView(header);
 
         // ============================================================
@@ -331,6 +349,30 @@ public class MainActivity extends Activity {
             VortexMobileUi.animateEntrance(card, Math.min(idx * 22L, 160L));
             idx++;
         }
+    }
+
+    /**
+     * Opens (or creates) the Blockfall voxel game. {@code inEditor == false} jumps straight into
+     * play mode, which is what a player wants to see; {@code true} opens the scene/code editor.
+     */
+    private void launchBlockfall(boolean inEditor) {
+        GameProject target = null;
+        for (GameProject p : ProjectRepository.listProjects(this)) {
+            if (p != null && p.voxelEnabled) { target = p; break; }
+        }
+        if (target == null) {
+            target = ProjectRepository.createTemplate("MINECRAFT_3D", "Blockfall",
+                    "com.vortex.game.blockfall");
+            ProjectRepository.saveProject(this, target);
+            toastMessage("Blockfall created — walk with the joystick, tap to mine, long-press to build");
+        }
+        openEditor(target.id, inEditor ? "SCENE" : "PLAY");
+    }
+
+    private void toastMessage(String msg) {
+        try {
+            android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show();
+        } catch (Throwable ignored) { }
     }
 
     private void openEditor(String projectId, String initialTab) {

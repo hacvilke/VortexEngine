@@ -232,7 +232,7 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio(boolean checkStartupDependencies) {
-        super("Vortex Engine Studio v4.8.0 — Voxel Worlds • Tile Maps • Prefabs • In-App Docs • Forge AI Chat");
+        super("Vortex Engine Studio v4.8.1 — Voxel Worlds • Tile Maps • Prefabs • In-App Docs • Forge AI Chat");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         // Laptop-aware sizing: fit cleanly inside 1280x720 / 1366x768 / 1536x864 / 1440x900 screens!
@@ -604,6 +604,12 @@ public class VortexDesktopStudio extends JFrame {
         telemetryLabel.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 4));
         right.add(telemetryLabel);
 
+        DesktopUiKit.VortexButton blockfallBtn = new DesktopUiKit.VortexButton(
+                "Blockfall", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.CUBE);
+        blockfallBtn.setToolTipText("Open the 3D voxel game (Blockfall) and play it — WASD, SPACE, LMB mine, RMB build");
+        blockfallBtn.addActionListener(e -> launchBlockfall(true));
+        right.add(blockfallBtn);
+
         playStopBtn = new DesktopUiKit.VortexButton("Play", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.PLAY);
         playStopBtn.setToolTipText("Play / Stop the game (F5)");
         playStopBtn.addActionListener(e -> togglePlayMode());
@@ -674,6 +680,25 @@ public class VortexDesktopStudio extends JFrame {
         items.add(new DesktopUiKit.MenuAction("Clone Selected Entity", this::cloneSelectedEntity));
         items.add(new DesktopUiKit.MenuAction("Delete Selected Entity", this::deleteSelectedEntity));
         return items;
+    }
+
+    /**
+     * One-tap access to the flagship voxel game: creates Blockfall (or reloads the open voxel
+     * project) and optionally drops straight into Play Mode. Without this the game hides inside
+     * the template dropdown, which is exactly where people stop looking for it.
+     */
+    private void launchBlockfall(boolean playNow) {
+        GameProject vox = project;
+        if (vox == null || !vox.voxelEnabled) {
+            vox = ProjectTemplates.create("MINECRAFT_3D", "Blockfall", "com.vortex.game.blockfall");
+            currentProjectFile = null;
+            loadProjectIntoStudio(vox);
+            log("Created 'Blockfall' — a 3D voxel world (mine with LMB, build with RMB, F to fly).");
+        }
+        if (playNow && !viewport.isPlaying()) togglePlayMode();
+        if (playNow) {
+            log("PLAYING Blockfall • WASD walk • SPACE jump • F fly • LMB mine • RMB build • 1-9 pick block");
+        }
     }
 
     private List<DesktopUiKit.MenuAction> buildCreateMenuItems() {
@@ -930,6 +955,9 @@ public class VortexDesktopStudio extends JFrame {
 
     private List<DesktopUiKit.MenuAction> buildHelpMenuItems() {
         List<DesktopUiKit.MenuAction> items = new ArrayList<>();
+        items.add(new DesktopUiKit.MenuAction("Play Blockfall (3D Voxel Game)", () -> launchBlockfall(true)));
+        items.add(new DesktopUiKit.MenuAction("Open Blockfall in the Editor", () -> launchBlockfall(false)));
+        items.add(new DesktopUiKit.MenuAction("---", null));
         items.add(new DesktopUiKit.MenuAction("Docs & Getting Started…", this::showDocsBrowser));
         items.add(new DesktopUiKit.MenuAction("How do I…? (ask the docs)", this::askDocsQuestion));
         items.add(new DesktopUiKit.MenuAction("Voxel World Guide", () -> showDocsTopic("voxel")));
@@ -940,8 +968,8 @@ public class VortexDesktopStudio extends JFrame {
                 "Physics",
                 "2D: JBox2D rigid bodies (CCD bullets)\n3D: substepped impulse solver + terrain\nLayers: collisionLayer / collisionMask")));
         items.add(new DesktopUiKit.MenuAction("---", null));
-        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.8.0", () -> DesktopUiKit.showInfoModal(this,
-                "Vortex Engine Studio v4.8.0",
+        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.8.1", () -> DesktopUiKit.showInfoModal(this,
+                "Vortex Engine Studio v4.8.1",
                 "Free & open-source 2D/3D game engine\nWindows • Linux • Android • Web")));
         return items;
     }
@@ -1368,7 +1396,7 @@ public class VortexDesktopStudio extends JFrame {
         headerBar.add(rightBar, BorderLayout.EAST);
         bottomWrapperPanel.add(headerBar, BorderLayout.NORTH);
 
-        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.8.0 Desktop Studio Ready.");
+        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.8.1 Desktop Studio Ready.");
 
         JScrollPane consoleScroll = DesktopUiKit.createScrollPane(consoleArea);
         bottomDeck.addCard("CONSOLE", consoleScroll, 0);
@@ -4289,7 +4317,7 @@ public class VortexDesktopStudio extends JFrame {
     // Headless Verification Suite (Java VM + ES6 JS + Lua + LRM + Forge + UI)
     // =========================================================================
     private static void runHeadlessSelfTests() throws Exception {
-        System.out.println("=== Vortex Engine v4.8.0 Headless Verification Suite ===");
+        System.out.println("=== Vortex Engine v4.8.1 Headless Verification Suite ===");
 
         // 1) Zero-Blue Monochrome Palette + Laptop UI Scale Verification
         Color[] uiColors = {
@@ -4761,6 +4789,6 @@ public class VortexDesktopStudio extends JFrame {
         tmpExe.delete();
         tmpZip.delete();
 
-        System.out.println("=== ALL VORTEX v4.8.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
+        System.out.println("=== ALL VORTEX v4.8.1 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
     }
 }

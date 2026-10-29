@@ -1,4 +1,4 @@
-# Vortex Engine Studio — v4.8.0 ("Blockfall Edition")
+# Vortex Engine Studio — v4.8.1 ("Blockfall Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 

@@ -20,7 +20,11 @@ No installer, no account, no internet needed.
 
 ## 2. Make a project
 
-`File ▸ New Project…` → pick a starter → **Create**.
+**Fastest path to the block game:** press the **Blockfall** button in the top toolbar (desktop) or
+**▶ PLAY BLOCKFALL** on the Android home screen. That is the 3D voxel game, already set up and
+running — nothing to configure.
+
+Otherwise: `File ▸ New Project…` → pick a starter → **Create**.
 
 | Starter | What it teaches |
 |---|---|
