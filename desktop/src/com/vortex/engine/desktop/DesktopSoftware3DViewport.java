@@ -1,6 +1,10 @@
 package com.vortex.engine.desktop;
 
 import com.vortex.engine.core.model.Entity;
+import com.vortex.engine.core.voxel.BlockType;
+import com.vortex.engine.core.voxel.VoxelPlayer;
+import com.vortex.engine.core.voxel.VoxelRuntime;
+import com.vortex.engine.core.voxel.VoxelWorld;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.model.PixelSpriteCodec;
 import com.vortex.engine.core.noise.FastNoiseLite;
@@ -88,8 +92,22 @@ public class DesktopSoftware3DViewport extends JPanel {
             "#2E3138", "#C9A227", "#B04A4A", "#DDD8CE", "#7A6B8C", "#46695C"
     };
     private int hoverCellX = Integer.MIN_VALUE, hoverCellY = Integer.MIN_VALUE;
+    // v4.8.0 voxel editing
+    private int voxelBrushId = BlockType.GRASS;
+    private VoxelWorld.RayHit voxelHover = null;
+    private static final float NEAR_PLANE = 0.12f;
+    /** Faces wider than this many blocks are split so the painter sort cannot go wrong. */
+    private static final float VOXEL_SPLIT = 14f;
+    /** Outline stroke used to close T-junction cracks between merged voxel quads. */
+    private static final BasicStroke SEAM_STROKE = new BasicStroke(2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER);
+    private final java.util.ArrayList<VoxelQuad> vq = new java.util.ArrayList<>();
+    // last camera basis used by paint3DScene, so mouse picking can rebuild the same ray
+    private final float[] camState = new float[13];
     /** Set by the studio so tile painting can refresh the hierarchy + inspector. */
     private Runnable onSceneChanged;
+    /** Called when the middle-click eyedropper picks a new block (studio highlights it). */
+    private Runnable onVoxelBrushPicked;
+    public void setOnVoxelBrushPicked(Runnable r) { this.onVoxelBrushPicked = r; }
     private boolean playing = false;
     private String selectedEntityId = null;
     private ViewportListener listener;
@@ -249,6 +267,9 @@ public class DesktopSoftware3DViewport extends JPanel {
     public void setTilePaintLayer(String layer) { if (layer != null && !layer.trim().isEmpty()) this.tilePaintLayer = layer.trim(); }
     public boolean isTilePaintSolid() { return tilePaintSolid; }
     public void setTilePaintSolid(boolean solid) { this.tilePaintSolid = solid; repaint(); }
+    public int getVoxelBrushId() { return voxelBrushId; }
+    public void setVoxelBrushId(int id) { this.voxelBrushId = id; repaint(); }
+
     public boolean isShowColliders() { return showColliders; }
     public void setShowColliders(boolean show) { this.showColliders = show; repaint(); }
 
@@ -266,6 +287,27 @@ public class DesktopSoftware3DViewport extends JPanel {
                 requestFocusInWindow();
                 lastMouse = e.getPoint();
                 if (playing) {
+                    if (activeProject != null && activeProject.voxelEnabled) {
+                        // Voxel playtest: left click breaks, right click places.
+                        VoxelRuntime rt = activeProject.ensureVoxelRuntime();
+                        if (SwingUtilities.isLeftMouseButton(e)) {
+                            int broken = rt.breakTargeted();
+                            if (broken != BlockType.AIR) {
+                                emitVoxelParticles(broken, rt.player);
+                                scriptEngine.notifyVoxelEvent(true, BlockType.name(broken));
+                            }
+                        } else if (SwingUtilities.isRightMouseButton(e)) {
+                            if (rt.placeTargeted(rt.player.selectedBlock)) {
+                                scriptEngine.notifyVoxelEvent(false, BlockType.name(rt.player.selectedBlock));
+                            }
+                        } else if (SwingUtilities.isMiddleMouseButton(e)) {
+                            VoxelWorld.RayHit h = rt.player.target(rt.world);
+                            if (h != null && h.blockId != BlockType.WATER) rt.player.selectHotbar(
+                                    indexOfHotbar(rt.player, h.blockId));
+                        }
+                        repaint();
+                        return;
+                    }
                     if (SwingUtilities.isLeftMouseButton(e)) {
                         scriptEngine.inputBtnA = true;
                         scriptEngine.notifyButton("A");
@@ -274,6 +316,22 @@ public class DesktopSoftware3DViewport extends JPanel {
                         scriptEngine.notifyButton("B");
                     }
                     return;
+                }
+                if (activeProject != null && activeProject.voxelEnabled && "3D".equalsIgnoreCase(activeProject.dimensionMode)) {
+                    if (SwingUtilities.isLeftMouseButton(e) || SwingUtilities.isRightMouseButton(e)) {
+                        handleVoxelEditorClick(e.getX(), e.getY(), SwingUtilities.isRightMouseButton(e));
+                        return;
+                    }
+                    if (SwingUtilities.isMiddleMouseButton(e)) {
+                        float[] ray = rayFromScreen(e.getX(), e.getY());
+                        VoxelRuntime rt = activeProject.ensureVoxelRuntime();
+                        VoxelWorld.RayHit h = rt.world.raycast(ray[0], ray[1], ray[2], ray[3], ray[4], ray[5], 120f);
+                        if (h != null && h.blockId != BlockType.WATER) {
+                            voxelBrushId = h.blockId;
+                            if (onVoxelBrushPicked != null) onVoxelBrushPicked.run();
+                        }
+                        return;
+                    }
                 }
                 if (tilePaintMode && activeProject != null && "2D".equalsIgnoreCase(activeProject.dimensionMode)) {
                     if (handleTilePaletteClick(e.getX(), e.getY())) return;
@@ -315,7 +373,16 @@ public class DesktopSoftware3DViewport extends JPanel {
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (lastMouse == null || activeProject == null || playing) return;
+                if (lastMouse == null || activeProject == null || playing) {
+                    if (playing && activeProject != null && activeProject.voxelEnabled && lastMouse != null) {
+                        VoxelPlayer vp = activeProject.ensureVoxelRuntime().player;
+                        vp.yawDeg += (e.getX() - lastMouse.x) * 0.28f;
+                        vp.pitchDeg = Math.max(-85f, Math.min(85f, vp.pitchDeg - (e.getY() - lastMouse.y) * 0.22f));
+                        lastMouse = e.getPoint();
+                        repaint();
+                    }
+                    return;
+                }
                 if (tilePaintMode && "2D".equalsIgnoreCase(activeProject.dimensionMode)) {
                     hoverCellX = cellX(e.getX());
                     hoverCellY = cellY(e.getY());
@@ -396,6 +463,26 @@ public class DesktopSoftware3DViewport extends JPanel {
                 int code = e.getKeyCode();
                 boolean fresh = heldKeys.add(code);
                 syncKeyboardAxes();
+                if (activeProject != null && activeProject.voxelEnabled && fresh) {
+                    VoxelPlayer vp = activeProject.ensureVoxelRuntime().player;
+                    if (code == KeyEvent.VK_F) {
+                        vp.flying = !vp.flying;
+                        if (listener != null) listener.onLog(vp.flying ? "Fly mode ON" : "Fly mode OFF");
+                    } else if (code >= KeyEvent.VK_1 && code <= KeyEvent.VK_9) {
+                        int slot = code - KeyEvent.VK_1;
+                        if (playing) {
+                            vp.selectHotbar(slot);
+                        } else {
+                            int[] ids = BlockType.hotbarIds();
+                            if (slot < ids.length) {
+                                voxelBrushId = ids[slot];
+                                if (onVoxelBrushPicked != null) onVoxelBrushPicked.run();
+                            }
+                        }
+                    } else if (code == KeyEvent.VK_B && playing) {
+                        vp.cycleHotbar(1);
+                    }
+                }
                 if (playing && fresh) {
                     if (code == KeyEvent.VK_SPACE || code == KeyEvent.VK_J || code == KeyEvent.VK_Z) {
                         scriptEngine.inputBtnA = true;
@@ -431,6 +518,19 @@ public class DesktopSoftware3DViewport extends JPanel {
         scriptEngine.inputJoyY = jy;
     }
 
+    private static int indexOfHotbar(VoxelPlayer vp, int blockId) {
+        int[] ids = vp.hotbar();
+        for (int i = 0; i < ids.length; i++) if (ids[i] == blockId) return i;
+        return 0;
+    }
+
+    private void emitVoxelParticles(int blockId, VoxelPlayer vp) {
+        int argb = BlockType.color(blockId);
+        String hex = String.format("#%02X%02X%02X", (argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
+        emitParticles(vp.eyeX() + vp.dirX() * 2f, vp.eyeY() + vp.dirY() * 2f, vp.eyeZ() + vp.dirZ() * 2f,
+                10, hex, true);
+    }
+
     private void tickAndRepaint() {
         if (!playing || activeProject == null) {
             if (frameTimer.isRunning()) frameTimer.stop();
@@ -452,6 +552,16 @@ public class DesktopSoftware3DViewport extends JPanel {
         }
 
         syncKeyboardAxes();
+        if (activeProject.voxelEnabled) {
+            VoxelRuntime rt = activeProject.ensureVoxelRuntime();
+            VoxelPlayer vp = rt.player;
+            vp.update(rt.world, dt,
+                    scriptEngine.inputJoyY, scriptEngine.inputJoyX,
+                    heldKeys.contains(KeyEvent.VK_SPACE) || heldKeys.contains(KeyEvent.VK_J),
+                    heldKeys.contains(KeyEvent.VK_CONTROL),
+                    heldKeys.contains(KeyEvent.VK_SHIFT));
+            voxelHover = vp.target(rt.world);
+        }
         scriptEngine.update(dt);
         List<PhysicsWorld.CollisionEvent> cols = physicsWorld.step(activeProject, dt);
         for (PhysicsWorld.CollisionEvent ce : cols) {
@@ -649,7 +759,25 @@ public class DesktopSoftware3DViewport extends JPanel {
 
     private void paint3DScene(Graphics2D g2, GameProject p, int w, int h) {
         float camX, camY, camZ, lookX, lookY, lookZ;
-        if (!playing) {
+        VoxelPlayer vp = p.voxelEnabled ? p.ensureVoxelRuntime().player : null;
+        if (vp != null && playing) {
+            // Minecraft-style first person: eye height, head bob, free look.
+            camX = vp.eyeX();
+            camY = vp.eyeY() + vp.bobOffset();
+            camZ = vp.eyeZ();
+            lookX = camX + vp.dirX();
+            lookY = camY + vp.dirY();
+            lookZ = camZ + vp.dirZ();
+        } else if (!playing && vp != null) {
+            // Editor camera orbits the player so the world stays framed while you build.
+            double yaw = Math.toRadians(editorYawDeg);
+            double pitch = Math.toRadians(Math.max(6f, editorPitchDeg));
+            float horiz = (float) (Math.cos(pitch) * editorDist);
+            camX = vp.x + (float) (Math.sin(yaw) * horiz);
+            camY = vp.y + 1.2f + (float) (Math.sin(pitch) * editorDist);
+            camZ = vp.z + (float) (Math.cos(yaw) * horiz);
+            lookX = vp.x; lookY = vp.y + 1.0f; lookZ = vp.z;
+        } else if (!playing) {
             double yaw = Math.toRadians(editorYawDeg);
             double pitch = Math.toRadians(editorPitchDeg);
             float horiz = (float) (Math.cos(pitch) * editorDist);
@@ -700,7 +828,7 @@ public class DesktopSoftware3DViewport extends JPanel {
         float halfH = h * 0.5f;
         float halfW = w * 0.5f;
 
-        if (!playing || p.showGrid) {
+        if ((!playing || p.showGrid) && !p.voxelEnabled) {
             g2.setStroke(new BasicStroke(1f));
             for (int i = -20; i <= 20; i += 2) {
                 g2.setColor(i == 0 ? new Color(235, 235, 240, 125) : new Color(62, 62, 70, 75));
@@ -711,6 +839,10 @@ public class DesktopSoftware3DViewport extends JPanel {
 
         triBuffer.clear();
         Color skyCol = toAwtColor(p.skyColorHex, 255);
+
+        if (p.voxelEnabled) {
+            paintVoxelWorld(g2, p, w, h, camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH, skyCol);
+        }
 
         for (Entity e : p.entities) {
             if (!e.alive || !e.visible) continue;
@@ -733,6 +865,11 @@ public class DesktopSoftware3DViewport extends JPanel {
                 g2.setColor(t.edge);
                 g2.draw(poly);
             }
+        }
+
+        if (p.voxelEnabled) {
+            paintVoxelTargetHighlight(g2, p, camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH);
+            if (playing) paintVoxelHotbar(g2, p, w, h);
         }
 
         // Soft contact shadows: a cheap projected blob under every solid, offset away from the sun.
@@ -796,6 +933,307 @@ public class DesktopSoftware3DViewport extends JPanel {
                 g2.setColor(pt.color);
                 g2.fillOval(Math.round(pr[0]) - sz / 2, Math.round(pr[1]) - sz / 2, sz, sz);
             }
+        }
+    }
+
+    // ------------------------------------------------------------------ voxel world (v4.8.0)
+
+    /**
+     * Submits the visible block surface. Faces are already merged/greedy-meshed by the voxel core,
+     * grouped per block type, and back-face culled against the camera before projection so the
+     * software rasteriser only ever sorts what can actually be seen.
+     */
+    /** Minecraft-style hotbar + crosshair, drawn only while playing a voxel project. */
+    private void paintVoxelHotbar(Graphics2D g2, GameProject p, int w, int h) {
+        VoxelPlayer vp = p.ensureVoxelRuntime().player;
+        int[] ids = vp.hotbar();
+        int slot = 34, gap = 6;
+        int total = ids.length * slot + (ids.length - 1) * gap;
+        int x0 = (w - total) / 2;
+        int y0 = h - slot - 18;
+        g2.setColor(new Color(14, 14, 17, 190));
+        g2.fillRoundRect(x0 - 8, y0 - 8, total + 16, slot + 16, 10, 10);
+        g2.setStroke(new BasicStroke(1f));
+        g2.setColor(new Color(120, 120, 128, 170));
+        g2.drawRoundRect(x0 - 8, y0 - 8, total + 16, slot + 16, 10, 10);
+        for (int i = 0; i < ids.length; i++) {
+            int sx = x0 + i * (slot + gap);
+            int argb = BlockType.color(ids[i]);
+            g2.setColor(new Color((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF));
+            g2.fillRoundRect(sx, y0, slot, slot, 6, 6);
+            g2.setColor(i == vp.hotbarIndex ? Color.WHITE : new Color(0, 0, 0, 110));
+            g2.setStroke(new BasicStroke(i == vp.hotbarIndex ? 2.4f : 1f));
+            g2.drawRoundRect(sx, y0, slot, slot, 6, 6);
+        }
+        // crosshair
+        int cx = w / 2, cy = h / 2;
+        g2.setColor(new Color(255, 255, 255, 200));
+        g2.setStroke(new BasicStroke(1.6f));
+        g2.drawLine(cx - 9, cy, cx - 3, cy);
+        g2.drawLine(cx + 3, cy, cx + 9, cy);
+        g2.drawLine(cx, cy - 9, cx, cy - 3);
+        g2.drawLine(cx, cy + 3, cx, cy + 9);
+        // hint line
+        String hint = BlockType.name(vp.selectedBlock) + "  •  WASD move  •  SPACE jump  •  F fly  •  LMB break  •  RMB place  •  1-9 pick";
+        g2.setFont(getFont() == null ? new Font("SansSerif", Font.PLAIN, 11) : getFont().deriveFont(Font.PLAIN, 11f));
+        int tw = g2.getFontMetrics().stringWidth(hint);
+        g2.setColor(new Color(14, 14, 17, 200));
+        g2.fillRoundRect((w - tw) / 2 - 8, y0 - 34, tw + 16, 22, 7, 7);
+        g2.setColor(new Color(232, 232, 238));
+        g2.drawString(hint, (w - tw) / 2, y0 - 19);
+    }
+
+    /** Camera-space (view-space) coordinates: x right, y up, z forward. */
+    private float[] toView(float wx, float wy, float wz, float camX, float camY, float camZ,
+                           float rx, float ry, float rz, float ux, float uy, float uz,
+                           float fx, float fy, float fz) {
+        float dx = wx - camX, dy = wy - camY, dz = wz - camZ;
+        return new float[]{
+                dx * rx + dy * ry + dz * rz,
+                dx * ux + dy * uy + dz * uz,
+                dx * fx + dy * fy + dz * fz
+        };
+    }
+
+    /**
+     * Sutherland–Hodgman clip of a camera-space polygon against z >= near.
+     * Without this, any triangle that crosses the near plane (the ground right at the player's
+     * feet, a wall you are touching) projects to gigantic screen coordinates and smears across
+     * the frame — the classic "huge wedge" voxel artefact.
+     */
+    private static java.util.List<float[]> clipNear(java.util.List<float[]> poly, float near) {
+        java.util.List<float[]> out = new java.util.ArrayList<>(4);
+        int n = poly.size();
+        for (int i = 0; i < n; i++) {
+            float[] a = poly.get(i);
+            float[] b = poly.get((i + 1) % n);
+            boolean aIn = a[2] >= near;
+            boolean bIn = b[2] >= near;
+            if (aIn) out.add(a);
+            if (aIn != bIn) {
+                float t = (near - a[2]) / (b[2] - a[2]);
+                out.add(new float[]{
+                        a[0] + (b[0] - a[0]) * t,
+                        a[1] + (b[1] - a[1]) * t,
+                        near
+                });
+            }
+        }
+        return out;
+    }
+
+    /** Projects a clipped camera-space vertex to screen space. */
+    private static float[] viewToScreen(float[] v, float fovScale, float halfW, float halfH) {
+        float cz = Math.max(0.05f, v[2]);
+        return new float[]{halfW + (v[0] / cz) * fovScale * halfH, halfH - (v[1] / cz) * fovScale * halfH, cz};
+    }
+
+    /**
+     * Voxel world pass (v4.8.0).
+     *
+     * Sorted-quad painter's algorithm with near-plane clipping and large-face subdivision:
+     *  - greedy quads are split into bars of at most {@link #VOXEL_SPLIT} blocks so sorting by
+     *    centroid depth stays correct (a 90-block ground quad cannot be sorted reliably),
+     *  - polygons crossing the near plane are clipped in camera space (otherwise the ground at your
+     *    feet projects to coordinates in the millions and smears across the screen),
+     *  - faces are back-face culled against the eye and lit with the project's light rig + fog.
+     */
+    private void paintVoxelWorld(Graphics2D g2, GameProject p, int w, int h,
+                                 float camX, float camY, float camZ,
+                                 float rx, float ry, float rz, float ux, float uy, float uz,
+                                 float fx, float fy, float fz,
+                                 float fovScale, float halfW, float halfH, Color skyCol) {
+        VoxelRuntime rt = p.ensureVoxelRuntime();
+        java.util.List<VoxelWorld.Quad> quads = rt.quads();
+        if (quads == null || quads.isEmpty()) return;
+
+        float lYaw = (float) Math.toRadians(p.sunYawDeg);
+        float lPitch = (float) Math.toRadians(p.sunPitchDeg);
+        float lx = (float) (Math.sin(lYaw) * Math.cos(lPitch));
+        float ly = (float) Math.sin(lPitch);
+        float lz = (float) (Math.cos(lYaw) * Math.cos(lPitch));
+        float ll = (float) Math.sqrt(lx * lx + ly * ly + lz * lz);
+        if (ll > 1e-5f) { lx /= ll; ly /= ll; lz /= ll; }
+        float sunI = Math.max(0f, Math.min(2f, p.sunIntensity));
+        float amb = Math.max(0f, Math.min(0.95f, p.ambientStrength));
+        Color sunCol = toAwtColor(p.sunColorHex, 255);
+        float maxDist = p.fogFar > 1f ? p.fogFar * 1.08f : 150f;
+        float maxDist2 = maxDist * maxDist;
+
+        vq.clear();
+        for (int qi = 0; qi < quads.size(); qi++) {
+            VoxelWorld.Quad q = quads.get(qi);
+            float[] v = q.vertices;
+            // Back-face cull using the quad's own vertices (not the centroid: for a huge ground
+            // quad the centroid can be behind the player even when the face is visible).
+            float cx0 = (v[0] + v[6]) * 0.5f, cy0 = (v[1] + v[7]) * 0.5f, cz0 = (v[2] + v[8]) * 0.5f;
+            if (q.nx * (camX - cx0) + q.ny * (camY - cy0) + q.nz * (camZ - cz0) <= 0f) continue;
+
+            float dcx = cx0 - camX, dcy = cy0 - camY, dcz = cz0 - camZ;
+            if (dcx * dcx + dcy * dcy + dcz * dcz > maxDist2) continue;
+
+            int argb = BlockType.color(q.blockId);
+            if ((argb >>> 24) == 0) continue;
+            boolean emissive = BlockType.isEmissive(q.blockId);
+            float wrap = Math.max(0f, ((q.nx * lx + q.ny * ly + q.nz * lz) + 0.32f) / 1.32f);
+            float skyFill = 0.5f + 0.5f * q.ny;
+            float shade = emissive ? 1.05f : amb * (0.74f + 0.26f * skyFill) + wrap * sunI * 0.92f + 0.05f;
+            shade = Math.max(0.12f, Math.min(1.85f, shade));
+            int r = Math.round(((argb >> 16) & 0xFF) * shade);
+            int gg = Math.round(((argb >> 8) & 0xFF) * shade);
+            int b = Math.round((argb & 0xFF) * shade);
+            if (!emissive) {
+                float litMix = Math.min(0.30f, wrap * sunI * 0.26f);
+                r = Math.round(r * (1f - litMix) + sunCol.getRed() * litMix);
+                gg = Math.round(gg * (1f - litMix) + sunCol.getGreen() * litMix);
+                b = Math.round(b * (1f - litMix) + sunCol.getBlue() * litMix);
+                float coolMix = Math.min(0.16f, (1f - wrap) * 0.16f);
+                r = Math.round(r * (1f - coolMix) + 26 * coolMix);
+                gg = Math.round(gg * (1f - coolMix) + 30 * coolMix);
+                b = Math.round(b * (1f - coolMix) + 42 * coolMix);
+            }
+            // Fog blends distant blocks into the sky so the world edge is never a hard line.
+            float dist = (float) Math.sqrt(dcx * dcx + dcy * dcy + dcz * dcz);
+            if (p.fogFar > p.fogNear && dist > p.fogNear) {
+                float ft = Math.min(0.92f, (dist - p.fogNear) / Math.max(1f, p.fogFar - p.fogNear));
+                r = Math.round(r * (1f - ft) + skyCol.getRed() * ft);
+                gg = Math.round(gg * (1f - ft) + skyCol.getGreen() * ft);
+                b = Math.round(b * (1f - ft) + skyCol.getBlue() * ft);
+            }
+            Color fill = new Color(Math.min(255, r), Math.min(255, gg), Math.min(255, b));
+
+            // Split very wide faces so painter sorting stays correct.
+            float ex = Math.abs(v[6] - v[0]), ey = Math.abs(v[7] - v[1]), ez = Math.abs(v[8] - v[2]);
+            float extent = Math.max(ex, Math.max(ey, ez));
+            int bars = extent > VOXEL_SPLIT ? Math.min(12, (int) Math.ceil(extent / VOXEL_SPLIT)) : 1;
+
+            float[][] corners = {
+                    {v[0], v[1], v[2]}, {v[3], v[4], v[5]}, {v[6], v[7], v[8]}, {v[9], v[10], v[11]}
+            };
+            for (int bar = 0; bar < bars; bar++) {
+                float t0 = bar / (float) bars, t1 = (bar + 1) / (float) bars;
+                float[] e0 = lerp3(corners[0], corners[1], t0);
+                float[] e1 = lerp3(corners[0], corners[1], t1);
+                float[] e2 = lerp3(corners[3], corners[2], t1);
+                float[] e3 = lerp3(corners[3], corners[2], t0);
+                float[] view0 = toView(e0[0], e0[1], e0[2], camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz);
+                float[] view1 = toView(e1[0], e1[1], e1[2], camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz);
+                float[] view2 = toView(e2[0], e2[1], e2[2], camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz);
+                float[] view3 = toView(e3[0], e3[1], e3[2], camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz);
+                if (view0[2] < NEAR_PLANE && view1[2] < NEAR_PLANE && view2[2] < NEAR_PLANE && view3[2] < NEAR_PLANE) continue;
+
+                java.util.List<float[]> poly = new java.util.ArrayList<>(4);
+                poly.add(view0); poly.add(view1); poly.add(view2); poly.add(view3);
+                if (!(view0[2] >= NEAR_PLANE && view1[2] >= NEAR_PLANE
+                        && view2[2] >= NEAR_PLANE && view3[2] >= NEAR_PLANE)) {
+                    poly = clipNear(poly, NEAR_PLANE);
+                }
+                if (poly.size() < 3) continue;
+
+                float depth = (view0[2] + view1[2] + view2[2] + view3[2]) * 0.25f;
+                VoxelQuad vd = new VoxelQuad();
+                vd.depth = depth;
+                vd.fill = fill;
+                vd.points = new float[poly.size() * 2];
+                for (int k = 0; k < poly.size(); k++) {
+                    float[] sv = viewToScreen(poly.get(k), fovScale, halfW, halfH);
+                    vd.points[k * 2] = sv[0];
+                    vd.points[k * 2 + 1] = sv[1];
+                }
+                vq.add(vd);
+            }
+        }
+
+        java.util.Collections.sort(vq);
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+        for (int i = 0; i < vq.size(); i++) {
+            VoxelQuad vd = vq.get(i);
+            int n = vd.points.length / 2;
+            int[] xs = new int[n];
+            int[] ys = new int[n];
+            for (int k = 0; k < n; k++) {
+                xs[k] = Math.round(vd.points[k * 2]);
+                ys[k] = Math.round(vd.points[k * 2 + 1]);
+            }
+            g2.setColor(vd.fill);
+            g2.fillPolygon(xs, ys, n);
+            g2.setStroke(SEAM_STROKE);
+            // Stroke the same outline: adjacent merged quads round their shared edge to different
+            // pixels, which leaves hairline gaps of sky colour ("seams") without this.
+            g2.drawPolygon(xs, ys, n);
+        }
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    }
+
+    private static float[] lerp3(float[] a, float[] b, float t) {
+        return new float[]{a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t};
+    }
+
+    /** Depth-sorted screen polygon for the voxel pass (farthest drawn first). */
+    private static final class VoxelQuad implements Comparable<VoxelQuad> {
+        float depth;
+        Color fill;
+        float[] points;
+
+        @Override
+        public int compareTo(VoxelQuad o) {
+            return Float.compare(o.depth, depth);
+        }
+    }
+
+    /** Outline of the block under the cursor / crosshair, drawn after the depth-sorted triangles. */
+    /** Editor voxel editing: LMB breaks the block under the cursor, RMB places the selected block. */
+    private void handleVoxelEditorClick(int sx, int sy, boolean place) {
+        if (activeProject == null || playing) return;
+        float[] ray = rayFromScreen(sx, sy);
+        VoxelRuntime rt = activeProject.ensureVoxelRuntime();
+        VoxelWorld.RayHit hit = rt.world.raycast(ray[0], ray[1], ray[2], ray[3], ray[4], ray[5], 160f);
+        voxelHover = hit;
+        if (hit == null) { repaint(); return; }
+        if (place) {
+            rt.placeAt(hit.px, hit.py, hit.pz, voxelBrushId);
+        } else {
+            rt.breakAt(hit.x, hit.y, hit.z);
+        }
+        if (onSceneChanged != null) onSceneChanged.run();
+        repaint();
+    }
+
+    /** Converts a screen point into a world-space look ray using the last painted camera. */
+    private float[] rayFromScreen(int sx, int sy) {
+        float fovScale = camState[12] <= 0f ? 1.73f : camState[12];
+        float aspect = getWidth() / Math.max(1f, (float) getHeight());
+        float nx = (sx / Math.max(1f, (float) getWidth())) * 2f - 1f;
+        float ny = 1f - (sy / Math.max(1f, (float) getHeight())) * 2f;
+        float tanHalf = 1f / fovScale;
+        float dx = camState[9] + camState[3] * nx * tanHalf * aspect + camState[6] * ny * tanHalf;
+        float dy = camState[10] + camState[4] * nx * tanHalf * aspect + camState[7] * ny * tanHalf;
+        float dz = camState[11] + camState[5] * nx * tanHalf * aspect + camState[8] * ny * tanHalf;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 1e-5f) len = 1f;
+        return new float[]{camState[0], camState[1], camState[2], dx / len, dy / len, dz / len};
+    }
+
+    private void paintVoxelTargetHighlight(Graphics2D g2, GameProject p,
+                                           float camX, float camY, float camZ,
+                                           float rx, float ry, float rz, float ux, float uy, float uz,
+                                           float fx, float fy, float fz,
+                                           float fovScale, float halfW, float halfH) {
+        VoxelWorld.RayHit hit = voxelHover;
+        if (hit == null) return;
+        float pad = 0.004f;
+        float x0 = hit.x - pad, y0 = hit.y - pad, z0 = hit.z - pad;
+        float x1 = hit.x + 1 + pad, y1 = hit.y + 1 + pad, z1 = hit.z + 1 + pad;
+        float[][] edges = {
+                {x0, y0, z0, x1, y0, z0}, {x1, y0, z0, x1, y0, z1}, {x1, y0, z1, x0, y0, z1}, {x0, y0, z1, x0, y0, z0},
+                {x0, y1, z0, x1, y1, z0}, {x1, y1, z0, x1, y1, z1}, {x1, y1, z1, x0, y1, z1}, {x0, y1, z1, x0, y1, z0},
+                {x0, y0, z0, x0, y1, z0}, {x1, y0, z0, x1, y1, z0}, {x1, y0, z1, x1, y1, z1}, {x0, y0, z1, x0, y1, z1}
+        };
+        g2.setColor(new Color(255, 255, 255, 210));
+        g2.setStroke(new BasicStroke(1.6f));
+        for (float[] e : edges) {
+            draw3DLine(g2, e[0], e[1], e[2], e[3], e[4], e[5],
+                    camX, camY, camZ, rx, ry, rz, ux, uy, uz, fx, fy, fz, fovScale, halfW, halfH);
         }
     }
 
@@ -1419,7 +1857,8 @@ public class DesktopSoftware3DViewport extends JPanel {
                 int dw = Math.min(640, w - 40);
                 int dh = 86;
                 int dx = (w - dw) / 2;
-                int dy = h - dh - 18;
+                // In a block world the hotbar owns the bottom strip - keep the dialog above it.
+                int dy = h - dh - (p.voxelEnabled && playing ? 92 : 18);
                 g2.setColor(new Color(11, 11, 14, 238));
                 g2.fillRoundRect(dx, dy, dw, dh, 12, 12);
                 g2.setColor(new Color(255, 255, 255, 220));

@@ -8,6 +8,7 @@ import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.noise.FastNoiseLite;
 import com.vortex.engine.core.noise.TerrainGenerator;
 import com.vortex.engine.core.physics.PhysicsWorld;
+import com.vortex.engine.core.voxel.BlockType;
 import com.vortex.engine.core.storage.VortexSaveStore;
 import com.vortex.engine.core.tween.VortexTweenSystem;
 import bsh.EvalError;
@@ -185,7 +186,12 @@ public class VortexScriptEngine {
             "setBanner", "setHudText", "showDialog", "hideDialog", "setLabel", "setProgressBar", "removeUI", "clearUI", "log",
             "chaseAI", "chaseTagAI", "raycast", "raycastDist",
             "tweenPos", "tweenScale", "tweenRot", "tweenTagYoyo",
-            "noise2D", "noise3D", "terrainHeight", "rand", "clamp", "time"
+            "noise2D", "noise3D", "terrainHeight", "rand", "clamp", "time",
+            // v4.8.0 voxel world API (works in JS / Lua / Java / VortexScript)
+            "voxelGet", "voxelSet", "voxelName", "voxelBlockId", "voxelSolid", "voxelHeight",
+            "voxelSeed", "voxelBreak", "voxelPlace", "voxelRegenerate",
+            "playerX", "playerY", "playerZ", "playerYaw", "playerPitch", "setPlayerPos", "setPlayerLook",
+            "playerFlying", "setPlayerFlying", "blockBreakAtCursor", "blockPlaceAtCursor", "selectedBlock", "selectBlock"
     };
 
     private final Map<String, Object> globals = new HashMap<>();
@@ -1004,6 +1010,30 @@ public class VortexScriptEngine {
         callHook("onUpdate", (double) dt);
     }
 
+
+    /** Integer floor of a numeric argument (voxel API takes block coordinates). */
+    private int iflr(Object[] a, int i) {
+        return (int) Math.floor(flt(a, i, 0f));
+    }
+
+    /** Accepts either a block name ("STONE") or a numeric id. */
+    private int blockIdFrom(Object arg) {
+        if (arg instanceof String) return BlockType.idFromName((String) arg);
+        if (arg instanceof Number) return ((Number) arg).intValue();
+        return BlockType.AIR;
+    }
+
+    private int idOrSelected(Object[] a, com.vortex.engine.core.voxel.VoxelPlayer vp) {
+        if (a.length > 0 && a[0] != null) return blockIdFrom(a[0]);
+        return vp.selectedBlock;
+    }
+
+    /** Called by the viewport/renderer after the player mines or places a block. */
+    public synchronized void notifyVoxelEvent(boolean mined, String blockName) {
+        if (!compiledOk) return;
+        callHook(mined ? "onBlockMined" : "onBlockPlaced", blockName);
+    }
+
     public synchronized void notifyCollision(Entity a, Entity b) {
         if (!compiledOk) return;
         callHook("onCollide", a.name, b.name, a.tag, b.tag);
@@ -1621,6 +1651,88 @@ public class VortexScriptEngine {
             case "log": log(str(a, 0)); return 0.0;
 
             // Open-Source FastNoiseLite procedural noise functions!
+            // ---------------- v4.8.0 voxel world API ----------------
+            case "voxelGet": {
+                if (!project.voxelEnabled) return 0.0;
+                return (double) project.ensureVoxelRuntime().world.get(iflr(a, 0), iflr(a, 1), iflr(a, 2));
+            }
+            case "voxelSet": {
+                if (!project.voxelEnabled) return 0.0;
+                int id = a.length > 3 ? blockIdFrom(a[3]) : BlockType.GRASS;
+                project.ensureVoxelRuntime().world.set(iflr(a, 0), iflr(a, 1), iflr(a, 2), id);
+                return 1.0;
+            }
+            case "voxelName": {
+                int id = a.length > 0 ? (a[0] instanceof String ? blockIdFrom(a[0]) : iflr(a, 0)) : 0;
+                return BlockType.name(id);
+            }
+            case "voxelBlockId": return (double) blockIdFrom(a.length > 0 ? a[0] : null);
+            case "voxelSolid": {
+                if (!project.voxelEnabled) return 0.0;
+                return project.ensureVoxelRuntime().world.isSolid(iflr(a, 0), iflr(a, 1), iflr(a, 2)) ? 1.0 : 0.0;
+            }
+            case "voxelHeight": {
+                if (!project.voxelEnabled) return 0.0;
+                return (double) project.ensureVoxelRuntime().world.surfaceHeight(iflr(a, 0), iflr(a, 1));
+            }
+            case "voxelSeed": return (double) project.voxelSeed;
+            case "voxelBreak": {
+                if (!project.voxelEnabled) return 0.0;
+                return (double) project.ensureVoxelRuntime().breakAt(iflr(a, 0), iflr(a, 1), iflr(a, 2));
+            }
+            case "voxelPlace": {
+                if (!project.voxelEnabled) return 0.0;
+                int id = a.length > 3 ? blockIdFrom(a[3]) : BlockType.STONE;
+                return project.ensureVoxelRuntime().placeAt(iflr(a, 0), iflr(a, 1), iflr(a, 2), id) ? 1.0 : 0.0;
+            }
+            case "voxelRegenerate": {
+                if (!project.voxelEnabled) return 0.0;
+                project.ensureVoxelRuntime().regenerate(project, iflr(a, 0));
+                return 1.0;
+            }
+            case "playerX": return project.voxelEnabled ? (double) project.ensureVoxelRuntime().player.x : 0.0;
+            case "playerY": return project.voxelEnabled ? (double) project.ensureVoxelRuntime().player.y : 0.0;
+            case "playerZ": return project.voxelEnabled ? (double) project.ensureVoxelRuntime().player.z : 0.0;
+            case "playerYaw": return project.voxelEnabled ? (double) project.ensureVoxelRuntime().player.yawDeg : 0.0;
+            case "playerPitch": return project.voxelEnabled ? (double) project.ensureVoxelRuntime().player.pitchDeg : 0.0;
+            case "setPlayerPos": {
+                if (!project.voxelEnabled) return 0.0;
+                com.vortex.engine.core.voxel.VoxelPlayer vp = project.ensureVoxelRuntime().player;
+                vp.x = flt(a, 0, vp.x); vp.y = flt(a, 1, vp.y); vp.z = flt(a, 2, vp.z);
+                vp.vx = vp.vy = vp.vz = 0f;
+                return 1.0;
+            }
+            case "setPlayerLook": {
+                if (!project.voxelEnabled) return 0.0;
+                com.vortex.engine.core.voxel.VoxelPlayer vp = project.ensureVoxelRuntime().player;
+                vp.yawDeg = flt(a, 0, vp.yawDeg);
+                vp.pitchDeg = Math.max(-85f, Math.min(85f, flt(a, 1, vp.pitchDeg)));
+                return 1.0;
+            }
+            case "playerFlying": return project.voxelEnabled && project.ensureVoxelRuntime().player.flying ? 1.0 : 0.0;
+            case "setPlayerFlying": {
+                if (!project.voxelEnabled) return 0.0;
+                project.ensureVoxelRuntime().player.flying = a.length > 0 && flt(a, 0, 1f) > 0.5f;
+                return 1.0;
+            }
+            case "blockBreakAtCursor": {
+                if (!project.voxelEnabled) return 0.0;
+                return (double) project.ensureVoxelRuntime().breakTargeted();
+            }
+            case "blockPlaceAtCursor": {
+                if (!project.voxelEnabled) return 0.0;
+                com.vortex.engine.core.voxel.VoxelPlayer vp = project.ensureVoxelRuntime().player;
+                return project.ensureVoxelRuntime().placeTargeted(idOrSelected(a, vp)) ? 1.0 : 0.0;
+            }
+            case "selectedBlock": return project.voxelEnabled
+                    ? (double) project.ensureVoxelRuntime().player.selectedBlock : 0.0;
+            case "selectBlock": {
+                if (project.voxelEnabled) {
+                    com.vortex.engine.core.voxel.VoxelRuntime rt = project.ensureVoxelRuntime();
+                    rt.player.selectedBlock = blockIdFrom(a.length > 0 ? a[0] : null);
+                }
+                return 1.0;
+            }
             case "noise2D": return (double) fastNoise.GetNoise(flt(a, 0, 0f), flt(a, 1, 0f));
             case "noise3D": return (double) fastNoise.GetNoise(flt(a, 0, 0f), flt(a, 1, 0f), flt(a, 2, 0f));
 

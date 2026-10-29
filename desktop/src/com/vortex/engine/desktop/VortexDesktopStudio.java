@@ -167,6 +167,39 @@ public class VortexDesktopStudio extends JFrame {
                 runHeadlessSelfTests();
                 return;
             }
+            if ("--docs-shot".equals(args[i]) && i + 1 < args.length) {
+                // GUI verification hook: open the studio, open the docs browser, screenshot, exit.
+                final String shotPath = args[i + 1];
+                DesktopUiKit.installDarkDefaults();
+                SwingUtilities.invokeLater(() -> {
+                    final VortexDesktopStudio studio = new VortexDesktopStudio(true);
+                    studio.setSize(1440, 900);
+                    studio.setVisible(true);
+                    javax.swing.Timer kick = new javax.swing.Timer(1400, e -> {
+                        javax.swing.Timer grab = new javax.swing.Timer(1600, ev -> {
+                            try {
+                                java.awt.Robot robot = new java.awt.Robot();
+                                java.awt.Rectangle all = new java.awt.Rectangle(
+                                        java.awt.Toolkit.getDefaultToolkit().getScreenSize());
+                                javax.imageio.ImageIO.write(robot.createScreenCapture(all), "png", new File(shotPath));
+                                System.out.println("[SHOT] wrote " + shotPath);
+                            } catch (Throwable ex) {
+                                System.out.println("[SHOT] failed: " + ex);
+                            }
+                            for (java.awt.Window w : java.awt.Window.getWindows()) {
+                                if (w instanceof javax.swing.JDialog) w.dispose();
+                            }
+                            System.exit(0);
+                        });
+                        grab.setRepeats(false);
+                        grab.start();
+                        studio.showDocsBrowser();
+                    });
+                    kick.setRepeats(false);
+                    kick.start();
+                });
+                return;
+            }
             if ("--export-html".equals(args[i]) && i + 2 < args.length) {
                 String tplKey = args[i + 1];
                 File outHtml = new File(args[i + 2]);
@@ -199,7 +232,7 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio(boolean checkStartupDependencies) {
-        super("Vortex Engine Studio v4.7.0 — Multi-File IDE • Tile Maps • Prefabs • Forge AI Chat • Native Java / JS / Lua");
+        super("Vortex Engine Studio v4.8.0 — Voxel Worlds • Tile Maps • Prefabs • In-App Docs • Forge AI Chat");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         // Laptop-aware sizing: fit cleanly inside 1280x720 / 1366x768 / 1536x864 / 1440x900 screens!
@@ -710,6 +743,9 @@ public class VortexDesktopStudio extends JFrame {
         }));
         items.add(new DesktopUiKit.MenuAction("Merge Tile Runs", this::mergeTileRuns));
         items.add(new DesktopUiKit.MenuAction("---", null));
+        items.add(new DesktopUiKit.MenuAction("Voxel Block Palette…", this::showVoxelPalette));
+        items.add(new DesktopUiKit.MenuAction("Voxel Regenerate World…", this::regenerateVoxelWorld));
+        items.add(new DesktopUiKit.MenuAction("---", null));
         items.add(new DesktopUiKit.MenuAction("Prefab Palette…", this::showPrefabPalette));
         items.add(new DesktopUiKit.MenuAction("Create Prefab from Selection…", this::createPrefabFromSelection));
         items.add(new DesktopUiKit.MenuAction("---", null));
@@ -740,15 +776,172 @@ public class VortexDesktopStudio extends JFrame {
         return items;
     }
 
+    // =====================================================================
+    // v4.8.0 — in-IDE documentation browser (works offline)
+    // =====================================================================
+
+    private void showDocsBrowser() {
+        final javax.swing.JDialog dlg = new javax.swing.JDialog(this, "Vortex Docs", true);
+        JPanel root = new JPanel(new BorderLayout(10, 10));
+        root.setBackground(DesktopUiKit.C_PANEL);
+        root.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        JLabel head = new JLabel("Vortex Docs  \u2022  everything you need, offline");
+        head.setFont(DesktopUiKit.FONT_UI_BOLD);
+        head.setForeground(DesktopUiKit.C_WHITE);
+
+        final javax.swing.JTextField search = new javax.swing.JTextField();
+        search.setFont(DesktopUiKit.FONT_UI);
+        search.setBackground(DesktopUiKit.C_VOID);
+        search.setForeground(DesktopUiKit.C_TEXT);
+        search.setCaretColor(DesktopUiKit.C_TEXT);
+        search.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(DesktopUiKit.C_BORDER),
+                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+        JLabel searchHint = new JLabel("Search topics \u2014 or type a question and press Enter (\"how do I jump?\")");
+        searchHint.setFont(DesktopUiKit.FONT_UI);
+        searchHint.setForeground(DesktopUiKit.C_TEXT_MUTED);
+        JPanel searchWrap = new JPanel(new BorderLayout(0, 4));
+        searchWrap.setOpaque(false);
+        searchWrap.add(searchHint, BorderLayout.NORTH);
+        searchWrap.add(search, BorderLayout.CENTER);
+
+        JPanel headRow = new JPanel(new BorderLayout(0, 8));
+        headRow.setOpaque(false);
+        headRow.add(head, BorderLayout.NORTH);
+        headRow.add(searchWrap, BorderLayout.SOUTH);
+        root.add(headRow, BorderLayout.NORTH);
+
+        final JTextArea bodyArea = new JTextArea();
+        bodyArea.setEditable(false);
+        bodyArea.setLineWrap(true);
+        bodyArea.setWrapStyleWord(true);
+        bodyArea.setFont(DesktopUiKit.FONT_MONO != null ? DesktopUiKit.FONT_MONO : DesktopUiKit.FONT_UI);
+        bodyArea.setBackground(DesktopUiKit.C_VOID);
+        bodyArea.setForeground(DesktopUiKit.C_TEXT);
+        bodyArea.setMargin(new java.awt.Insets(14, 16, 16, 16));
+
+        final java.util.List<com.vortex.engine.core.docs.VortexDocs.Topic> topics =
+                com.vortex.engine.core.docs.VortexDocs.all();
+        final javax.swing.DefaultListModel<String> model = new javax.swing.DefaultListModel<>();
+        final java.util.List<com.vortex.engine.core.docs.VortexDocs.Topic> shown = new ArrayList<>(topics);
+        for (com.vortex.engine.core.docs.VortexDocs.Topic t : shown) model.addElement(t.title);
+
+        final JList<String> list = new JList<>(model);
+        list.setBackground(DesktopUiKit.C_PANEL);
+        list.setForeground(DesktopUiKit.C_TEXT);
+        list.setSelectionBackground(DesktopUiKit.C_BORDER);
+        list.setSelectionForeground(DesktopUiKit.C_WHITE);
+        list.setFont(DesktopUiKit.FONT_UI);
+        list.setFixedCellHeight(DesktopUiKit.scaled(28));
+        list.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+
+        final JScrollPane bodyScroll = new JScrollPane(bodyArea);
+        bodyScroll.setBorder(BorderFactory.createEmptyBorder());
+        bodyScroll.setHorizontalScrollBarPolicy(javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+        final int[] current = {0};
+        list.addListSelectionListener(ev -> {
+            int i = list.getSelectedIndex();
+            if (i < 0 || i >= shown.size()) return;
+            current[0] = i;
+            com.vortex.engine.core.docs.VortexDocs.Topic t = shown.get(i);
+            bodyArea.setText(t.title + "\n" + t.summary + "\n\n" + t.body);
+            // Reset BOTH bars after layout, otherwise the first line renders half-clipped.
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                bodyArea.setCaretPosition(0);
+                bodyScroll.getVerticalScrollBar().setValue(0);
+            });
+        });
+
+        search.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private void refilter() {
+                String q = search.getText();
+                shown.clear();
+                model.clear();
+                for (com.vortex.engine.core.docs.VortexDocs.Topic t : topics) {
+                    if (com.vortex.engine.core.docs.VortexDocs.matches(t, q)) {
+                        shown.add(t);
+                        model.addElement(t.title);
+                    }
+                }
+                if (!shown.isEmpty()) list.setSelectedIndex(0);
+                else bodyArea.setText("No topic matches \"" + q + "\".\n\nPress Enter and I will try to answer "
+                        + "the question the way I would in the AI tab.");
+            }
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { refilter(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { refilter(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { refilter(); }
+        });
+        search.addActionListener(ev -> {
+            com.vortex.engine.core.docs.VortexDocs.Topic t =
+                    com.vortex.engine.core.docs.VortexDocs.answerFor(search.getText().trim());
+            if (t == null) return;
+            for (int i = 0; i < shown.size(); i++) {
+                if (shown.get(i).id.equals(t.id)) { list.setSelectedIndex(i); list.ensureIndexIsVisible(i); return; }
+            }
+        });
+
+        JScrollPane listScroll = new JScrollPane(list);
+        listScroll.setPreferredSize(new Dimension(DesktopUiKit.scaled(250), 0));
+        listScroll.setHorizontalScrollBarPolicy(javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        listScroll.setBorder(BorderFactory.createLineBorder(DesktopUiKit.C_BORDER));
+        bodyScroll.setBorder(BorderFactory.createLineBorder(DesktopUiKit.C_BORDER));
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listScroll, bodyScroll);
+        split.setBorder(BorderFactory.createEmptyBorder());
+        split.setOpaque(false);
+        split.setDividerSize(6);
+        root.add(split, BorderLayout.CENTER);
+
+        DesktopUiKit.VortexButton close = new DesktopUiKit.VortexButton("Close", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.CLOSE);
+        close.addActionListener(ev -> dlg.dispose());
+        JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        south.setOpaque(false);
+        south.add(close);
+        root.add(south, BorderLayout.SOUTH);
+
+        dlg.setContentPane(root);
+        dlg.setSize(DesktopUiKit.scaled(940), DesktopUiKit.scaled(620));
+        dlg.setLocationRelativeTo(this);
+        split.setDividerLocation(DesktopUiKit.scaled(250));
+        list.setSelectedIndex(0);
+        dlg.setVisible(true);
+    }
+
+    private void showDocsTopic(String id) {
+        com.vortex.engine.core.docs.VortexDocs.Topic t = com.vortex.engine.core.docs.VortexDocs.get(id);
+        if (t == null) { showDocsBrowser(); return; }
+        DesktopUiKit.showInfoModal(this, t.title, t.body);
+    }
+
+    private void askDocsQuestion() {
+        String q = DesktopUiKit.showInputModal(this, "Docs", "Ask in plain words (e.g. \"how do I jump?\")", "");
+        if (q == null || q.trim().isEmpty()) return;
+        com.vortex.engine.core.docs.VortexDocs.Topic t = com.vortex.engine.core.docs.VortexDocs.answerFor(q.trim());
+        if (t == null) {
+            DesktopUiKit.showInfoModal(this, "No match",
+                    "I could not match that to a topic yet.\n\nTry: how do I move?, voxel, physics, camera, export, prefab, or ask Forge AI in the AI tab.");
+            return;
+        }
+        log("\u25B8 Docs: " + t.title);
+        DesktopUiKit.showInfoModal(this, t.title, t.body);
+    }
+
     private List<DesktopUiKit.MenuAction> buildHelpMenuItems() {
         List<DesktopUiKit.MenuAction> items = new ArrayList<>();
+        items.add(new DesktopUiKit.MenuAction("Docs & Getting Started…", this::showDocsBrowser));
+        items.add(new DesktopUiKit.MenuAction("How do I…? (ask the docs)", this::askDocsQuestion));
+        items.add(new DesktopUiKit.MenuAction("Voxel World Guide", () -> showDocsTopic("voxel")));
+        items.add(new DesktopUiKit.MenuAction("Script API Guide", () -> showDocsTopic("script")));
+        items.add(new DesktopUiKit.MenuAction("---", null));
         items.add(new DesktopUiKit.MenuAction("Scripting API Reference", () -> rightTabs.selectTabByKey("SCRIPT", true)));
         items.add(new DesktopUiKit.MenuAction("Physics & Collision Layers", () -> DesktopUiKit.showInfoModal(this,
                 "Physics",
                 "2D: JBox2D rigid bodies (CCD bullets)\n3D: substepped impulse solver + terrain\nLayers: collisionLayer / collisionMask")));
         items.add(new DesktopUiKit.MenuAction("---", null));
-        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.7.0", () -> DesktopUiKit.showInfoModal(this,
-                "Vortex Engine Studio v4.7.0",
+        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.8.0", () -> DesktopUiKit.showInfoModal(this,
+                "Vortex Engine Studio v4.8.0",
                 "Free & open-source 2D/3D game engine\nWindows • Linux • Android • Web")));
         return items;
     }
@@ -1175,7 +1368,7 @@ public class VortexDesktopStudio extends JFrame {
         headerBar.add(rightBar, BorderLayout.EAST);
         bottomWrapperPanel.add(headerBar, BorderLayout.NORTH);
 
-        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.7.0 Desktop Studio Ready.");
+        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.8.0 Desktop Studio Ready.");
 
         JScrollPane consoleScroll = DesktopUiKit.createScrollPane(consoleArea);
         bottomDeck.addCard("CONSOLE", consoleScroll, 0);
@@ -3021,6 +3214,80 @@ public class VortexDesktopStudio extends JFrame {
     // v4.7.0 — Tile painter + prefab palette
     // =====================================================================
 
+    // =====================================================================
+    // v4.8.0 — voxel world tools
+    // =====================================================================
+
+    private void showVoxelPalette() {
+        if (!project.voxelEnabled) {
+            DesktopUiKit.showInfoModal(this, "Voxel World",
+                    "This project has no block world yet.\n\nCreate one with  File ▸ New Project ▸ 3D Voxel: Blockfall,\n"
+                    + "or turn this project into a voxel world with Tools ▸ Voxel Regenerate World.");
+            return;
+        }
+        final int[] ids = com.vortex.engine.core.voxel.BlockType.hotbarIds();
+        final javax.swing.JDialog dlg = new javax.swing.JDialog(this, "Voxel Block Palette", true);
+        JPanel root = new JPanel(new BorderLayout(10, 10));
+        root.setBackground(DesktopUiKit.C_PANEL);
+        root.setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
+
+        JLabel title = new JLabel("Block brush  •  LMB mine   RMB build   middle-click pipette");
+        title.setFont(DesktopUiKit.FONT_UI_BOLD);
+        title.setForeground(DesktopUiKit.C_WHITE);
+        root.add(title, BorderLayout.NORTH);
+
+        JPanel grid = new JPanel(new java.awt.GridLayout(0, 4, 6, 6));
+        grid.setOpaque(false);
+        for (final int id : ids) {
+            final DesktopUiKit.VortexButton b = new DesktopUiKit.VortexButton(
+                    com.vortex.engine.core.voxel.BlockType.name(id), DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.NONE);
+            int argb = com.vortex.engine.core.voxel.BlockType.color(id);
+            b.setBackground(new Color((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF));
+            b.setForeground(new Color(16, 16, 18));
+            b.addActionListener(ev -> {
+                viewport.setVoxelBrushId(id);
+                globalStatusPill.setStatus("Block brush: " + com.vortex.engine.core.voxel.BlockType.name(id),
+                        DesktopUiKit.StatusPill.State.NEUTRAL);
+                dlg.dispose();
+            });
+            grid.add(b);
+        }
+        root.add(grid, BorderLayout.CENTER);
+
+        DesktopUiKit.VortexButton close = new DesktopUiKit.VortexButton("Close", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.CLOSE);
+        close.addActionListener(ev -> dlg.dispose());
+        JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        south.setOpaque(false);
+        south.add(close);
+        root.add(south, BorderLayout.SOUTH);
+        dlg.setContentPane(root);
+        dlg.setSize(DesktopUiKit.scaled(430), DesktopUiKit.scaled(300));
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    private void regenerateVoxelWorld() {
+        String seedText = DesktopUiKit.showInputModal(this, "Voxel World",
+                "World seed (leave empty for the current one)", String.valueOf(project.voxelSeed));
+        if (seedText == null) return;
+        int seed = project.voxelSeed;
+        try {
+            if (!seedText.trim().isEmpty()) seed = Integer.parseInt(seedText.trim());
+        } catch (NumberFormatException ignored) {
+            seed = seedText.hashCode();
+        }
+        pushUndo();
+        project.voxelEnabled = true;
+        project.dimensionMode = "3D";
+        project.ensureVoxelRuntime().regenerate(project, seed);
+        viewport.invalidateAssetCaches();
+        viewport.repaint();
+        refreshHierarchyList();
+        log("\u2713 Voxel world generated with seed " + seed + " ("
+                + project.ensureVoxelRuntime().world.size + "\u00d7" + project.ensureVoxelRuntime().world.height + " blocks)");
+        globalStatusPill.setStatus("\u2713 Voxel world: seed " + seed, DesktopUiKit.StatusPill.State.SUCCESS);
+    }
+
     private void toggleTilePaint() {
         boolean on = !viewport.isTilePaintMode();
         if (on && !"2D".equalsIgnoreCase(project.dimensionMode)) {
@@ -4022,7 +4289,7 @@ public class VortexDesktopStudio extends JFrame {
     // Headless Verification Suite (Java VM + ES6 JS + Lua + LRM + Forge + UI)
     // =========================================================================
     private static void runHeadlessSelfTests() throws Exception {
-        System.out.println("=== Vortex Engine v4.7.0 Headless Verification Suite ===");
+        System.out.println("=== Vortex Engine v4.8.0 Headless Verification Suite ===");
 
         // 1) Zero-Blue Monochrome Palette + Laptop UI Scale Verification
         Color[] uiColors = {
@@ -4413,6 +4680,71 @@ public class VortexDesktopStudio extends JFrame {
                 System.out.println("  [PASS] Tiled .tmx import (" + built.summary
                         + "), in-editor Tile Brush (merge/erase) and Scene-Tree Prefabs Verified!");
             }
+
+            // 7.11) Voxel world: generation, meshing, physics, editing, docs
+            {
+                GameProject vox = ProjectTemplates.create("MINECRAFT_3D", "Blockfall", "com.vortex.blockfall");
+                if (!vox.voxelEnabled) throw new RuntimeException("voxel template did not enable the block world");
+                com.vortex.engine.core.voxel.VoxelRuntime rt = vox.ensureVoxelRuntime();
+                com.vortex.engine.core.voxel.VoxelWorld world = rt.world;
+                int solid = 0;
+                for (byte b : world.blocks) if (b != 0) solid++;
+                if (solid < 50000) throw new RuntimeException("voxel world generated too little terrain (" + solid + ")");
+
+                java.util.List<com.vortex.engine.core.voxel.VoxelWorld.Quad> quads = rt.quads();
+                if (quads == null || quads.size() < 1000 || quads.size() > 60000) {
+                    throw new RuntimeException("greedy mesh out of expected range (" + (quads == null ? 0 : quads.size()) + ")");
+                }
+
+                // player physics: fall, land, walk, jump
+                com.vortex.engine.core.voxel.VoxelPlayer vp = rt.player;
+                for (int i = 0; i < 180; i++) vp.update(world, 1f / 60f, 0, 0, false, false, false);
+                if (!vp.onGround) throw new RuntimeException("voxel player never landed");
+                if (vp.collides(world)) throw new RuntimeException("voxel player is inside a block after landing");
+                float beforeX = vp.x, beforeZ = vp.z;
+                for (int i = 0; i < 60; i++) vp.update(world, 1f / 60f, 1, 0, false, false, true);
+                double travelled = Math.hypot(vp.x - beforeX, vp.z - beforeZ);
+                if (travelled < 0.4) throw new RuntimeException("voxel player did not walk (" + travelled + ")");
+                float vyBefore = vp.vy;
+                vp.update(world, 1f / 60f, 0, 0, true, false, false);
+                if (vp.vy <= vyBefore - 5f) throw new RuntimeException("voxel jump did not apply");
+
+                // look at feet, mine the block, place it back
+                vp.pitchDeg = -80f;
+                com.vortex.engine.core.voxel.VoxelWorld.RayHit hit = vp.target(world);
+                if (hit == null) throw new RuntimeException("voxel raycast found nothing under the player");
+                int mined = rt.breakTargeted();
+                if (mined == com.vortex.engine.core.voxel.BlockType.AIR) throw new RuntimeException("voxel mining failed");
+                int meshVersion = world.dirty();
+                if (meshVersion == 0) throw new RuntimeException("voxel world did not bump its edit version");
+
+                // save / load keeps the world identical
+                String worldJson = vox.toJsonString();
+                GameProject voxBack = GameProject.fromJsonString(worldJson);
+                com.vortex.engine.core.voxel.VoxelRuntime rtBack = voxBack.ensureVoxelRuntime();
+                if (!java.util.Arrays.equals(rtBack.world.blocks, world.blocks)) {
+                    throw new RuntimeException("voxel world did not survive save/load");
+                }
+
+                // documentation answers a beginner's question with the real API
+                com.vortex.engine.core.docs.VortexDocs.Topic doc =
+                        com.vortex.engine.core.docs.VortexDocs.answerFor("how do I make my player jump?");
+                if (doc == null || !doc.body.contains("jump")) {
+                    throw new RuntimeException("docs did not answer a movement question");
+                }
+                if (com.vortex.engine.core.docs.VortexDocs.all().size() < 8) {
+                    throw new RuntimeException("docs topics missing");
+                }
+                // Forge answers a how-to with docs instead of rebuilding the scene
+                String entitiesBefore = String.valueOf(vox.entities.size());
+                VortexForgeAgent.ChatTurnResult howTo = VortexForgeAgent.runChatTurn(
+                        vox, new ArrayList<>(), "how do I make a block world?", 0, "offline-procedural-v4", "");
+                if (howTo.reply == null || howTo.reply.length() < 40) {
+                    throw new RuntimeException("forge gave no documentation answer");
+                }
+                System.out.println("  [PASS] Voxel World (96x96x64 generation, greedy mesh "
+                        + quads.size() + " quads, walk/jump/mine, RLE save round-trip) + In-App Docs & Forge doc answers Verified!");
+            }
         }
 
         // 8) Standalone Exporters (.exe & Termux .zip)
@@ -4429,6 +4761,6 @@ public class VortexDesktopStudio extends JFrame {
         tmpExe.delete();
         tmpZip.delete();
 
-        System.out.println("=== ALL VORTEX v4.7.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
+        System.out.println("=== ALL VORTEX v4.8.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
     }
 }

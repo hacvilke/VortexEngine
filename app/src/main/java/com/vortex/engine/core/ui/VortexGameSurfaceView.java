@@ -31,6 +31,10 @@ public class VortexGameSurfaceView extends FrameLayout {
     public boolean tilePaintSolid = false;
     public Runnable onTilesChanged;
     private boolean tilePaintedThisTouch = false;
+    // v4.8.0 voxel touch: drag = look, quick tap = mine, long press = build
+    private float voxelDownX, voxelDownY, voxelLastX, voxelLastY;
+    private long voxelDownMs;
+    private boolean voxelLongPressFired, voxelLookDragged;
     private boolean gridSnap = true;
     private boolean draggingEntity = false;
     private float prevTouchX, prevTouchY;
@@ -108,7 +112,52 @@ public class VortexGameSurfaceView extends FrameLayout {
         glView.requestRender();
     }
 
+    /** Touch controls for a voxel playtest: drag to look, tap to mine, long-press to build. */
+    private boolean handleVoxelTouch(MotionEvent event) {
+        int action = event.getActionMasked();
+        float x = event.getX();
+        float y = event.getY();
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+                voxelDownX = x; voxelDownY = y;
+                voxelLastX = x; voxelLastY = y;
+                voxelDownMs = System.currentTimeMillis();
+                voxelLongPressFired = false;
+                voxelLookDragged = false;
+                return true;
+            case MotionEvent.ACTION_MOVE: {
+                float dx = x - voxelLastX, dy = y - voxelLastY;
+                voxelLastX = x; voxelLastY = y;
+                if (Math.abs(x - voxelDownX) > 12f || Math.abs(y - voxelDownY) > 12f) voxelLookDragged = true;
+                if (voxelLookDragged) renderer.voxelLook(dx, dy);
+                if (!voxelLongPressFired && System.currentTimeMillis() - voxelDownMs > 420 && !voxelLookDragged) {
+                    voxelLongPressFired = renderer.voxelBuild();
+                }
+                glView.requestRender();
+                return true;
+            }
+            case MotionEvent.ACTION_POINTER_DOWN: {
+                // second finger = place a block (mirrors the desktop right click)
+                voxelLongPressFired = renderer.voxelBuild();
+                return true;
+            }
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL: {
+                if (!voxelLookDragged && !voxelLongPressFired && System.currentTimeMillis() - voxelDownMs < 400) {
+                    renderer.voxelMine();
+                }
+                glView.requestRender();
+                return true;
+            }
+            default:
+                return true;
+        }
+    }
+
     private boolean handleViewportTouch(MotionEvent event) {
+        if (renderer.isPlaying() && renderer.voxelPlayer() != null) {
+            return handleVoxelTouch(event);
+        }
         if (renderer.isPlaying()) {
             // Pass world touch coordinates to VortexScript
             int act = event.getActionMasked();

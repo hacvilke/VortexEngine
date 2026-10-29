@@ -23,7 +23,8 @@ public class ProjectTemplates {
             "SHOOTER_2D",
             "BLANK_3D_LUA",
             "BLANK_2D_LUA",
-            "EXPLORER_3D"
+            "EXPLORER_3D",
+            "MINECRAFT_3D"
     };
 
     public static final String[] TEMPLATE_NAMES = {
@@ -40,7 +41,8 @@ public class ProjectTemplates {
             "2D Arcade: Nova Blaster (Space Shooter + Plasma Lasers)",
             "3D Sandbox: Blank 3D Project (Java / ES6 JS / Lua 5.2)",
             "2D Sandbox: Blank 2D Project (Java / ES6 JS / Lua 5.2 + JBox2D)",
-            "3D Explorer: Green Hollow Valley (ES6 JS + sunlight rig + collecting + NPC patrol)"
+            "3D Explorer: Green Hollow Valley (ES6 JS + sunlight rig + collecting + NPC patrol)",
+            "3D Voxel: Blockfall — mine, build, survive (Minecraft-style block world, infinite terrain seed)"
     };
 
     public static GameProject create(String templateKey, String title, String pkgName) {
@@ -59,6 +61,7 @@ public class ProjectTemplates {
             case "BLANK_2D_LUA":            p = buildBlankLua(title, pkgName, false); break;
             case "BLANK_3D_LUA":            p = buildBlankLua(title, pkgName, true); break;
             case "EXPLORER_3D":             p = buildExplorer3D(title, pkgName); break;
+            case "MINECRAFT_3D":            p = buildVoxelBlockfall(title, pkgName); break;
             case "NEON_3D":
             default:                        p = buildNeonHorizon3D(title, pkgName); break;
         }
@@ -378,6 +381,145 @@ public class ProjectTemplates {
                 "    vortex.addHealth(-6);\n" +
                 "    vortex.playSound('hit');\n" +
                 "    vortex.setBanner('OUCH!');\n" +
+                "  }\n" +
+                "}\n";
+        p.putScriptFile("scripts/main.js", p.scriptCode);
+        return p;
+    }
+
+
+    /**
+     * v4.8.0 — "Blockfall": a Minecraft-style voxel sandbox.
+     *
+     * The world itself is owned by the voxel core (VoxelWorld/VoxelPlayer), so walking, jumping,
+     * swimming, flying, breaking and placing all work on desktop and phone without a single line of
+     * script. The starter script below is deliberately small and commented line by line: it shows a
+     * beginner how to read the world from code (vortex.voxel*) and how to react to gameplay events.
+     */
+    private static GameProject buildVoxelBlockfall(String title, String pkgName) {
+        GameProject p = new GameProject();
+        p.title = title;
+        p.packageName = pkgName;
+        p.dimensionMode = "3D";
+        p.scriptLanguage = "JS";
+        p.voxelEnabled = true;
+        p.voxelSeed = 4711;
+        p.voxelSpawnX = 48f;
+        p.voxelSpawnZ = 48f;
+        p.voxelSpawnYaw = 200f;
+        p.voxelRenderRadius = 46;
+
+        // Daylight rig tuned for blocky surfaces: high sun, cool shadows, gentle ambient.
+        p.skyColorHex = "#8FC7E8";
+        p.sunYawDeg = 42f;
+        p.sunPitchDeg = 62f;
+        p.sunIntensity = 1.12f;
+        p.ambientStrength = 0.46f;
+        p.sunColorHex = "#FFF4DC";
+        p.shadows = true;
+        p.shadowStrength = 0.30f;
+        p.fogNear = 48f;
+        p.fogFar = 120f;
+        p.gravityY = 26f;
+        p.cameraMode = "FIRST_PERSON";
+        p.musicEnabled = true;
+        p.musicBpm = 96;
+        p.musicPattern = ChiptuneGenerator.PRESET_SKYCHILL;
+        p.iconAccentHex = "#7BE3C1";
+        p.iconGlyph = "CUBE";
+
+        // Scene props: the world is procedural, but a few glowing shards sit on it so the
+        // scene tree is not empty and there is a first objective to chase.
+        com.vortex.engine.core.voxel.VoxelRuntime vrt = p.ensureVoxelRuntime();
+        float[][] shardSpots = {
+                {43f, 43f}, {54f, 44f}, {40f, 55f}, {56f, 52f}, {48f, 38f}
+        };
+        for (int si = 0; si < shardSpots.length; si++) {
+            float sx = shardSpots[si][0];
+            float sz = shardSpots[si][1];
+            int top = vrt.world.surfaceHeight((int) sx, (int) sz);
+            Entity shard = Entity.create3D("Shard" + (si + 1), "shard", "OCTAHEDRON",
+                    sx, top + 2.4f, sz, 0.9f, 1.5f, 0.9f, "#7BE3C1", "STATIC");
+            shard.emissive = true;
+            p.entities.add(shard);
+        }
+        int homeTop = vrt.world.surfaceHeight(48, 44);
+        Entity beacon = Entity.create3D("HomeBeacon", "beacon", "PYRAMID",
+                48f, homeTop + 1.0f, 44f, 1.4f, 2.4f, 1.4f, "#FACC15", "STATIC");
+        beacon.emissive = true;
+        p.entities.add(beacon);
+
+        p.scriptCode =
+                "// BLOCKFALL — a Minecraft-style voxel world.\n" +
+                "//\n" +
+                "// You do not need to write anything to play: the engine runs the block world\n" +
+                "// (walking, jumping, swimming, flying, mining, building) by itself.\n" +
+                "// This file is here so you can see HOW to talk to that world from code.\n" +
+                "//\n" +
+                "// Controls:  WASD move · SPACE jump · F fly · SHIFT sprint · CTRL sneak\n" +
+                "//            LMB mine · RMB build · 1-9 pick block · B cycle block · middle click pipette\n" +
+                "\n" +
+                "var mined = 0;\n" +
+                "var built = 0;\n" +
+                "\n" +
+                "function onStart() {\n" +
+                "  vortex.setBanner('BLOCKFALL — mine the hills, build a home');\n" +
+                "  // Pretend to welcome the player with a short line in the console.\n" +
+                "  vortex.log('World seed: ' + vortex.voxelSeed());\n" +
+                "}\n" +
+                "\n" +
+                "function onUpdate(dt) {\n" +
+                "  // Runs every frame. The engine already handles walking, mining and building;\n" +
+                "  // this is where YOUR game logic goes.\n" +
+                "  onUpdateShards();\n" +
+                "}\n" +
+                "\n" +
+                "// Called when the player mines a block or places one.\n" +
+                "function onBlockMined(name) {\n" +
+                "  mined = mined + 1;\n" +
+                "  vortex.addScore(10);\n" +
+                "  vortex.playSound('coin');\n" +
+                "  vortex.setBanner('MINED ' + mined + '  ·  BUILT ' + built);\n" +
+                "}\n" +
+                "\n" +
+                "function onBlockPlaced(name) {\n" +
+                "  built = built + 1;\n" +
+                "  vortex.setBanner('MINED ' + mined + '  ·  BUILT ' + built);\n" +
+                "}\n" +
+                "\n" +
+                "// Example of editing the world from code: build a 5x5 stone floor under the player.\n" +
+                "// Type 'buildFloor()' in this file and call it from onStart() to try it.\n" +
+                "function buildFloor() {\n" +
+                "  var px = floor(vortex.playerX());\n" +
+                "  var py = floor(vortex.playerY()) - 1;\n" +
+                "  var pz = floor(vortex.playerZ());\n" +
+                "  for (var dx = -2; dx <= 2; dx++) {\n" +
+                "    for (var dz = -2; dz <= 2; dz++) {\n" +
+                "      vortex.voxelSet(px + dx, py, pz + dz, 'STONE');\n" +
+                "    }\n" +
+                "  }\n" +
+                "  vortex.log('Floor built at ' + px + ',' + py + ',' + pz);\n" +
+                "}\n" +
+                "\n" +
+                "// A shard is a floating collectible. The world is voxels, not physics bodies, so we\n" +
+                "// simply check the distance every frame - the same pattern works for any pickup.\n" +
+                "var shards = 0;\n" +
+                "function onUpdateShards() {\n" +
+                "  for (var i = 1; i <= 5; i++) {\n" +
+                "    var name = 'Shard' + i;\n" +
+                "    if (!vortex.exists(name)) continue;\n" +
+                "    var dx = vortex.getX(name) - vortex.playerX();\n" +
+                "    var dy = vortex.getY(name) - vortex.playerY();\n" +
+                "    var dz = vortex.getZ(name) - vortex.playerZ();\n" +
+                "    if (dx * dx + dy * dy + dz * dz < 6.0) {\n" +
+                "      vortex.particles(vortex.getX(name), vortex.getY(name), vortex.getZ(name), 22, '#7BE3C1');\n" +
+                "      vortex.destroy(name);\n" +
+                "      vortex.playSound('coin');\n" +
+                "      vortex.addScore(250);\n" +
+                "      shards = shards + 1;\n" +
+                "      vortex.setBanner('SHARD ' + shards + '/5');\n" +
+                "      if (shards >= 5) vortex.setBanner('ALL SHARDS - now build something');\n" +
+                "    }\n" +
                 "  }\n" +
                 "}\n";
         p.putScriptFile("scripts/main.js", p.scriptCode);

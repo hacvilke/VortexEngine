@@ -88,6 +88,20 @@ public class GameProject {
     public final Map<String, String> customObjMeshes = new LinkedHashMap<>();
     // 16x16 pixel-art sprites encoded as 256 comma-separated #RRGGBB or '.' transparent tokens
     public final Map<String, String> customSprites = new LinkedHashMap<>();
+    // ---- v4.8.0 voxel (Minecraft-style) world ----
+    /** When true the project renders and simulates a block world instead of plain entities. */
+    public boolean voxelEnabled = false;
+    public int voxelSeed = 4711;
+    public float voxelSpawnX = 48f;
+    public float voxelSpawnZ = 48f;
+    public float voxelSpawnYaw = 200f;
+    /** Render distance in blocks for the phone renderer (0 = whole world). */
+    public int voxelRenderRadius = 46;
+    /** Run-length encoded block data; empty means "generate from voxelSeed". */
+    public String voxelWorldData = "";
+    /** Live world + player; never serialized. */
+    public transient com.vortex.engine.core.voxel.VoxelRuntime voxelRuntime = null;
+
     /** v4.7.0 — reusable scene-tree prefabs (custom + seeded built-ins). */
     public final List<Prefab> prefabs = new ArrayList<>();
 
@@ -332,6 +346,17 @@ public class GameProject {
                 } catch (Exception ignored) { }
             }
             o.put("prefabs", prefabArr);
+
+            o.put("voxelEnabled", voxelEnabled);
+            o.put("voxelSeed", voxelSeed);
+            o.put("voxelSpawnX", voxelSpawnX);
+            o.put("voxelSpawnZ", voxelSpawnZ);
+            o.put("voxelSpawnYaw", voxelSpawnYaw);
+            o.put("voxelRenderRadius", voxelRenderRadius);
+            // Always persist the LIVE world, not the snapshot taken when it was first loaded —
+            // otherwise every block mined or placed during this session would be lost on save.
+            String liveVoxel = currentVoxelData();
+            if (liveVoxel != null && !liveVoxel.isEmpty()) o.put("voxelWorldData", liveVoxel);
             return o.toString(2);
         } catch (JSONException ex) {
             return "{}";
@@ -440,6 +465,14 @@ public class GameProject {
             }
         }
         p.ensurePrefabsInitialized();
+
+        p.voxelEnabled = o.optBoolean("voxelEnabled", false);
+        p.voxelSeed = o.optInt("voxelSeed", 4711);
+        p.voxelSpawnX = (float) o.optDouble("voxelSpawnX", 48.0);
+        p.voxelSpawnZ = (float) o.optDouble("voxelSpawnZ", 48.0);
+        p.voxelSpawnYaw = (float) o.optDouble("voxelSpawnYaw", 200.0);
+        p.voxelRenderRadius = o.optInt("voxelRenderRadius", 46);
+        p.voxelWorldData = o.optString("voxelWorldData", "");
         return p;
     }
 
@@ -459,5 +492,35 @@ public class GameProject {
     /** True when a prefab with this name already exists (case-insensitive). */
     public boolean hasPrefab(String name) {
         return findPrefab(name) != null;
+    }
+
+    /** Returns the live voxel runtime, creating (or loading) the world on first use. */
+    public com.vortex.engine.core.voxel.VoxelRuntime ensureVoxelRuntime() {
+        if (voxelRuntime == null) voxelRuntime = com.vortex.engine.core.voxel.VoxelRuntime.forProject(this);
+        return voxelRuntime;
+    }
+
+    public void disposeVoxelRuntime() {
+        syncVoxelData();
+        voxelRuntime = null;
+    }
+
+    /** Re-encodes the live block world into {@link #voxelWorldData} (call before saving). */
+    public void syncVoxelData() {
+        if (voxelEnabled && voxelRuntime != null) {
+            try {
+                voxelWorldData = voxelRuntime.world != null ? voxelRuntime.world.serializeRle() : "";
+            } catch (Exception ignored) { }
+        }
+    }
+
+    /** RLE block data as it should be written to disk right now. */
+    private String currentVoxelData() {
+        if (voxelEnabled && voxelRuntime != null && voxelRuntime.world != null) {
+            try {
+                return voxelRuntime.world.serializeRle();
+            } catch (Exception ignored) { }
+        }
+        return voxelWorldData;
     }
 }

@@ -45,9 +45,9 @@ public class ExportTestBundle {
 }
 EOF
 
-"$JAVA_HOME/bin/javac" -encoding UTF-8 -cp "$ROOT_DIR/dist/VortexEngine-Studio-Desktop-v4.7.0.jar" \
+"$JAVA_HOME/bin/javac" -encoding UTF-8 -cp "$ROOT_DIR/dist/VortexEngine-Studio-Desktop-v4.8.0.jar" \
     -d "$TEST_DIR" "$TEST_DIR/ExportTestBundle.java"
-"$JAVA_HOME/bin/java" -cp "$TEST_DIR:$ROOT_DIR/dist/VortexEngine-Studio-Desktop-v4.7.0.jar" \
+"$JAVA_HOME/bin/java" -cp "$TEST_DIR:$ROOT_DIR/dist/VortexEngine-Studio-Desktop-v4.8.0.jar" \
     ExportTestBundle \
     "$TEST_DIR/NeonSurvivors-Termux.zip" \
     "$TEST_DIR/NeonSurvivorsSwarm-Windows-Sample.exe" \
@@ -90,4 +90,4 @@ echo "=== [5/5] Testing Linux Self-Contained Binary + Live LRM Headless Suite ==
 
 rm -rf "$TEST_DIR"
 ls -lh "$ROOT_DIR/dist/"
-echo "[ALL V4.7.0 PIPELINE TESTS PASSED!]"
+echo "[ALL V4.8.0 PIPELINE TESTS PASSED!]"

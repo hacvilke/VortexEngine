@@ -4,6 +4,7 @@ import com.vortex.engine.core.audio.ChiptuneGenerator;
 import com.vortex.engine.core.model.Entity;
 import com.vortex.engine.core.model.GameProject;
 import com.vortex.engine.core.model.PixelSpriteCodec;
+import com.vortex.engine.core.model.ProjectTemplates;
 import com.vortex.engine.core.script.VortexScriptEngine;
 import com.vortex.engine.core.storage.VortexSaveStore;
 import java.io.BufferedReader;
@@ -181,8 +182,71 @@ public class VortexForgeAgent {
     // =========================================================================
     // Multi-Genre Offline Smart Generator (Works 100% Offline, Supports JS & Java!)
     // =========================================================================
+    // ---------------------------------------------------------------------
+    // v4.8.0 — prompt-derived values so two different prompts never produce
+    // byte-identical scenes (the old generator always emitted the same arena).
+    // ---------------------------------------------------------------------
+    private static final String[] PROMPT_COLORS = {
+            "#EF4444", "#FACC15", "#7BE3C1", "#C9A227", "#B04A4A", "#8BC34A", "#E0E0E6", "#A88D6A"
+    };
+
+    /** Deterministic per-prompt number in [min, max]. */
+    private static int pick(String prompt, String salt, int min, int max) {
+        int h = (prompt + "|" + salt).hashCode();
+        int span = Math.max(1, max - min + 1);
+        return min + Math.floorMod(h, span);
+    }
+
+    private static String pickColor(String prompt, String salt) {
+        return PROMPT_COLORS[Math.floorMod((prompt + "|" + salt).hashCode(), PROMPT_COLORS.length)];
+    }
+
+    /** First number in the prompt ("5 enemies" -> 5), clamped, else the fallback. */
+    private static int numberIn(String prompt, int fallback, int min, int max) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(\\d{1,2})\\s*(enemies|enemy|drone|orb|coins|gems|platforms|slimes|meteors|blocks)")
+                .matcher(prompt.toLowerCase(Locale.US));
+        if (m.find()) {
+            try {
+                return Math.max(min, Math.min(max, Integer.parseInt(m.group(1))));
+            } catch (NumberFormatException ignored) { }
+        }
+        return fallback;
+    }
+
     private static String applyOfflineSmartGenerator(GameProject p, String prompt, boolean replaceScene) {
         String low = prompt.toLowerCase(Locale.US);
+
+        // ---- voxel archetype: "make minecraft / a block world / mine and build" ----
+        if (low.contains("voxel") || low.contains("minecraft") || low.contains("block world")
+                || low.contains("blocks") || low.contains("mine and build") || low.contains("dig")) {
+            int seed = pick(prompt, "voxelseed", 1000, 9999);
+            GameProject built = ProjectTemplates.create("MINECRAFT_3D",
+                    p.title == null || p.title.isEmpty() ? "Blockfall" : p.title,
+                    p.packageName == null || p.packageName.isEmpty() ? "com.vortex.blockfall" : p.packageName);
+            p.dimensionMode = "3D";
+            p.voxelEnabled = true;
+            p.voxelSeed = seed;
+            p.voxelRenderRadius = 46;
+            p.skyColorHex = built.skyColorHex;
+            p.sunYawDeg = built.sunYawDeg;
+            p.sunPitchDeg = built.sunPitchDeg;
+            p.sunIntensity = built.sunIntensity;
+            p.ambientStrength = built.ambientStrength;
+            p.sunColorHex = built.sunColorHex;
+            p.shadows = built.shadows;
+            p.shadowStrength = built.shadowStrength;
+            p.fogNear = built.fogNear;
+            p.fogFar = built.fogFar;
+            p.scriptLanguage = "JS";
+            p.putScriptFile("scripts/main.js", built.scriptCode);
+            p.scriptCode = built.scriptCode;
+            p.disposeVoxelRuntime();
+            p.ensureVoxelRuntime();
+            return "Voxel world generated (seed " + seed + "): 96×96×64 blocks with hills, lakes and trees. "
+                    + "Press PLAY GAME — WASD/joystick to walk, SPACE to jump, F to fly, LMB/tap to mine, "
+                    + "RMB/long-press to build. Your script hooks onBlockMined(name) and onBlockPlaced(name).";
+        }
         boolean wantJava = low.contains("java ") || low.endsWith(" java") || "JAVA".equalsIgnoreCase(p.scriptLanguage);
         boolean want3D = low.contains("3d") || low.contains("terrain") || low.contains("mecha")
                 || low.contains("canyon") || low.contains("island") || low.contains("obby");
@@ -211,15 +275,19 @@ public class VortexForgeAgent {
             }
 
             int baseIdx = p.entities.size();
-            for (int i = 0; i < 6; i++) {
-                float ang = (float) (i * Math.PI * 2.0 / 6.0);
-                float rx = (float) Math.cos(ang) * 12f;
-                float rz = (float) Math.sin(ang) * 12f;
-                Entity drone = Entity.create3D("Sentinel_" + (baseIdx + i), "enemy", "PYRAMID", rx, 6f, rz, 1.3f, 1.6f, 1.3f, "#EF4444", "DYNAMIC");
+            int enemyCount = numberIn(prompt, 6, 2, 12);
+            float ring = 10f + pick(prompt, "ring", 0, 6);
+            String enemyCol = pickColor(prompt, "enemy");
+            String orbCol = pickColor(prompt, "orb");
+            for (int i = 0; i < enemyCount; i++) {
+                float ang = (float) (i * Math.PI * 2.0 / enemyCount);
+                float rx = (float) Math.cos(ang) * ring;
+                float rz = (float) Math.sin(ang) * ring;
+                Entity drone = Entity.create3D("Sentinel_" + (baseIdx + i), "enemy", "PYRAMID", rx, 6f, rz, 1.3f, 1.6f, 1.3f, enemyCol, "DYNAMIC");
                 drone.spinY = 120f;
                 p.entities.add(drone);
 
-                Entity crystal = Entity.create3D("Orb_" + (baseIdx + i), "coin", "CUBE", rx * 0.55f, 5.5f, rz * 0.55f, 0.85f, 0.85f, 0.85f, "#FACC15", "STATIC");
+                Entity crystal = Entity.create3D("Orb_" + (baseIdx + i), "coin", "CUBE", rx * 0.55f, 5.5f, rz * 0.55f, 0.85f, 0.85f, 0.85f, orbCol, "STATIC");
                 crystal.isTrigger = true;
                 crystal.spinY = 95f;
                 p.entities.add(crystal);
@@ -274,7 +342,8 @@ public class VortexForgeAgent {
                     "    vortex.playSound('hit');\n" +
                     "  }\n" +
                     "}\n";
-            return "Forge Offline Generator built 3D Terrain + 6 AI Sentinels + 6 Energy Orbs + Railgun Script!";
+            return "Built a 3D arena: terrain + " + enemyCount + " sentinels + " + enemyCount
+                    + " energy orbs, with a railgun script (A = jump, B = railgun).";
         }
 
         if (wantPlatformer) {
@@ -1121,6 +1190,22 @@ public class VortexForgeAgent {
             q1.options.add("Run a playtest");
             res.questions.add(q1);
             return res;
+        }
+
+        // Documentation questions get the real documented answer (never a canned generator run).
+        boolean isEditVerb = low.startsWith("add ") || low.startsWith("make ") || low.startsWith("create ")
+                || low.startsWith("build ") || low.startsWith("generate ") || low.startsWith("write ")
+                || low.startsWith("spawn ") || low.startsWith("give ");
+        if (!isEditVerb) {
+            String doc = com.vortex.engine.core.docs.VortexDocs.shortAnswer(low);
+            if (doc != null) {
+                res.reply = doc;
+                Question q1 = new Question("next", "Want me to apply this to your project?");
+                q1.options.add("Yes, set it up for me");
+                q1.options.add("Just show me in the docs");
+                res.questions.add(q1);
+                return res;
+            }
         }
 
         // Vague asks get a short question card instead of a guess.

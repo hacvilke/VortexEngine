@@ -14,6 +14,9 @@ import com.vortex.engine.core.model.PixelSpriteCodec;
 import com.vortex.engine.core.noise.TerrainGenerator;
 import com.vortex.engine.core.physics.PhysicsWorld;
 import com.vortex.engine.core.script.VortexScriptEngine;
+import com.vortex.engine.core.voxel.BlockType;
+import com.vortex.engine.core.voxel.VoxelPlayer;
+import com.vortex.engine.core.voxel.VoxelRuntime;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -44,6 +47,10 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
     private float cachedTerrainFreq = -1f;
 
     private final Map<String, Mesh3D> customMeshCache = new HashMap<>();
+    // v4.8.0 voxel meshes, one per block type, rebuilt only when the world changes
+    private final Map<Integer, Mesh3D> voxelMeshes = new HashMap<>();
+    private int voxelMeshVersion = -1;
+    private int voxelMeshCenterX = Integer.MIN_VALUE, voxelMeshCenterZ = Integer.MIN_VALUE;
     private final Map<String, int[]> decodedSpriteCache = new HashMap<>();
 
     // Dynamic line/shape scratch buffer (pos3 + col4 = 7 floats per vertex)
@@ -110,6 +117,8 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         this.customMeshCache.clear();
         this.decodedSpriteCache.clear();
         this.cachedTerrainMesh = null;
+        this.voxelMeshes.clear();
+        this.voxelMeshVersion = -1;
         this.particleSystem.clear();
         this.physicsWorld.reset();
         this.playing = startPlaying;
@@ -178,6 +187,41 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
 
     public GameProject getActiveProject() { return activeProject; }
     public boolean isPlaying() { return playing; }
+
+    /** v4.8.0 — voxel input from the touch surface. */
+    public void voxelLook(float dxPx, float dyPx) {
+        GameProject p = activeProject;
+        if (p == null || !p.voxelEnabled) return;
+        VoxelPlayer vp = p.ensureVoxelRuntime().player;
+        vp.yawDeg += dxPx * 0.22f;
+        vp.pitchDeg = Math.max(-85f, Math.min(85f, vp.pitchDeg - dyPx * 0.18f));
+    }
+
+    public boolean voxelMine() {
+        GameProject p = activeProject;
+        if (p == null || !p.voxelEnabled) return false;
+        VoxelRuntime rt = p.ensureVoxelRuntime();
+        int broken = rt.breakTargeted();
+        if (broken != BlockType.AIR) {
+            scriptEngine.notifyVoxelEvent(true, BlockType.name(broken));
+            return true;
+        }
+        return false;
+    }
+
+    public boolean voxelBuild() {
+        GameProject p = activeProject;
+        if (p == null || !p.voxelEnabled) return false;
+        VoxelRuntime rt = p.ensureVoxelRuntime();
+        boolean placed = rt.placeTargeted(rt.player.selectedBlock);
+        if (placed) scriptEngine.notifyVoxelEvent(false, BlockType.name(rt.player.selectedBlock));
+        return placed;
+    }
+
+    public VoxelPlayer voxelPlayer() {
+        GameProject p = activeProject;
+        return p == null || !p.voxelEnabled ? null : p.ensureVoxelRuntime().player;
+    }
     public void setSelectedEntityId(String id) { this.selectedEntityId = id; }
     public String getSelectedEntityId() { return selectedEntityId; }
 
@@ -251,6 +295,11 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
             }
 
             if (playing) {
+                if (project.voxelEnabled) {
+                    VoxelRuntime rt = project.ensureVoxelRuntime();
+                    rt.player.update(rt.world, dt, scriptEngine.inputJoyY, scriptEngine.inputJoyX,
+                            scriptEngine.inputBtnA, false, false);
+                }
                 scriptEngine.update(dt);
                 List<PhysicsWorld.CollisionEvent> cols = physicsWorld.step(project, dt);
                 for (int i = 0; i < cols.size(); i++) {
@@ -281,7 +330,23 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         Matrix.perspectiveM(projMatrix, 0, Math.max(30f, Math.min(100f, project.cameraFov)), aspect, 0.2f, 240f);
 
         float camX, camY, camZ, lookX, lookY, lookZ;
-        if (!playing) {
+        VoxelPlayer voxelPlayer = project.voxelEnabled ? project.ensureVoxelRuntime().player : null;
+        if (voxelPlayer != null && playing) {
+            camX = voxelPlayer.eyeX();
+            camY = voxelPlayer.eyeY() + voxelPlayer.bobOffset();
+            camZ = voxelPlayer.eyeZ();
+            lookX = camX + voxelPlayer.dirX();
+            lookY = camY + voxelPlayer.dirY();
+            lookZ = camZ + voxelPlayer.dirZ();
+        } else if (!playing && voxelPlayer != null) {
+            double yawRad = Math.toRadians(editorYawDeg);
+            double pitchRad = Math.toRadians(Math.max(6f, Math.min(80f, editorPitchDeg)));
+            float horiz = (float) (Math.cos(pitchRad) * editorDist);
+            camX = voxelPlayer.x + (float) (Math.sin(yawRad) * horiz);
+            camY = voxelPlayer.y + 1.2f + (float) (Math.sin(pitchRad) * editorDist);
+            camZ = voxelPlayer.z + (float) (Math.cos(yawRad) * horiz);
+            lookX = voxelPlayer.x; lookY = voxelPlayer.y + 1f; lookZ = voxelPlayer.z;
+        } else if (!playing) {
             double yawRad = Math.toRadians(editorYawDeg);
             double pitchRad = Math.toRadians(Math.max(-80f, Math.min(80f, editorPitchDeg)));
             float horiz = (float) (Math.cos(pitchRad) * editorDist);
@@ -320,7 +385,7 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         Matrix.multiplyMM(vpMatrix, 0, projMatrix, 0, viewMatrix, 0);
         System.arraycopy(vpMatrix, 0, lastFrameVP, 0, 16);
 
-        if (!playing || project.showGrid) draw3DGrid();
+        if ((!playing || project.showGrid) && !project.voxelEnabled) draw3DGrid();
 
         lit3DShader.use();
         float[] amb = Entity.hexToRgba(project.ambientColorHex, 1f);
@@ -340,6 +405,10 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
         int uSecColor = lit3DShader.uniform("uSecondaryColor");
         int uChecker = lit3DShader.uniform("uChecker");
         int uEmissive = lit3DShader.uniform("uEmissive");
+
+        if (project.voxelEnabled) {
+            drawVoxelWorld(project, aPos, aNorm, aUV, uMVP, uModel, uColor, uSecColor, uChecker, uEmissive);
+        }
 
         Entity selected = null;
         synchronized (this) {
@@ -365,6 +434,70 @@ public class VortexGLRenderer implements GLSurfaceView.Renderer {
 
         if (!playing && selected != null) draw3DSelectionBoxAndGizmo(selected);
         particleSystem.draw(flatShader, vpMatrix, 9.5f);
+    }
+
+    /**
+     * Draws the voxel world: one mesh per block type, rebuilt only when the world is edited or the
+     * player walks far enough that the render radius window moved.
+     */
+    private void drawVoxelWorld(GameProject project, int aPos, int aNorm, int aUV,
+                                int uMVP, int uModel, int uColor, int uSecColor, int uChecker, int uEmissive) {
+        VoxelRuntime rt = project.ensureVoxelRuntime();
+        int cx = (int) Math.floor(rt.player.x);
+        int cz = (int) Math.floor(rt.player.z);
+        int radius = project.voxelRenderRadius > 0 ? project.voxelRenderRadius : 0;
+
+        boolean rebuild = voxelMeshVersion != rt.world.dirty()
+                || Math.abs(cx - voxelMeshCenterX) > 4
+                || Math.abs(cz - voxelMeshCenterZ) > 4;
+        if (rebuild) {
+            voxelMeshVersion = rt.world.dirty();
+            voxelMeshCenterX = cx;
+            voxelMeshCenterZ = cz;
+            voxelMeshes.clear();
+            Map<Integer, float[]> byBlock = rt.trianglesByBlock(cx, cz, radius);
+            for (Map.Entry<Integer, float[]> e : byBlock.entrySet()) {
+                float[] tris = e.getValue();             // pos3 + normal3 per vertex, 3 verts per triangle
+                if (tris.length == 0) continue;
+                int verts = tris.length / 6;
+                float[] interleaved = new float[verts * Mesh3D.FLOATS_PER_VERTEX];
+                int o = 0;
+                for (int i = 0; i < verts; i++) {
+                    interleaved[o++] = tris[i * 6];
+                    interleaved[o++] = tris[i * 6 + 1];
+                    interleaved[o++] = tris[i * 6 + 2];
+                    interleaved[o++] = tris[i * 6 + 3];
+                    interleaved[o++] = tris[i * 6 + 4];
+                    interleaved[o++] = tris[i * 6 + 5];
+                    interleaved[o++] = 0f;
+                    interleaved[o++] = 0f;
+                }
+                voxelMeshes.put(e.getKey(), new Mesh3D(interleaved));
+            }
+        }
+
+        // Identity model matrix: the mesh is already in world space.
+        Matrix.setIdentityM(modelMatrix, 0);
+        Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, modelMatrix, 0);
+        GLES20.glUniformMatrix4fv(uModel, 1, false, modelMatrix, 0);
+        GLES20.glUniformMatrix4fv(uMVP, 1, false, mvpMatrix, 0);
+        GLES20.glUniform1f(uChecker, 0f);
+        float[] white = new float[]{1f, 1f, 1f, 1f};
+        GLES20.glUniform4fv(uSecColor, 1, white, 0);
+
+        for (Map.Entry<Integer, Mesh3D> e : voxelMeshes.entrySet()) {
+            int id = e.getKey();
+            int argb = BlockType.color(id);
+            float[] col = new float[]{
+                    ((argb >> 16) & 0xFF) / 255f,
+                    ((argb >> 8) & 0xFF) / 255f,
+                    (argb & 0xFF) / 255f,
+                    id == BlockType.WATER ? 0.72f : 1f
+            };
+            GLES20.glUniform4fv(uColor, 1, col, 0);
+            GLES20.glUniform1f(uEmissive, BlockType.isEmissive(id) ? 1f : 0f);
+            e.getValue().draw(aPos, aNorm, aUV);
+        }
     }
 
     private Mesh3D resolveMesh(GameProject project, Entity e) {

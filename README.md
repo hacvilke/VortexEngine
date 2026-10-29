@@ -1,8 +1,37 @@
-# Vortex Engine Studio — v4.7.0 ("Tile & Material Edition")
+# Vortex Engine Studio — v4.8.0 ("Blockfall Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
+
+## What's New in v4.8.0 (Voxel Worlds, In-App Docs & an Honest Forge)
+
+### 1. 3D Voxel: **Blockfall** — a Minecraft-style game, playable today
+- New engine subsystem `core/voxel`: a **96 × 96 × 64** block world (one byte per block) with seed-based hills, lakes, beaches, mountains, caves-free strata and oak trees.
+- **Greedy meshing** merges coplanar faces into bars, so a whole landscape is ~8–12k quads instead of 230k blocks; the mesh rebuilds only when the world changes or you walk out of the render window.
+- **First-person controller**: walk, sprint, sneak, jump, swim, **fly**, head-bob, and **AABB-vs-voxel collision** that cannot tunnel. Same code on desktop, Android and exports.
+- **Mining and building**: voxel raycast (Amanatides & Woo) with an outline on the targeted block, block palette, hotbar, mine/place through the *editor* too (`Tools ▸ Voxel Block Palette`, LMB mine / RMB build, middle-click pipette).
+- **Phone controls**: joystick to walk, drag to look, tap to mine, long-press (or second finger) to build.
+- **Saves** are run-length encoded inside the project JSON (~60–120 KB), so a block world survives save/reload/export.
+- **Scriptable**: `voxelGet / voxelSet / voxelName / voxelHeight / playerX/Y/Z / setPlayerPos / setPlayerFlying / blockBreakAtCursor / blockPlaceAtCursor / voxelRegenerate` plus `onBlockMined(name)` and `onBlockPlaced(name)` hooks.
+- The desktop software renderer got a **near-plane clipper + face-splitting** voxel pass (the old painter's algorithm smeared huge merged ground faces across the screen) and now holds ~30–80 FPS at 1200×720 depending on the machine and view.
+- **Spawn you can actually see:** new worlds search for an open, level, grass column near the project's spawn point and carve a soft-edged meadow there (`VoxelWorld.prepareSpawn` / `clearSpawnPad`), so nobody starts inside a hill.
+- **Oaks look like oaks** (full rounded canopies) and hairline gaps between merged quads were closed with a same-colour outline stroke.
+- **Blockfall starter** now ships a small objective: 5 glowing shards to collect plus a home beacon, with a commented script that shows how to read the world (`playerX/Y/Z`, `voxelGet`, `voxelName`) and react to `onBlockMined` / `onBlockPlaced`.
+- **Save safety:** the project now persists the *live* block world on save (`GameProject.syncVoxelData`), so blocks mined or placed in a session are no longer lost when you save.
+
+### 2. Documentation that ships *inside* the app
+- `Help ▸ Docs & Getting Started…` opens a browsable, offline documentation window (10 topics: getting started, voxel, scripting, camera/controls, 3D, physics, export, debugging, Forge, prefabs/tilemaps).
+- `Help ▸ How do I…?` answers a plain-language question directly.
+- Docs window has a **search box**: type to filter topics, or type a question and press Enter to jump straight to the answer.
+- Same content on the phone: `More ⋯ ▸ Docs: Getting started / Voxel worlds / Script API / How do I…?`.
+- Repo docs: [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md), [`docs/VOXEL.md`](docs/VOXEL.md), [`docs/SCRIPT_API.md`](docs/SCRIPT_API.md) (generated from the engine source, so it cannot go stale), [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
+
+### 3. Forge AI stops recycling one canned answer
+- **How-to questions are answered from the documentation** (real API names, real controls) instead of triggering a scene generator, with a one-tap "apply it for me" follow-up.
+- The offline generator is now **prompt-derived**: enemy counts, ring radius, colours and names come from your words ("8 red drones"), so two different prompts never produce byte-identical scenes.
+- **New voxel archetype**: "make minecraft / a block world" builds Blockfall with a fresh seed and explains the controls.
+- Replies read like a person explaining what they did — and every action still has an **Undo** badge.
 
 ## What's New in v4.7.0 (Tile Maps, Prefabs & Procedural Materials)
 

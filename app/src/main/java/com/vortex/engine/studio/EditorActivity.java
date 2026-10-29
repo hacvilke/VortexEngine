@@ -352,8 +352,9 @@ public class EditorActivity extends Activity {
         final TextView moreBtn = VortexMobileUi.makeButton(this, "More ⋯", VortexMobileUi.ButtonVariant.SECONDARY, true);
         moreBtn.setTag("MORE");
         moreBtn.setOnClickListener(v -> {
-            String[] names = {"Sprite Editor", "Audio & SFX", "LRM P2P Sync", "Build & Export"};
-            String[] keys = {"PIXEL", "SFX", "LRM", "BUILD"};
+            String[] names = {"Sprite Editor", "Audio & SFX", "LRM P2P Sync", "Build & Export",
+                    "Docs: Getting started", "Docs: Voxel worlds", "Docs: Script API", "Docs: How do I…?"};
+            String[] keys = {"PIXEL", "SFX", "LRM", "BUILD", "DOC_START", "DOC_VOXEL", "DOC_SCRIPT", "DOC_ASK"};
             VortexMobileUi.showPickerModal(this, "More tools", names, 0, (which, val) -> switchMode(keys[which]));
         });
         LinearLayout.LayoutParams moreLp = new LinearLayout.LayoutParams(0, dp(38), 1f);
@@ -2368,7 +2369,73 @@ public class EditorActivity extends Activity {
         buildLogTv.append(span);
     }
 
+    // =====================================================================
+    // v4.8.0 — in-app documentation (offline, phone sized)
+    // =====================================================================
+
+    private void showMobileDocs(String which) {
+        if ("DOC_ASK".equals(which)) {
+            LinearLayout body = new LinearLayout(this);
+            body.setOrientation(LinearLayout.VERTICAL);
+            body.setPadding(dp(14), dp(6), dp(14), dp(6));
+            TextView hint = new TextView(this);
+            hint.setText("Type a question in your own words — e.g. \"how do I jump?\"");
+            hint.setTextColor(VortexMobileUi.C_TEXT_DIM);
+            hint.setTextSize(12f);
+            body.addView(hint);
+            final android.widget.EditText field = new android.widget.EditText(this);
+            field.setTextColor(VortexMobileUi.C_TEXT);
+            field.setHint("how do I move my player?");
+            field.setSingleLine(false);
+            body.addView(field);
+            VortexMobileUi.showModal(this, "Ask the docs", body, "Answer", () -> {
+                String q = field.getText().toString().trim();
+                com.vortex.engine.core.docs.VortexDocs.Topic t =
+                        com.vortex.engine.core.docs.VortexDocs.answerFor(q);
+                if (t == null) {
+                    toast("No match — try: voxel, jump, physics, export");
+                } else {
+                    showTopicModal(t);
+                }
+            }, "Close", null, null);
+            return;
+        }
+        String id = "DOC_VOXEL".equals(which) ? "voxel" : ("DOC_SCRIPT".equals(which) ? "script" : "start");
+        com.vortex.engine.core.docs.VortexDocs.Topic t = com.vortex.engine.core.docs.VortexDocs.get(id);
+        if (t != null) showTopicModal(t);
+    }
+
+    private void showTopicModal(final com.vortex.engine.core.docs.VortexDocs.Topic t) {
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(14), dp(4), dp(14), dp(4));
+        TextView summary = new TextView(this);
+        summary.setText(t.summary);
+        summary.setTextColor(VortexMobileUi.C_TEXT_DIM);
+        summary.setTextSize(12.5f);
+        body.addView(summary);
+        TextView text = new TextView(this);
+        text.setText(t.body);
+        text.setTextColor(VortexMobileUi.C_TEXT);
+        text.setTextSize(13.5f);
+        text.setLineSpacing(dp(3), 1f);
+        body.addView(text);
+        final java.util.List<com.vortex.engine.core.docs.VortexDocs.Topic> all =
+                com.vortex.engine.core.docs.VortexDocs.all();
+        VortexMobileUi.showModal(this, t.title, body, "More topics", () -> {
+            String[] names = new String[all.size()];
+            for (int i = 0; i < all.size(); i++) names[i] = all.get(i).title;
+            VortexMobileUi.showPickerModal(this, "Docs topics", names, 0, (which, val) -> {
+                if (which >= 0 && which < all.size()) showTopicModal(all.get(which));
+            });
+        }, "Close", null, null);
+    }
+
     private void switchMode(String mode) {
+        if (mode != null && mode.startsWith("DOC_")) {
+            showMobileDocs(mode);
+            return;
+        }
         syncCodeFromEditor();
         sfxPreview.stopAll();
         currentMode = mode;
