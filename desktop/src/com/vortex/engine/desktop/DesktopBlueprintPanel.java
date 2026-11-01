@@ -509,13 +509,13 @@ public final class DesktopBlueprintPanel extends JPanel {
             int step = Math.max(14, Math.round(24 * zoom));
             int ox = ((Math.round(panX) % step) + step) % step;
             int oy = ((Math.round(panY) % step) + step) % step;
-            g2.setColor(new Color(24, 24, 29));
+            g2.setColor(DesktopUiKit.C_PAPER_2);
             for (int x = ox; x < w; x += step) g2.drawLine(x, 0, x, h);
             for (int y = oy; y < h; y += step) g2.drawLine(0, y, w, y);
             int major = step * 4;
             int mox = ((Math.round(panX) % major) + major) % major;
             int moy = ((Math.round(panY) % major) + major) % major;
-            g2.setColor(new Color(36, 36, 43));
+            g2.setColor(DesktopUiKit.C_PAPER_DEEP);
             for (int x = mox; x < w; x += major) g2.drawLine(x, 0, x, h);
             for (int y = moy; y < h; y += major) g2.drawLine(0, y, w, y);
         }
@@ -547,16 +547,16 @@ public final class DesktopBlueprintPanel extends JPanel {
             String cat = n.getCategory();
             Color hdrCol;
             if ("EVENT".equalsIgnoreCase(cat)) hdrCol = new Color(68, 28, 34);
-            else if ("GUI".equalsIgnoreCase(cat)) hdrCol = new Color(46, 46, 54);
+            else if ("GUI".equalsIgnoreCase(cat)) hdrCol = new Color(0xE0, 0xD3, 0xB4);
             else if ("BRANCH".equalsIgnoreCase(cat)) hdrCol = new Color(58, 46, 24);
-            else hdrCol = new Color(34, 34, 40);
+            else hdrCol = DesktopUiKit.C_SURFACE;
 
             g2.setClip(card);
             g2.setColor(hdrCol);
             g2.fillRect(Math.round(n.x), Math.round(n.y), NODE_W, 26);
             g2.setClip(null);
 
-            g2.setColor(sel ? Color.WHITE : new Color(62, 62, 72));
+            g2.setColor(sel ? DesktopUiKit.C_INK : DesktopUiKit.C_BORDER_STRONG);
             g2.setStroke(new BasicStroke(sel ? 1.8f : 1.0f));
             g2.draw(card);
 

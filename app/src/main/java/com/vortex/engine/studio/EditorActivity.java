@@ -111,6 +111,8 @@ public class EditorActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
+        // Paper theme lettering must be ready before any view is built.
+        VortexMobileUi.loadPaperFonts(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         VortexMobileUi.applyDarkSystemBars(this);
         VortexSaveStore.setSaveRootDir(new File(getFilesDir(), "vortex_saves"));
@@ -353,8 +355,9 @@ public class EditorActivity extends Activity {
         moreBtn.setTag("MORE");
         moreBtn.setOnClickListener(v -> {
             String[] names = {"Sprite Editor", "Audio & SFX", "LRM P2P Sync", "Build & Export",
-                    "Docs: Getting started", "Docs: Voxel worlds", "Docs: Script API", "Docs: How do I…?"};
-            String[] keys = {"PIXEL", "SFX", "LRM", "BUILD", "DOC_START", "DOC_VOXEL", "DOC_SCRIPT", "DOC_ASK"};
+                    "Docs: Getting started", "Docs: Voxel worlds", "Docs: Script API", "Docs: How do I…?",
+                    "API Reference (offline site)"};
+            String[] keys = {"PIXEL", "SFX", "LRM", "BUILD", "DOC_START", "DOC_VOXEL", "DOC_SCRIPT", "DOC_ASK", "DOC_SITE"};
             VortexMobileUi.showPickerModal(this, "More tools", names, 0, (which, val) -> switchMode(keys[which]));
         });
         LinearLayout.LayoutParams moreLp = new LinearLayout.LayoutParams(0, dp(38), 1f);
@@ -1490,35 +1493,52 @@ public class EditorActivity extends Activity {
     }
 
     private void showApiDocsDialog() {
-        String docs =
-                "=== ES6+ JAVASCRIPT (Mozilla Rhino / Web V8) ===\n" +
-                "  class WaveDirector { constructor() {} }\n" +
-                "  function onStart() {}\n" +
-                "  function onUpdate(dt) {}\n" +
-                "  function onButton(btn) {} // 'A' or 'B'\n" +
-                "  function onCollide(a, b, tagA, tagB) {}\n\n" +
-                "Engine API (`vortex.*` or global functions):\n" +
-                "  vortex.joyX(), vortex.joyY(), vortex.btnA(), vortex.btnB()\n" +
-                "  vortex.setPos(n, x, y [, z]) | vortex.setVel(n, vx, vy [, vz])\n" +
-                "  vortex.findNearestTag('Player', 'enemy', 30)\n" +
-                "  vortex.setSpriteAnim('Player', 'knight_1,knight_2', 7)\n" +
-                "  vortex.saveData('best', 500) | vortex.loadNum('best', 0)\n" +
-                "  vortex.chaseTagAI('enemy', 'Player', 4.5)  // Theta* AI\n" +
-                "  vortex.tweenTagYoyo('coin', 0.4, 0.9, 'SINE')\n" +
-                "  vortex.raycast(ox,oy,oz, dx,dy,dz, maxDist)\n" +
-                "  vortex.playMusic('CYBERPUNK'|'DUNGEON'|'BOSS'|'SKYCHILL', bpm)\n" +
-                "  vortex.playSound('jump'|'coin'|'laser'|'explosion'|'hit'|'powerup')\n\n" +
-                "=== LUA 5.2 (LuaJ) & VORTEXSCRIPT (.vxs) ===\n" +
-                "Identical `vortex.*` methods in Lua 5.2 and direct globals in .vxs!";
-        VortexMobileUi.showMessageModal(
-                this,
-                "Scripting API Reference (ES6 JS • Lua 5.2 • VXS)",
-                docs,
-                "Got It",
-                null,
-                null,
-                null,
-                null);
+        openOfflineDocs();
+    }
+
+    /**
+     * "API Reference" opens the generated offline documentation site (index.html) in an in-app
+     * WebView. The file is written from the engine's own docs corpus, so it always matches the
+     * build the user is holding — and it works with the radio off.
+     */
+    private void openOfflineDocs() {
+        try {
+            java.io.File dir = new java.io.File(getCacheDir(), "docs");
+            java.io.File index = com.vortex.engine.core.docs.DocsSite.write(dir);
+            android.webkit.WebView web = new android.webkit.WebView(this);
+            web.setBackgroundColor(android.graphics.Color.parseColor("#FBF6EA"));
+            android.webkit.WebSettings ws = web.getSettings();
+            ws.setJavaScriptEnabled(false);
+            ws.setAllowFileAccess(true);
+            web.loadUrl("file://" + index.getAbsolutePath());
+
+            LinearLayout body = new LinearLayout(this);
+            body.setOrientation(LinearLayout.VERTICAL);
+            body.setBackgroundColor(VortexMobileUi.C_PAPER);
+            body.addView(web, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+
+            final android.app.Dialog dlg = new android.app.Dialog(this);
+            dlg.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+            dlg.setContentView(body);
+            android.view.Window w = dlg.getWindow();
+            if (w != null) {
+                w.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT);
+                w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(VortexMobileUi.C_PAPER));
+                w.setGravity(android.view.Gravity.CENTER);
+            }
+            dlg.setOnDismissListener(d -> web.destroy());
+            dlg.show();
+            toast("Offline API reference • " + (index.length() / 1024) + " KB");
+        } catch (Throwable ex) {
+            LinearLayout body = new LinearLayout(this);
+            TextView t = new TextView(this);
+            t.setText("Could not open the offline docs: " + ex);
+            t.setTextColor(VortexMobileUi.C_TEXT);
+            body.addView(t);
+            VortexMobileUi.showMessageModal(this, "API Reference", String.valueOf(ex), "Close", null, null, null, null);
+        }
     }
 
     // =========================================================================
@@ -2374,6 +2394,7 @@ public class EditorActivity extends Activity {
     // =====================================================================
 
     private void showMobileDocs(String which) {
+        if ("DOC_SITE".equals(which)) { openOfflineDocs(); return; }
         if ("DOC_ASK".equals(which)) {
             LinearLayout body = new LinearLayout(this);
             body.setOrientation(LinearLayout.VERTICAL);

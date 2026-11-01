@@ -137,6 +137,11 @@ echo "app/src/main/java/com/vortex/engine/core/audio/ChiptuneGenerator.java" >> 
     -d "$BUILD_DESK/classes" \
     @"$BUILD_DESK/sources.txt"
 
+# Paper theme fonts (Caveat / Patrick Hand / Special Elite) ship inside the jar.
+if [ -d "desktop/resources" ]; then
+    cp -R desktop/resources/. "$BUILD_DESK/classes/"
+fi
+
 echo "=== [3/5] Assembling All-in-One Desktop Fat JAR (Core + Java VM + Rhino ES6 + LuaJ + JBox2D + Tween + Pathfinding + org.json) ==="
 (cd "$BUILD_DESK/fatjar" && unzip -qo "$LUAJ_JAR" && unzip -qo "$JBOX2D_JAR" && unzip -qo "$TWEEN_JAR" && unzip -qo "$PATHFINDING_JAR" && unzip -qo "$RHINO_JAR" && unzip -qo "$BSH_JAR" && unzip -qo "$JSON_JAR")
 rm -rf "$BUILD_DESK/fatjar/META-INF"
@@ -169,7 +174,7 @@ Manifest-Version: 1.0
 Main-Class: com.vortex.engine.desktop.VortexDesktopStudio
 EOF
 
-FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.8.1.jar"
+FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.9.0.jar"
 "$JAR" cfm "$FAT_JAR" "$BUILD_DESK/manifest.mf" -C "$BUILD_DESK/fatjar" .
 
 echo "=== [4/5] Building Self-Contained Windows x64 .EXE & Linux x86_64 Binary ==="

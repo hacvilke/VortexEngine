@@ -83,57 +83,94 @@ import javax.swing.text.StyledDocument;
  */
 public final class DesktopUiKit {
 
-    // High-Contrast 5-Tier Neutral Dark + Crisp White Studio Palette (ZERO BLUE!)
-    public static final Color C_VOID          = new Color(7, 7, 9);       // #070709 Deep recessed canvas / code / console well
-    public static final Color C_INPUT_BG      = new Color(11, 11, 15);    // #0B0B0F Recessed numeric / text input well
-    public static final Color C_PANEL         = new Color(21, 21, 26);    // #15151A Primary dock surface (Hierarchy / Explorer)
-    public static final Color C_PANEL_ALT     = new Color(28, 28, 35);    // #1C1C23 Alternating card / Inspector accordion surface
-    public static final Color C_HEADER        = new Color(33, 33, 41);    // #212129 Elevated dock header bar
-    public static final Color C_SURFACE       = new Color(42, 42, 52);    // #2A2A34 Interactive controls & active tab surface
-    public static final Color C_SURFACE_HOV   = new Color(56, 56, 69);    // #383845 Hover state highlight
-    public static final Color C_BORDER_SUBTLE = new Color(46, 46, 57);    // #2E2E39 Subtle inner card divider
-    public static final Color C_BORDER        = new Color(64, 64, 79);    // #40404F Crisp structural panel separation border
-    public static final Color C_BORDER_STRONG = new Color(102, 102, 122); // #66667A Active splitter / input focus border
-    public static final Color C_WHITE         = new Color(255, 255, 255); // #FFFFFF Pure crisp accent white
-    public static final Color C_WHITE_SOFT    = new Color(240, 240, 245); // #F0F0F5
-    public static final Color C_ACCENT_TINT   = new Color(48, 48, 59);    // #30303B Selected item / active pill fill
-    public static final Color C_DARK_INK      = new Color(9, 9, 11);      // #09090B
-    public static final Color C_TEXT          = new Color(250, 250, 252); // #FAFAFC Primary readable text
-    public static final Color C_TEXT_LABEL    = new Color(226, 226, 235); // #E2E2EB High-contrast Inspector property labels
-    public static final Color C_TEXT_MUTED    = new Color(184, 184, 198); // #B8B8C6 Readable metadata & secondary labels (no eye strain)
+    // =====================================================================
+    // PAPER THEME — cream stock, ink text, pencil rules, hand lettering.
+    // Palette mirrors hacvilke/paper-trader: nothing here is pure white or pure black,
+    // because paper never is; contrast comes from ink weight, not from neon.
+    // =====================================================================
+    public static final Color C_PAPER        = new Color(0xFB, 0xF6, 0xEA); // #fbf6ea sheet
+    public static final Color C_PAPER_2      = new Color(0xF4, 0xEC, 0xDA); // #f4ecda secondary stock
+    public static final Color C_PAPER_DEEP   = new Color(0xEA, 0xDF, 0xC6); // #eadfc6 kraft / headers
+    public static final Color C_INK          = new Color(0x33, 0x29, 0x1D); // #33291d ink
+    public static final Color C_PENCIL       = new Color(0x6F, 0x65, 0x58); // #6f6558 pencil
+    public static final Color C_INK_GREEN    = new Color(0x1E, 0x7A, 0x44); // #1e7a44
+    public static final Color C_INK_RED      = new Color(0xC0, 0x39, 0x2B); // #c0392b
+    public static final Color C_INK_BLUE     = new Color(0x24, 0x56, 0xA6); // #2456a6
+    public static final Color C_INK_AMBER    = new Color(0xA8, 0x62, 0x10);
 
-    // Backwards-compatible aliases mapped strictly to Crisp White / Neutral Dark (ZERO BLUE!)
-    public static final Color C_CYAN         = C_WHITE;
-    public static final Color C_CYAN_HOV     = C_WHITE;
-    public static final Color C_CYAN_TINT    = C_ACCENT_TINT;
-    public static final Color C_CYAN_DARK_TX = C_DARK_INK;
+    // Same names as before, re-pointed at paper. (C_WHITE == "ink" and C_DARK_INK == "paper" is
+    // deliberate: it inverts stamps/buttons in one place instead of touching 300 call sites.)
+    public static final Color C_VOID          = C_PAPER;       // canvas / code / console sheet
+    public static final Color C_INPUT_BG      = new Color(0xFF, 0xFD, 0xF7);
+    public static final Color C_PANEL         = C_PAPER_2;     // docks
+    public static final Color C_PANEL_ALT     = new Color(0xFF, 0xFC, 0xF3);
+    public static final Color C_HEADER        = C_PAPER_DEEP;  // dock headers (kraft tab)
+    public static final Color C_SURFACE       = new Color(0xEF, 0xE6, 0xD3);
+    public static final Color C_SURFACE_HOV   = new Color(0xE4, 0xD8, 0xBC);
+    public static final Color C_BORDER_SUBTLE = new Color(0xE3, 0xD7, 0xBD);
+    public static final Color C_BORDER        = new Color(0xD2, 0xC2, 0x9F);
+    public static final Color C_BORDER_STRONG = new Color(0xA9, 0x96, 0x70);
+    public static final Color C_WHITE         = C_INK;         // "strongest foreground" == ink
+    public static final Color C_WHITE_SOFT    = new Color(0x3E, 0x33, 0x25);
+    public static final Color C_ACCENT_TINT   = new Color(0xEE, 0xE2, 0xC6);
+    public static final Color C_DARK_INK      = C_PAPER;       // text stamped on ink fills
+    public static final Color C_TEXT          = C_INK;
+    public static final Color C_TEXT_LABEL    = new Color(0x3A, 0x2F, 0x22);
+    public static final Color C_TEXT_MUTED    = C_PENCIL;
 
-    // Semantic Build / Script / Console Feedback Palette (Soft Red Errors + Bright Green Successes + Warm Amber)
-    public static final Color C_DANGER_BG    = new Color(48, 20, 25);
-    public static final Color C_DANGER_HOV   = new Color(66, 27, 34);
-    public static final Color C_DANGER_BD    = new Color(156, 56, 68);
-    public static final Color C_DANGER_TX    = new Color(255, 107, 107);  // #FF6B6B Soft coral red for errors
-    public static final Color C_OK_BG        = new Color(12, 42, 27);     // #0C2A1B Subtle emerald confirmation tint
-    public static final Color C_OK_BD        = new Color(22, 163, 74);    // #16A34A Emerald confirmation border
-    public static final Color C_OK_TX        = new Color(0, 230, 118);    // #00E676 Bright emerald green for successful builds
-    public static final Color C_WARN_BG      = new Color(45, 34, 12);
-    public static final Color C_WARN_TX      = new Color(251, 191, 36);   // #FBBF24 Warm amber warnings
+    public static final Color C_CYAN          = C_INK;
+    public static final Color C_CYAN_HOV      = C_PENCIL;
+    public static final Color C_CYAN_TINT     = C_ACCENT_TINT;
+    public static final Color C_CYAN_DARK_TX  = C_PAPER;
 
-    // Crisp Native ClearType / FreeType Font Resolution & Readable Default Scale (100% — NEVER 10pt!)
-    public static final String UI_FAMILY   = pickInstalledFont(
-            "Inter", "Segoe UI", "Ubuntu", "Cantarell", "Liberation Sans", "DejaVu Sans", "SansSerif");
-    public static final String MONO_FAMILY = pickInstalledFont(
-            "JetBrains Mono", "Cascadia Mono", "Consolas", "Liberation Mono", "DejaVu Sans Mono", "Monospaced");
+    // Semantic ink washes (stamps, not neon)
+    public static final Color C_DANGER_BG    = new Color(0xF7, 0xE3, 0xDF);
+    public static final Color C_DANGER_HOV   = new Color(0xF1, 0xD3, 0xCD);
+    public static final Color C_DANGER_BD    = new Color(0xD9, 0xA7, 0x9F);
+    public static final Color C_DANGER_TX    = C_INK_RED;
+    public static final Color C_OK_BG        = new Color(0xE4, 0xEF, 0xE2);
+    public static final Color C_OK_BD        = new Color(0xA8, 0xC9, 0xA9);
+    public static final Color C_OK_TX        = C_INK_GREEN;
+    public static final Color C_WARN_BG      = new Color(0xF6, 0xEC, 0xD5);
+    public static final Color C_WARN_TX      = C_INK_AMBER;
+
+    // ---------------------------------------------------------------------
+    // Paper lettering: three OFL fonts are bundled with the app (fonts/*.ttf) so the hand-lettered
+    // look works offline on every machine. If loading ever fails we degrade to system faces.
+    // ---------------------------------------------------------------------
+    private static boolean handFontsLoaded = false;
+    private static String registerFont(String resource, String family, String fallback) {
+        try {
+            java.io.InputStream in = DesktopUiKit.class.getResourceAsStream(resource);
+            if (in != null) {
+                java.awt.Font f = java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT, in);
+                java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(f);
+                handFontsLoaded = true;
+                return family;
+            }
+        } catch (Throwable ignored) { }
+        return fallback;
+    }
+
+    /** Hand lettering for headings and labels (Caveat). */
+    public static final String HAND_FAMILY = registerFont("/fonts/Caveat.ttf", "Caveat",
+            pickInstalledFont("Segoe Print", "Comic Sans MS", "DejaVu Sans", "SansSerif"));
+    /** Body lettering for the whole UI (Patrick Hand). */
+    public static final String UI_FAMILY = registerFont("/fonts/PatrickHand.ttf", "Patrick Hand",
+            pickInstalledFont("Segoe Print", "Comic Sans MS", "DejaVu Sans", "SansSerif"));
+    /** Typewriter face for code, console and terminal (Special Elite). */
+    public static final String MONO_FAMILY = registerFont("/fonts/SpecialElite.ttf", "Special Elite",
+            pickInstalledFont("JetBrains Mono", "Consolas", "Liberation Mono", "DejaVu Sans Mono", "Monospaced"));
 
     private static float uiScale = 1.00f;
     private static int baseUiPt = 14;
     private static int baseMonoPt = 14;
 
     public static Font FONT_SMALL      = new Font(UI_FAMILY, Font.PLAIN, scaledFontPt(12));
-    public static Font FONT_SMALL_BOLD = new Font(UI_FAMILY, Font.BOLD, scaledFontPt(12));
+    public static Font FONT_SMALL_BOLD = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(16));
     public static Font FONT_UI         = new Font(UI_FAMILY, Font.PLAIN, scaledFontPt(baseUiPt));
-    public static Font FONT_UI_BOLD    = new Font(UI_FAMILY, Font.BOLD, scaledFontPt(baseUiPt));
-    public static Font FONT_TITLE      = new Font(UI_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 1));
+    public static Font FONT_UI_BOLD    = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 3));
+    public static Font FONT_TITLE      = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 5));
     public static Font FONT_MONO       = new Font(MONO_FAMILY, Font.PLAIN, scaledFontPt(baseMonoPt));
 
     private static String pickInstalledFont(String... candidates) {
@@ -187,10 +224,10 @@ public final class DesktopUiKit {
 
     private static void rebuildFonts() {
         FONT_SMALL      = new Font(UI_FAMILY, Font.PLAIN, Math.max(11, scaledFontPt(baseUiPt - 1)));
-        FONT_SMALL_BOLD = new Font(UI_FAMILY, Font.BOLD, Math.max(11, scaledFontPt(baseUiPt - 1)));
+        FONT_SMALL_BOLD = new Font(HAND_FAMILY, Font.BOLD, Math.max(13, scaledFontPt(baseUiPt + 1)));
         FONT_UI         = new Font(UI_FAMILY, Font.PLAIN, scaledFontPt(baseUiPt));
-        FONT_UI_BOLD    = new Font(UI_FAMILY, Font.BOLD, scaledFontPt(baseUiPt));
-        FONT_TITLE      = new Font(UI_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 1));
+        FONT_UI_BOLD    = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 3));
+        FONT_TITLE      = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 5));
         FONT_MONO       = new Font(MONO_FAMILY, Font.PLAIN, scaledFontPt(baseMonoPt));
         UIManager.put("Label.font", FONT_UI);
         UIManager.put("Button.font", FONT_UI);
@@ -212,6 +249,77 @@ public final class DesktopUiKit {
 
     private DesktopUiKit() {}
 
+    // =====================================================================
+    // Paper rendering: grain, mottling and a wooden desk behind the sheet.
+    // Generated once into a 256px tile — no image assets, no per-frame cost.
+    // =====================================================================
+    private static java.awt.image.BufferedImage paperGrain = null;
+    private static java.awt.TexturePaint paperPaint = null;
+
+    /** Fine film grain over the cream stock (subtle by design: it must never hurt legibility). */
+    public static java.awt.TexturePaint paperGrainPaint() {
+        if (paperPaint == null) {
+            int n = 192;
+            java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(
+                    n, n, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            java.util.Random rnd = new java.util.Random(20260101L);
+            for (int y = 0; y < n; y++) {
+                for (int x = 0; x < n; x++) {
+                    // two octaves: high-frequency speckle + soft tonal blotches
+                    int speck = rnd.nextInt(100);
+                    double blot = Math.sin(x * 0.055) * Math.cos(y * 0.043) * 0.5 + 0.5;
+                    int a = (int) (speck < 55 ? 7 : (speck < 90 ? 12 : 18));
+                    a += (int) (blot * 8);
+                    int tone = speck < 50 ? 0x5A4632 : 0xFFF8E8;
+                    int r = (tone >> 16) & 0xFF, g = (tone >> 8) & 0xFF, b = tone & 0xFF;
+                    img.setRGB(x, y, (Math.min(26, a) << 24) | (r << 16) | (g << 8) | b);
+                }
+            }
+            paperGrain = img;
+            paperPaint = new java.awt.TexturePaint(img, new java.awt.Rectangle(0, 0, n, n));
+        }
+        return paperPaint;
+    }
+
+    /** Paints cream stock + grain into a component's background. */
+    public static void paintPaper(Graphics2D g2, int w, int h, Color base) {
+        g2.setColor(base == null ? C_PAPER : base);
+        g2.fillRect(0, 0, w, h);
+        g2.setPaint(paperGrainPaint());
+        g2.fillRect(0, 0, w, h);
+        g2.setPaint(null);
+    }
+
+    /** A panel that paints itself as a sheet of paper (with grain). */
+    public static final class PaperPanel extends JPanel {
+        private final Color base;
+        public PaperPanel(java.awt.LayoutManager lm) { this(lm, C_PAPER); }
+        public PaperPanel(java.awt.LayoutManager lm, Color base) {
+            super(lm);
+            this.base = base;
+            setOpaque(true);
+        }
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            paintPaper(g2, getWidth(), getHeight(), base);
+            g2.dispose();
+        }
+    }
+
+    /** The wooden desk the sheet of paper lies on. */
+    public static void paintDesk(Graphics2D g2, int w, int h) {
+        java.awt.GradientPaint wood = new java.awt.GradientPaint(
+                0, 0, new Color(0x9C, 0x6E, 0x40), 0, h, new Color(0x6B, 0x45, 0x23));
+        g2.setPaint(wood);
+        g2.fillRect(0, 0, w, h);
+        g2.setColor(new Color(0x2B, 0x18, 0x08, 26));
+        for (int x = 0; x < w; x += 118) g2.fillRect(x, 0, 2, h);
+        g2.setColor(new Color(0x2B, 0x18, 0x08, 16));
+        for (int y = 0; y < h; y += 13) g2.fillRect(0, y, w, 1);
+        g2.setPaint(null);
+    }
+
     public static void installDarkDefaults() {
         System.setProperty("awt.useSystemAAFontSettings", "lcd");
         System.setProperty("swing.aatext", "true");
@@ -220,13 +328,13 @@ public final class DesktopUiKit {
         } catch (Exception ignored) {}
         rebuildFonts();
         UIManager.put("Panel.background", C_VOID);
-        UIManager.put("SplitPane.background", new Color(25, 25, 32));
+        UIManager.put("SplitPane.background", C_PAPER_DEEP);
         UIManager.put("Viewport.background", C_VOID);
         UIManager.put("ScrollPane.background", C_VOID);
         UIManager.put("List.background", C_VOID);
         UIManager.put("List.foreground", C_TEXT);
         UIManager.put("List.selectionBackground", C_ACCENT_TINT);
-        UIManager.put("List.selectionForeground", C_WHITE);
+        UIManager.put("List.selectionForeground", C_INK);
         UIManager.put("TextArea.background", C_VOID);
         UIManager.put("TextArea.foreground", C_TEXT);
         UIManager.put("TextPane.background", C_VOID);
@@ -236,7 +344,7 @@ public final class DesktopUiKit {
         UIManager.put("Label.foreground", C_TEXT);
         UIManager.put("ToolTip.background", C_SURFACE);
         UIManager.put("ToolTip.foreground", C_WHITE);
-        UIManager.put("ToolTip.border", BorderFactory.createLineBorder(C_WHITE, 1));
+        UIManager.put("ToolTip.border", BorderFactory.createLineBorder(C_BORDER_STRONG, 1));
         UIManager.put("PopupMenu.border", BorderFactory.createLineBorder(C_BORDER, 1));
         UIManager.put("PopupMenu.background", C_HEADER);
         // Godot-style tree: crisp white chevrons (never the stock blue Metal handles).
@@ -246,7 +354,7 @@ public final class DesktopUiKit {
         UIManager.put("Tree.foreground", C_TEXT);
         UIManager.put("Tree.selectionBackground", C_ACCENT_TINT);
         UIManager.put("Tree.selectionForeground", C_WHITE);
-        UIManager.put("Tree.hash", new Color(46, 46, 57));
+        UIManager.put("Tree.hash", C_BORDER_SUBTLE);
     }
 
     /** Small monochrome disclosure chevron for tree/dock headers. */
@@ -1068,7 +1176,7 @@ public final class DesktopUiKit {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 enableAA(g2);
-                Color bg = lerpColor(C_INPUT_BG, new Color(20, 20, 24), focusT);
+                Color bg = lerpColor(C_INPUT_BG, C_SURFACE, focusT);
                 Color bd = lerpColor(C_BORDER, C_WHITE, focusT);
                 float fieldR = Math.min(Math.max(scaledF(6f), 4f), getHeight() * 0.42f);
                 RoundRectangle2D.Float r = new RoundRectangle2D.Float(0.5f, 0.5f, getWidth() - 1f, getHeight() - 1f, fieldR, fieldR);
@@ -1287,7 +1395,7 @@ public final class DesktopUiKit {
                 if (r.isEmpty() || !scrollbar.isEnabled()) return;
                 Graphics2D g2 = (Graphics2D) g.create();
                 enableAA(g2);
-                g2.setColor(isDragging || isThumbRollover() ? C_WHITE : new Color(68, 68, 78));
+                g2.setColor(isDragging || isThumbRollover() ? C_INK : new Color(0xB4, 0xA5, 0x84));
                 g2.fill(new RoundRectangle2D.Float(r.x + 1, r.y + 1, r.width - 2, r.height - 2, 6, 6));
                 g2.dispose();
             }
@@ -1305,7 +1413,7 @@ public final class DesktopUiKit {
         final JSplitPane sp = new JSplitPane(orientation, true, a, b);
         final int[] savedLoc = {dividerLoc};
         sp.setOpaque(true);
-        sp.setBackground(new Color(25, 25, 32));
+        sp.setBackground(C_PAPER_DEEP);
         sp.setBorder(BorderFactory.createEmptyBorder());
         sp.setUI(new BasicSplitPaneUI() {
             @Override
@@ -1344,7 +1452,7 @@ public final class DesktopUiKit {
                         enableAA(g2);
                         int w = getWidth();
                         int h = getHeight();
-                        g2.setColor(divHover ? C_SURFACE_HOV : new Color(25, 25, 32));
+                        g2.setColor(divHover ? C_SURFACE_HOV : C_BORDER);
                         g2.fillRect(0, 0, w, h);
 
                         if (orientation == JSplitPane.HORIZONTAL_SPLIT) {
@@ -1538,7 +1646,7 @@ public final class DesktopUiKit {
                     l.setBackground(C_ACCENT_TINT);
                     l.setForeground(C_WHITE);
                 } else {
-                    l.setBackground(index % 2 == 0 ? C_VOID : new Color(15, 15, 18));
+                    l.setBackground(index % 2 == 0 ? C_PAPER : C_PAPER_2);
                     l.setForeground(C_TEXT);
                 }
                 return l;
@@ -1942,7 +2050,7 @@ public final class DesktopUiKit {
             if (axisBadge != null && !axisBadge.isEmpty()) {
                 JLabel scrub = new JLabel(axisBadge, JLabel.CENTER);
                 scrub.setOpaque(true);
-                scrub.setBackground(new Color(26, 26, 34));
+                scrub.setBackground(C_PAPER_DEEP);
                 scrub.setForeground(badgeColor != null ? badgeColor : C_TEXT_LABEL);
                 scrub.setFont(FONT_SMALL_BOLD);
                 scrub.setBorder(BorderFactory.createCompoundBorder(
@@ -2286,7 +2394,7 @@ public final class DesktopUiKit {
             enableAA(g2);
             int w = getWidth(), h = getHeight();
 
-            Color bg = active ? C_SURFACE : (tabHover ? new Color(29, 29, 37) : new Color(16, 16, 21));
+            Color bg = active ? C_PAPER : (tabHover ? C_SURFACE : C_PAPER_2);
             g2.setColor(bg);
             g2.fill(new RoundRectangle2D.Float(0, 1, w - 1, h + 4, 6, 6));
 

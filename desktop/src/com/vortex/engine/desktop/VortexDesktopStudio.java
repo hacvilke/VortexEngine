@@ -146,7 +146,6 @@ public class VortexDesktopStudio extends JFrame {
     private DesktopUiKit.VortexButton playStopBtn;
     private DesktopUiKit.VortexButton dimBtn;
     private DesktopUiKit.VortexDropdown vmDropdown;
-    private DesktopUiKit.VortexDropdown snippetDropdown;
     private DesktopUiKit.VortexTabStrip rightTabs;
     private final DesktopUiKit.AnimatedDeck rightCardsPanel = new DesktopUiKit.AnimatedDeck();
     private final DefaultListModel<String> flowListModel = new DefaultListModel<>();
@@ -167,7 +166,8 @@ public class VortexDesktopStudio extends JFrame {
                 runHeadlessSelfTests();
                 return;
             }
-            if ("--docs-shot".equals(args[i]) && i + 1 < args.length) {
+            if (("--shot".equals(args[i]) || "--docs-shot".equals(args[i])) && i + 1 < args.length) {
+                final boolean withDocs = "--docs-shot".equals(args[i]);
                 // GUI verification hook: open the studio, open the docs browser, screenshot, exit.
                 final String shotPath = args[i + 1];
                 DesktopUiKit.installDarkDefaults();
@@ -193,7 +193,7 @@ public class VortexDesktopStudio extends JFrame {
                         });
                         grab.setRepeats(false);
                         grab.start();
-                        studio.showDocsBrowser();
+                        if (withDocs) studio.showDocsBrowser();
                     });
                     kick.setRepeats(false);
                     kick.start();
@@ -232,7 +232,7 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio(boolean checkStartupDependencies) {
-        super("Vortex Engine Studio v4.8.1 — Voxel Worlds • Tile Maps • Prefabs • In-App Docs • Forge AI Chat");
+        super("Vortex Engine Studio v4.9.0 — Voxel Worlds • Tile Maps • Prefabs • In-App Docs • Forge AI Chat");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         // Laptop-aware sizing: fit cleanly inside 1280x720 / 1366x768 / 1536x864 / 1440x900 screens!
@@ -350,9 +350,8 @@ public class VortexDesktopStudio extends JFrame {
                 log("[SYSTEM] " + probe.osName + " (" + probe.osArch + ") • "
                         + (probe.lrmBin != null ? probe.lrmVersion : "LRM not installed yet")
                         + " • " + (probe.goBin != null ? probe.goVersion : "Go optional"));
-                if (probe.lrmBin == null && !LrmWorkspaceBridge.isAutoPromptDismissed()) {
-                    showLrmDependencyWizardModal(true);
-                }
+                // No modal on launch. A game engine should open to a scene, not to a
+                // version-control installer: LRM lives in Tools > Integrations when wanted.
             });
         }, "vortex-startup-dep-check");
         checker.setDaemon(true);
@@ -805,6 +804,29 @@ public class VortexDesktopStudio extends JFrame {
     // v4.8.0 — in-IDE documentation browser (works offline)
     // =====================================================================
 
+    // =====================================================================
+    // v4.9.0 — API reference = one offline index.html, generated from this build
+    // =====================================================================
+
+    private void openApiReference() {
+        try {
+            java.io.File f = com.vortex.engine.core.docs.DocsSite.defaultFile();
+            log("\u25B8 API reference: " + f.getAbsolutePath() + " (" + (f.length() / 1024) + " KB, offline)");
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop d = java.awt.Desktop.getDesktop();
+                if (d.isSupported(java.awt.Desktop.Action.BROWSE)) {
+                    d.browse(f.toURI());
+                    return;
+                }
+            }
+            DesktopUiKit.showInfoModal(this, "API reference",
+                    "Wrote the offline documentation site to:\n\n" + f.getAbsolutePath()
+                            + "\n\nOpen that file in any browser — it needs no connection.");
+        } catch (Throwable ex) {
+            DesktopUiKit.showInfoModal(this, "API reference", "Could not open the docs site: " + ex);
+        }
+    }
+
     private void showDocsBrowser() {
         final javax.swing.JDialog dlg = new javax.swing.JDialog(this, "Vortex Docs", true);
         JPanel root = new JPanel(new BorderLayout(10, 10));
@@ -958,18 +980,19 @@ public class VortexDesktopStudio extends JFrame {
         items.add(new DesktopUiKit.MenuAction("Play Blockfall (3D Voxel Game)", () -> launchBlockfall(true)));
         items.add(new DesktopUiKit.MenuAction("Open Blockfall in the Editor", () -> launchBlockfall(false)));
         items.add(new DesktopUiKit.MenuAction("---", null));
+        items.add(new DesktopUiKit.MenuAction("API Reference (offline index.html)", this::openApiReference));
         items.add(new DesktopUiKit.MenuAction("Docs & Getting Started…", this::showDocsBrowser));
         items.add(new DesktopUiKit.MenuAction("How do I…? (ask the docs)", this::askDocsQuestion));
         items.add(new DesktopUiKit.MenuAction("Voxel World Guide", () -> showDocsTopic("voxel")));
         items.add(new DesktopUiKit.MenuAction("Script API Guide", () -> showDocsTopic("script")));
         items.add(new DesktopUiKit.MenuAction("---", null));
-        items.add(new DesktopUiKit.MenuAction("Scripting API Reference", () -> rightTabs.selectTabByKey("SCRIPT", true)));
+        items.add(new DesktopUiKit.MenuAction("API Reference (offline index.html)", this::openApiReference));
         items.add(new DesktopUiKit.MenuAction("Physics & Collision Layers", () -> DesktopUiKit.showInfoModal(this,
                 "Physics",
                 "2D: JBox2D rigid bodies (CCD bullets)\n3D: substepped impulse solver + terrain\nLayers: collisionLayer / collisionMask")));
         items.add(new DesktopUiKit.MenuAction("---", null));
-        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.8.1", () -> DesktopUiKit.showInfoModal(this,
-                "Vortex Engine Studio v4.8.1",
+        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.9.0", () -> DesktopUiKit.showInfoModal(this,
+                "Vortex Engine Studio v4.9.0",
                 "Free & open-source 2D/3D game engine\nWindows • Linux • Android • Web")));
         return items;
     }
@@ -1396,7 +1419,7 @@ public class VortexDesktopStudio extends JFrame {
         headerBar.add(rightBar, BorderLayout.EAST);
         bottomWrapperPanel.add(headerBar, BorderLayout.NORTH);
 
-        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.8.1 Desktop Studio Ready.");
+        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.9.0 Desktop Studio Ready.");
 
         JScrollPane consoleScroll = DesktopUiKit.createScrollPane(consoleArea);
         bottomDeck.addCard("CONSOLE", consoleScroll, 0);
@@ -1822,27 +1845,6 @@ public class VortexDesktopStudio extends JFrame {
         checkBtn.addActionListener(e -> checkScriptSyntax());
         btnBar.add(checkBtn);
 
-        String[] snips = {
-                "Snippets…",
-                "vortex.showDialog(\"COMMANDER\", \"Mission start!\", 4.0)",
-                "vortex.setLabel(\"obj\", \"WAVE 1\", 50, 12, 15, \"#FFFFFF\")",
-                "vortex.setProgressBar(\"xp\", \"XP\", 40, 100, 50, 92, \"#FFFFFF\")",
-                "vortex.findNearestTag(\"Player\", \"enemy\", 30)",
-                "vortex.chaseTagAI(\"enemy\", \"Player\", 4.5)",
-                "vortex.setSpriteAnim(\"Player\", \"knight_1,knight_2\", 7)",
-                "vortex.tweenTagYoyo(\"coin\", 0.35, 0.9, \"SINE\")",
-                "vortex.playMusic(\"CYBERPUNK\", 136)"
-        };
-        snippetDropdown = new DesktopUiKit.VortexDropdown(snips, snips[0]);
-        snippetDropdown.setPreferredSize(new Dimension(DesktopUiKit.scaled(118), DesktopUiKit.scaled(27)));
-        snippetDropdown.setOnSelect((idx, val) -> {
-            if (idx > 0) {
-                String tail = "LUA".equalsIgnoreCase(project.scriptLanguage) ? "\n" : ";\n";
-                scriptArea.insert(val + tail, scriptArea.getCaretPosition());
-                snippetDropdown.setSelectedIndex(0);
-            }
-        });
-        btnBar.add(snippetDropdown);
 
         DesktopUiKit.VortexButton snapBtn = new DesktopUiKit.VortexButton("Snap", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.SPLIT);
         snapBtn.setToolTipText("Snap active file beside Viewport (or drag any file tab onto the Viewport!)");
@@ -1867,11 +1869,8 @@ public class VortexDesktopStudio extends JFrame {
 
         DesktopUiKit.VortexButton docsBtn = new DesktopUiKit.VortexButton("API", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.CODE);
         docsBtn.setToolTipText("Vortex Polyglot Scripting & GUI API Reference");
-        docsBtn.addActionListener(e -> DesktopUiKit.showInfoModal(this, "Vortex Polyglot Multi-File & GUI Scripting API",
-                "• Multi-File Architecture: Organize scripts into `scripts/`, `objects/`, `ui/` — every file's `onStart()`, `onUpdate(dt)`, `onButton(btn)`, `onCollide(a,b,tagA,tagB)` hooks chain automatically!\n"
-                + "• In-Game GUI API: vortex.showDialog(speaker, msg, durSec), vortex.hideDialog(), vortex.setLabel(id, txt, xPct, yPct, fontSize, \"#FFFFFF\"), vortex.setProgressBar(id, title, val, max, xPct, yPct, \"#FFFFFF\"), vortex.removeUI(id), vortex.clearUI()\n"
-                + "• Input & Physics: vortex.joyX(), vortex.joyY(), vortex.setPos(n,x,y,z), vortex.setVel(n,vx,vy[,vz]), vortex.jump(n,vy)\n"
-                + "• AI, FX & Audio: vortex.chaseTagAI(fromTag,target,spd), vortex.findNearestTag(from,tag,range), vortex.particles(x,y,z,cnt,\"#FFFFFF\"), vortex.playSound(\"laser\"), vortex.playMusic(\"CYBERPUNK\",134)"));
+        docsBtn.setToolTipText("API Reference — opens the offline documentation site (index.html)");
+        docsBtn.addActionListener(e -> openApiReference());
         btnBar.add(docsBtn);
 
         header.add(btnBar, BorderLayout.NORTH);
@@ -4317,7 +4316,7 @@ public class VortexDesktopStudio extends JFrame {
     // Headless Verification Suite (Java VM + ES6 JS + Lua + LRM + Forge + UI)
     // =========================================================================
     private static void runHeadlessSelfTests() throws Exception {
-        System.out.println("=== Vortex Engine v4.8.1 Headless Verification Suite ===");
+        System.out.println("=== Vortex Engine v4.9.0 Headless Verification Suite ===");
 
         // 1) Zero-Blue Monochrome Palette + Laptop UI Scale Verification
         Color[] uiColors = {
@@ -4789,6 +4788,6 @@ public class VortexDesktopStudio extends JFrame {
         tmpExe.delete();
         tmpZip.delete();
 
-        System.out.println("=== ALL VORTEX v4.8.1 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
+        System.out.println("=== ALL VORTEX v4.9.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
     }
 }

@@ -9,40 +9,21 @@ import com.vortex.engine.core.flow.VortexFlowCompiler;
  */
 public class ProjectTemplates {
 
+    /**
+     * Three starters, deliberately. A beginner should never have to choose between fourteen demos:
+     * an empty 2D space, one small playable 2D game, and one empty 3D space.
+     * (The voxel game is reachable from the Blockfall button, not from this list.)
+     */
     public static final String[] TEMPLATE_KEYS = {
-            "NEON_SURVIVORS_JS_2D",
-            "IRON_SENTINEL_JAVA_2D",
-            "STARHULL_MECHA_JS_3D",
-            "CYBER_MAZE_AI_2D",
-            "CITADEL_TWEEN_3D",
-            "ANGRY_BOX2D_LUA",
-            "FRONTIER_TERRAIN_3D_LUA",
-            "NEON_3D",
-            "SKY_ISLANDS_3D",
-            "PLATFORMER_2D",
-            "SHOOTER_2D",
-            "BLANK_3D_LUA",
             "BLANK_2D_LUA",
-            "EXPLORER_3D",
-            "MINECRAFT_3D"
+            "PLATFORMER_2D",
+            "BLANK_3D_LUA"
     };
 
     public static final String[] TEMPLATE_NAMES = {
-            "2D Rogue-Lite: Neon Survivors Swarm (ES6 JS • Rhino + Animated Sprites)",
-            "2D Java Arena: Iron Sentinel (Native Java VM + JBox2D + Auto-Turret)",
-            "3D Mecha Combat: Starhull Raiders (ES6 JS • Rhino + 3D Terrain + Railgun)",
-            "2D AI Maze: Cyber Hunters (Lua 5.2 + Theta* Pathfinding + Chiptune)",
-            "3D Siege: Neon Citadel (Lua 5.2 + Universal Tween Engine + Raycast)",
-            "2D Physics: Angry Crates Siege (Lua 5.2 + JBox2D Rigid-Body)",
-            "3D World: Procedural Frontier (Lua 5.2 + FastNoiseLite Terrain)",
-            "3D Sci-Fi: Neon Horizon Runner (Custom .obj Starfighter)",
-            "3D Parkour: Sky Islands Adventure (3D Physics & Relics)",
-            "2D Action: Starbound Cavern (Platformer + Slime AI)",
-            "2D Arcade: Nova Blaster (Space Shooter + Plasma Lasers)",
-            "3D Sandbox: Blank 3D Project (Java / ES6 JS / Lua 5.2)",
-            "2D Sandbox: Blank 2D Project (Java / ES6 JS / Lua 5.2 + JBox2D)",
-            "3D Explorer: Green Hollow Valley (ES6 JS + sunlight rig + collecting + NPC patrol)",
-            "3D Voxel: Blockfall — mine, build, survive (Minecraft-style block world, infinite terrain seed)"
+            "Blank 2D space  —  empty scene, your rules",
+            "2D space  —  run, jump, collect (small playable example)",
+            "3D space  —  empty scene with sky & lighting"
     };
 
     public static GameProject create(String templateKey, String title, String pkgName) {

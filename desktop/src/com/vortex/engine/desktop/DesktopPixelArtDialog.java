@@ -106,7 +106,7 @@ public class DesktopPixelArtDialog extends JDialog {
                         int x0 = Math.round(ox + x * cell);
                         int y0 = Math.round(oy + y * cell);
                         int cw = Math.max(1, Math.round(cell));
-                        g2.setColor(((x + y) % 2 == 0) ? new Color(18, 18, 22) : new Color(26, 26, 31));
+                        g2.setColor(((x + y) % 2 == 0) ? new Color(0xF4, 0xEC, 0xDA) : new Color(0xEA, 0xDF, 0xC6));
                         g2.fillRect(x0, y0, cw, cw);
 
                         int argb = pixels[y * PixelSpriteCodec.SIZE + x];

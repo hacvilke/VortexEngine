@@ -32,31 +32,69 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * VortexMobileUi — Unified Dark Obsidian + Electric Cyan Custom Mobile UI Kit.
+ * VortexMobileUi — PAPER UI kit for the phone studio (cream stock, ink, pencil rules).
  *
  * Replaces raw OS Spinners, CheckBoxes, unstyled EditTexts, and white AlertDialogs
  * with cohesive, custom-drawn, touch-friendly components & micro-animations.
  */
 public final class VortexMobileUi {
 
-    // High-Contrast 5-Tier Neutral Dark + Crisp White Studio Palette (ZERO BLUE!)
-    public static final int C_VOID         = Color.parseColor("#070709");
-    public static final int C_HEADER       = Color.parseColor("#212129");
-    public static final int C_PANEL        = Color.parseColor("#16161C");
-    public static final int C_SURFACE      = Color.parseColor("#282832");
-    public static final int C_SURFACE_HI   = Color.parseColor("#363644");
-    public static final int C_INPUT_BG     = Color.parseColor("#0C0C10");
-    public static final int C_BORDER       = Color.parseColor("#424252");
-    public static final int C_CYAN         = Color.parseColor("#FFFFFF");
-    public static final int C_CYAN_TINT    = Color.parseColor("#30303B");
-    public static final int C_CYAN_DARK_TX = Color.parseColor("#09090B");
-    public static final int C_TEXT         = Color.parseColor("#FAFAFC");
-    public static final int C_TEXT_MUTED   = Color.parseColor("#CFCFD9");
-    public static final int C_TEXT_DIM     = Color.parseColor("#A4A4B4");
-    public static final int C_DANGER_BG    = Color.parseColor("#301419");
-    public static final int C_DANGER_BDR   = Color.parseColor("#9C3844");
-    public static final int C_DANGER_TX    = Color.parseColor("#FF6B6B");
-    public static final int C_OK_TX        = Color.parseColor("#00E676");
+    // =====================================================================
+    // PAPER THEME (same palette as hacvilke/paper-trader): cream stock, ink text,
+    // pencil rules. No pure white, no pure black — contrast comes from ink weight.
+    // =====================================================================
+    public static final int C_PAPER        = Color.parseColor("#FBF6EA");
+    public static final int C_PAPER_2      = Color.parseColor("#F4ECDA");
+    public static final int C_PAPER_DEEP   = Color.parseColor("#EADFC6");
+    public static final int C_INK          = Color.parseColor("#33291D");
+    public static final int C_PENCIL       = Color.parseColor("#6F6558");
+    public static final int C_INK_GREEN    = Color.parseColor("#1E7A44");
+    public static final int C_INK_RED      = Color.parseColor("#C0392B");
+
+    public static final int C_VOID         = C_PAPER;
+    public static final int C_HEADER       = C_PAPER_DEEP;
+    public static final int C_PANEL        = C_PAPER_2;
+    public static final int C_SURFACE      = Color.parseColor("#EFE6D3");
+    public static final int C_SURFACE_HI   = Color.parseColor("#E4D8BC");
+    public static final int C_INPUT_BG     = Color.parseColor("#FFFDF7");
+    public static final int C_BORDER       = Color.parseColor("#D2C29F");
+    public static final int C_CYAN         = C_INK;
+    public static final int C_CYAN_TINT    = Color.parseColor("#EEE2C6");
+    public static final int C_CYAN_DARK_TX = C_PAPER;
+    public static final int C_TEXT         = C_INK;
+    public static final int C_TEXT_MUTED   = Color.parseColor("#4A3E2E");
+    public static final int C_TEXT_DIM     = C_PENCIL;
+    public static final int C_DANGER_BG    = Color.parseColor("#F7E3DF");
+    public static final int C_DANGER_BDR   = Color.parseColor("#D9A79F");
+    public static final int C_DANGER_TX    = C_INK_RED;
+    public static final int C_OK_TX        = C_INK_GREEN;
+
+    // ---- bundled hand lettering (assets/fonts) ----
+    private static Typeface FACE_HAND = null;
+    private static Typeface FACE_BODY = null;
+    private static Typeface FACE_TYPE = null;
+
+    private static Typeface loadFace(Context ctx, String path, int fallbackStyle) {
+        try {
+            return Typeface.createFromAsset(ctx.getAssets(), path);
+        } catch (Throwable t) {
+            return Typeface.create(Typeface.DEFAULT, fallbackStyle);
+        }
+    }
+
+    /** Call once per Activity before building views. */
+    public static void loadPaperFonts(Context ctx) {
+        if (FACE_HAND != null) return;
+        FACE_HAND = loadFace(ctx, "fonts/Caveat.ttf", Typeface.BOLD);
+        FACE_BODY = loadFace(ctx, "fonts/PatrickHand.ttf", Typeface.NORMAL);
+        FACE_TYPE = loadFace(ctx, "fonts/SpecialElite.ttf", Typeface.NORMAL);
+    }
+
+    public static Typeface handTypeface() { return FACE_HAND != null ? FACE_HAND : Typeface.DEFAULT_BOLD; }
+    public static Typeface bodyTypeface() { return FACE_BODY != null ? FACE_BODY : Typeface.DEFAULT; }
+    public static Typeface typeTypeface() { return FACE_TYPE != null ? FACE_TYPE : Typeface.MONOSPACE; }
+
+
 
     public enum ButtonVariant {
         PRIMARY,   // Solid #00E5FF fill, dark bold text (1-2 main CTAs per screen)
@@ -85,7 +123,17 @@ public final class VortexMobileUi {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
                 w.setStatusBarColor(C_HEADER);
-                w.setNavigationBarColor(C_VOID);
+                w.setNavigationBarColor(C_PAPER_DEEP);
+                // Paper is a LIGHT surface: ask for dark status/nav icons.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    View dv = w.getDecorView();
+                    dv.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    View dv = w.getDecorView();
+                    dv.setSystemUiVisibility(dv.getSystemUiVisibility()
+                            | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+                }
             }
         } catch (Exception ignored) {
         }
@@ -134,7 +182,7 @@ public final class VortexMobileUi {
         tv.setSingleLine(true);
         tv.setEllipsize(TextUtils.TruncateAt.END);
         tv.setGravity(Gravity.CENTER);
-        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setTypeface(handTypeface());
         tv.setTextSize(compact ? 13.0f : 14.0f);
         int padH = dp(ctx, compact ? 11 : 14);
         int padV = dp(ctx, compact ? 7 : 10);
@@ -180,7 +228,7 @@ public final class VortexMobileUi {
         TextView tv = new TextView(ctx);
         tv.setText(label);
         tv.setTextSize(11.5f);
-        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setTypeface(handTypeface());
         tv.setSingleLine(true);
         tv.setPadding(dp(ctx, 7), dp(ctx, 3.5f), dp(ctx, 7), dp(ctx, 3.5f));
         GradientDrawable gd = new GradientDrawable();
@@ -546,7 +594,7 @@ public final class VortexMobileUi {
         titleTv.setText(title);
         titleTv.setTextColor(C_TEXT);
         titleTv.setTextSize(16.5f);
-        titleTv.setTypeface(Typeface.DEFAULT_BOLD);
+        titleTv.setTypeface(handTypeface());
         header.addView(titleTv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         TextView closeX = makeButton(act, "✕", ButtonVariant.SECONDARY, true);

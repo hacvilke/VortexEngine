@@ -617,8 +617,9 @@ public class DesktopSoftware3DViewport extends JPanel {
         if (mode3D) {
             paintSky(g2, p, w, h);
         } else {
-            g2.setColor(toAwtColor(p.skyColorHex, 255));
-            g2.fillRect(0, 0, w, h);
+            // 2D scene backdrop: a sheet of graph paper (cream stock + faint rule-blue grid).
+            // Editing a scene reads like sketching on paper instead of staring into a void.
+            paintGraphPaper(g2, w, h);
         }
 
         if (mode3D) {
@@ -639,6 +640,38 @@ public class DesktopSoftware3DViewport extends JPanel {
      * Sky + atmosphere (v4.7.0): vertical sky gradient from the light rig, warm horizon band, sun
      * disc with bloom, and stars when the sun is low. Cheap, resolution independent, no textures.
      */
+    /** Cream stock + faint rule-blue squares: the "paper" the 2D scene is drawn on. */
+    private void paintGraphPaper(Graphics2D g2, int w, int h) {
+        g2.setColor(new java.awt.Color(0xFB, 0xF6, 0xEA));
+        g2.fillRect(0, 0, w, h);
+        float zoom = Math.max(4f, editor2DZoom);
+        float step = Math.max(8f, zoom);                 // one world unit per square, clamped
+        if (step < 10f) step *= 2;
+        int minor = Math.max(1, Math.round(step));
+        g2.setColor(new java.awt.Color(0x24, 0x56, 0xA6, 26));
+        for (int x = Math.floorMod(Math.round(w * 0.5f + editor2DCamX * zoom), minor); x < w; x += minor) {
+            g2.drawLine(x, 0, x, h);
+        }
+        for (int y = Math.floorMod(Math.round(h * 0.5f - editor2DCamY * zoom), minor); y < h; y += minor) {
+            g2.drawLine(0, y, w, y);
+        }
+        // every 5th rule is darker, like real graph paper
+        g2.setColor(new java.awt.Color(0x24, 0x56, 0xA6, 52));
+        int major = minor * 5;
+        for (int x = Math.floorMod(Math.round(w * 0.5f + editor2DCamX * zoom), major); x < w; x += major) {
+            g2.drawLine(x, 0, x, h);
+        }
+        for (int y = Math.floorMod(Math.round(h * 0.5f - editor2DCamY * zoom), major); y < h; y += major) {
+            g2.drawLine(0, y, w, y);
+        }
+        // margin rule at the origin
+        g2.setColor(new java.awt.Color(0xC0, 0x39, 0x2B, 70));
+        int ox = Math.round(w * 0.5f + editor2DCamX * zoom);
+        int oy = Math.round(h * 0.5f - editor2DCamY * zoom);
+        if (ox >= 0 && ox < w) g2.drawLine(ox, 0, ox, h);
+        if (oy >= 0 && oy < h) g2.drawLine(0, oy, w, oy);
+    }
+
     private void paintSky(Graphics2D g2, GameProject p, int w, int h) {
         Color base = toAwtColor(p.skyColorHex, 255);
         float lum = (base.getRed() * 0.2126f + base.getGreen() * 0.7152f + base.getBlue() * 0.0722f) / 255f;

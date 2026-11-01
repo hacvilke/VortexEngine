@@ -36,6 +36,8 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
+        // Paper theme lettering must be ready before any view is built.
+        VortexMobileUi.loadPaperFonts(this);
         VortexMobileUi.applyDarkSystemBars(this);
 
         LinearLayout root = new LinearLayout(this);
@@ -64,7 +66,7 @@ public class MainActivity extends Activity {
         title.setSingleLine(true);
         brandRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView verChip = VortexMobileUi.makeBadge(this, "v4.8.1 STUDIO", true);
+        TextView verChip = VortexMobileUi.makeBadge(this, "v4.9.0 STUDIO", true);
         brandRow.addView(verChip);
         header.addView(brandRow);
 
