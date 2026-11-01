@@ -292,7 +292,7 @@ public final class DesktopUiKit {
     }
 
     /** A panel that paints itself as a sheet of paper (with grain). */
-    public static final class PaperPanel extends JPanel {
+    public static class PaperPanel extends JPanel {
         private final Color base;
         public PaperPanel(java.awt.LayoutManager lm) { this(lm, C_PAPER); }
         public PaperPanel(java.awt.LayoutManager lm, Color base) {
@@ -321,6 +321,96 @@ public final class DesktopUiKit {
         g2.setPaint(null);
     }
 
+    /** A root surface painted as the wooden desk (sheets & docks lie on top). */
+    public static final class DeskPanel extends JPanel {
+        public DeskPanel(java.awt.LayoutManager lm) {
+            super(lm);
+            setOpaque(true);
+        }
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            paintDesk(g2, getWidth(), getHeight());
+            g2.dispose();
+        }
+    }
+
+    /** Washi tape strip — translucent cream, faint border, slight rotation. */
+    public static void paintTape(Graphics2D g2, int cx, int cy, int w, int h, double rotDeg) {
+        java.awt.geom.AffineTransform old = g2.getTransform();
+        g2.rotate(Math.toRadians(rotDeg), cx, cy);
+        g2.setColor(new Color(0xFF, 0xF6, 0xDE, 150));
+        g2.fillRect(cx - w / 2, cy - h / 2, w, h);
+        g2.setColor(new Color(0xB4, 0xA0, 0x6E, 90));
+        g2.drawRect(cx - w / 2, cy - h / 2, w, h);
+        g2.setColor(new Color(0xFF, 0xFF, 0xF2, 70));
+        g2.drawLine(cx - w / 2 + 2, cy - h / 2 + 2, cx + w / 2 - 3, cy - h / 2 + 2);
+        g2.setTransform(old);
+    }
+
+    /** A paper sheet with washi tape on the two top corners. */
+    public static final class TapedSheet extends PaperPanel {
+        public TapedSheet(java.awt.LayoutManager lm) { super(lm); }
+        public TapedSheet(java.awt.LayoutManager lm, Color base) { super(lm, base); }
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g.create();
+            enableAA(g2);
+            int tw = Math.max(56, getWidth() / 7);
+            paintTape(g2, 26, 7, tw, 18, -7);
+            paintTape(g2, getWidth() - 26, 7, tw, 18, 5);
+            g2.dispose();
+        }
+    }
+
+    /** Hand-torn paper edge: a jagged ink line (ripped, not ruled). */
+    public static void paintTornEdge(Graphics2D g2, int x1, int x2, int y, int seg, int amp, Color c) {
+        g2.setColor(c);
+        g2.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        java.util.Random rnd = new java.util.Random(x1 * 31 + y * 17 + seg);
+        int prevY = y + (rnd.nextInt(amp * 2 + 1) - amp);
+        for (int x = x1 + seg; x <= x2; x += seg) {
+            int ny = y + (rnd.nextInt(amp * 2 + 1) - amp);
+            g2.drawLine(x - seg, prevY, x, ny);
+            prevY = ny;
+        }
+    }
+
+    /** Sticky note — pastel stock, Caveat lettering, one degree of tilt. */
+    public static final class StickyNote extends JPanel {
+        private final String text;
+        private final Color tone;
+        public StickyNote(String text, Color tone) {
+            this.text = text;
+            this.tone = tone;
+            setOpaque(false);
+            setFont(new Font(HAND_FAMILY, Font.PLAIN, 19));
+            setForeground(C_INK);
+        }
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            enableAA(g2);
+            int w = getWidth(), h = getHeight();
+            g2.rotate(Math.toRadians(-1.4), w / 2.0, h / 2.0);
+            g2.setColor(new Color(0x2B, 0x18, 0x08, 34));
+            g2.fillRect(4, 5, w - 6, h - 6);
+            g2.setColor(tone);
+            g2.fillRect(1, 1, w - 5, h - 5);
+            g2.setColor(new Color(0xB4, 0xA0, 0x6E, 110));
+            g2.drawRect(1, 1, w - 5, h - 5);
+            g2.setColor(getForeground());
+            FontMetrics fm = g2.getFontMetrics();
+            int ty = 10 + fm.getAscent();
+            for (String line : text.split("\n")) {
+                g2.drawString(line, 9, ty);
+                ty += fm.getHeight();
+            }
+            g2.dispose();
+        }
+    }
+
     public static void installDarkDefaults() {
         System.setProperty("awt.useSystemAAFontSettings", "lcd");
         System.setProperty("swing.aatext", "true");
@@ -329,7 +419,8 @@ public final class DesktopUiKit {
         } catch (Exception ignored) {}
         rebuildFonts();
         UIManager.put("Panel.background", C_VOID);
-        UIManager.put("SplitPane.background", C_PAPER_DEEP);
+        // the gaps between docks are the wooden desk under the paper
+        UIManager.put("SplitPane.background", new Color(0x8A, 0x5F, 0x36));
         UIManager.put("Viewport.background", C_VOID);
         UIManager.put("ScrollPane.background", C_VOID);
         UIManager.put("List.background", C_VOID);
@@ -1840,12 +1931,12 @@ public final class DesktopUiKit {
                 ? (java.awt.Window) owner
                 : (owner != null ? SwingUtilities.getWindowAncestor(owner) : null);
         JDialog dlg = new JDialog(win, title, java.awt.Dialog.ModalityType.APPLICATION_MODAL);
-        JPanel root = new JPanel(new BorderLayout(0, 8));
-        root.setBackground(C_HEADER);
-        root.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(C_WHITE, 1),
-                BorderFactory.createEmptyBorder(14, 16, 14, 16)));
-        root.setPreferredSize(new Dimension(540, 390));
+        // sheet-on-a-desk: warm wood around a taped paper sheet
+        JPanel root = new DeskPanel(new BorderLayout());
+        root.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
+        root.setPreferredSize(new Dimension(560, 406));
+        JPanel sheet = new TapedSheet(new BorderLayout(0, 8));
+        sheet.setBorder(BorderFactory.createEmptyBorder(16, 16, 14, 16));
 
         JPanel top = new JPanel(new BorderLayout(6, 6));
         top.setOpaque(false);
@@ -1866,7 +1957,7 @@ public final class DesktopUiKit {
         navRow.add(navBtns, BorderLayout.WEST);
         navRow.add(dirField, BorderLayout.CENTER);
         top.add(navRow, BorderLayout.SOUTH);
-        root.add(top, BorderLayout.NORTH);
+        sheet.add(top, BorderLayout.NORTH);
 
         DefaultListModel<String> listModel = new DefaultListModel<>();
         final List<File> currentEntries = new ArrayList<>();
@@ -1875,7 +1966,7 @@ public final class DesktopUiKit {
         fileList.setCellRenderer(createDarkListRenderer());
         JScrollPane sp = createScrollPane(fileList);
         sp.setBorder(BorderFactory.createLineBorder(C_BORDER, 1));
-        root.add(sp, BorderLayout.CENTER);
+        sheet.add(sp, BorderLayout.CENTER);
 
         JPanel bot = new JPanel(new BorderLayout(0, 8));
         bot.setOpaque(false);
@@ -1897,7 +1988,8 @@ public final class DesktopUiKit {
         foot.add(cancelBtn);
         foot.add(okBtn);
         bot.add(foot, BorderLayout.SOUTH);
-        root.add(bot, BorderLayout.SOUTH);
+        sheet.add(bot, BorderLayout.SOUTH);
+        root.add(sheet, BorderLayout.CENTER);
 
         Runnable reloadDir = () -> {
             dirField.setText(curDir[0].getAbsolutePath());

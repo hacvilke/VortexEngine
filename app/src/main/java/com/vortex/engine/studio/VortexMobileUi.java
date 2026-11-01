@@ -5,10 +5,13 @@ import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -124,6 +127,11 @@ public final class VortexMobileUi {
                 w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
                 w.setStatusBarColor(C_HEADER);
                 w.setNavigationBarColor(C_PAPER_DEEP);
+                // the whole studio sits on the wooden desk — cream sheets pop on it
+                try {
+                    w.getDecorView().setBackgroundDrawable(deskDrawable(act));
+                } catch (Throwable ignored) {
+                }
                 // Paper is a LIGHT surface: ask for dark status/nav icons.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     View dv = w.getDecorView();
@@ -137,6 +145,102 @@ public final class VortexMobileUi {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    // =====================================================================
+    // TACTILE PAPER: the wooden desk under the studio, washi tape, torn edges.
+    // Same recipe as hacvilke/paper-trader: sheets never float on nothing.
+    // =====================================================================
+    private static BitmapDrawable deskTile = null;
+
+    /** A tiling wooden-desk texture (planks + grain), generated once. */
+    public static Drawable deskDrawable(Context ctx) {
+        if (deskTile != null) return deskTile;
+        final int n = dp(ctx, 144);
+        Bitmap bm = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bm);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        // warm desk base
+        p.setColor(Color.parseColor("#8A5F36"));
+        c.drawRect(0, 0, n, n, p);
+        java.util.Random rnd = new java.util.Random(20260101L);
+        // grain speckle
+        for (int i = 0; i < n * 14; i++) {
+            int x = rnd.nextInt(n), y = rnd.nextInt(n);
+            p.setColor(rnd.nextBoolean() ? Color.argb(14, 0x2B, 0x18, 0x08) : Color.argb(10, 0xFF, 0xE8, 0xC8));
+            c.drawPoint(x, y, p);
+        }
+        // plank seams (vertical) + fibre lines (horizontal)
+        p.setColor(Color.argb(38, 0x2B, 0x18, 0x08));
+        c.drawRect(n / 2 - dp(ctx, 1), 0, n / 2 + dp(ctx, 1), n, p);
+        p.setColor(Color.argb(16, 0x2B, 0x18, 0x08));
+        for (int y = 0; y < n; y += dp(ctx, 9)) c.drawRect(0, y, n, y + 1, p);
+        BitmapDrawable bd = new BitmapDrawable(ctx.getResources(), bm);
+        bd.setTileModeXY(android.graphics.Shader.TileMode.REPEAT, android.graphics.Shader.TileMode.REPEAT);
+        deskTile = bd;
+        return deskTile;
+    }
+
+    /** Washi tape strips on the top corners of a sheet — pure decoration. */
+    public static final class TapeDrawable extends Drawable {
+        private final float len;
+        public TapeDrawable(float cornerLenDp) { super(); len = cornerLenDp; }
+        @Override
+        public void draw(Canvas c) {
+            android.graphics.Rect b = getBounds();
+            if (b.isEmpty()) return;
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            float w = len * 1.9f, h = len * 0.6f;
+            for (int i = 0; i < 2; i++) {
+                c.save();
+                float cx = i == 0 ? b.left + len * 0.55f : b.right - len * 0.55f;
+                c.rotate(i == 0 ? -7 : 6, cx, b.top + len * 0.2f);
+                p.setColor(Color.argb(150, 0xFF, 0xF6, 0xDE));
+                c.drawRect(cx - w / 2, b.top - h * 0.25f, cx + w / 2, b.top - h * 0.25f + h, p);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(1.2f);
+                p.setColor(Color.argb(90, 0xB4, 0xA0, 0x6E));
+                c.drawRect(cx - w / 2, b.top - h * 0.25f, cx + w / 2, b.top - h * 0.25f + h, p);
+                c.restore();
+            }
+        }
+        @Override
+        public void setAlpha(int a) {}
+        @Override
+        public void setColorFilter(android.graphics.ColorFilter cf) {}
+        @Override
+        public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+    }
+
+    /** A hand-torn paper edge (jagged ink line) — for accents, not rules. */
+    public static final class TornLineDrawable extends Drawable {
+        private final int color;
+        public TornLineDrawable(int inkColor) { super(); color = inkColor; }
+        @Override
+        public void draw(Canvas c) {
+            android.graphics.Rect b = getBounds();
+            if (b.isEmpty()) return;
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setColor(color);
+            p.setStrokeWidth(Math.max(1.5f, b.height() * 0.28f));
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeCap(Paint.Cap.ROUND);
+            android.graphics.Path path = new android.graphics.Path();
+            java.util.Random rnd = new java.util.Random(b.top * 31 + b.width());
+            float mid = b.height() * 0.5f;
+            path.moveTo(0, mid);
+            float seg = Math.max(6f, b.width() / 26f);
+            for (float x = seg; x <= b.width(); x += seg) {
+                path.lineTo(x, mid + (rnd.nextFloat() * 2f - 1f) * b.height() * 0.42f);
+            }
+            c.drawPath(path, p);
+        }
+        @Override
+        public void setAlpha(int a) {}
+        @Override
+        public void setColorFilter(android.graphics.ColorFilter cf) {}
+        @Override
+        public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }
 
     /**
@@ -574,15 +678,14 @@ public final class VortexMobileUi {
         cardBg.setCornerRadius(dp(act, 14));
         cardBg.setStroke(dp(act, 1.2f), C_BORDER);
         card.setBackground(cardBg);
+        // washi tape on the corners — this is a sheet of paper, not a panel
+        card.setForeground(new TapeDrawable(dp(act, 14)));
 
-        // Top 2dp Cyan Accent Line
+        // Torn accent edge under the header — ripped, not ruled
         View accentLine = new View(act);
-        GradientDrawable lineBg = new GradientDrawable();
-        lineBg.setColor(C_CYAN);
-        lineBg.setCornerRadii(new float[]{dp(act, 14), dp(act, 14), dp(act, 14), dp(act, 14), 0, 0, 0, 0});
-        accentLine.setBackground(lineBg);
+        accentLine.setBackground(new TornLineDrawable(C_INK));
         card.addView(accentLine, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(act, 3)));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(act, 5)));
 
         // Header Row
         LinearLayout header = new LinearLayout(act);
