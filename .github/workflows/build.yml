@@ -20,8 +20,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Android SDK 34
-        uses: android-actions/setup-android@v3
+      # (runner images ship the Android SDK + sdkmanager; the old
+      #  android-actions/setup-android@v3 step dies on obsolete 'tools')
 
       - name: Install Android Build-Tools 34.0.0, MinGW-w64 & hacvilke/lrm CLI
         run: |
@@ -34,7 +34,7 @@ jobs:
       - name: Build Android Studio v4.6.0 APK
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export ANDROID_SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           chmod +x scripts/*.sh scripts/termux/*.sh
           ./scripts/build_studio_apk.sh
 

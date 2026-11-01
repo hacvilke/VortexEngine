@@ -19,8 +19,8 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK (API 34 + Build Tools 34.0.0)
-        uses: android-actions/setup-android@v3
+      # (runner images ship the Android SDK + sdkmanager; the old
+      #  android-actions/setup-android@v3 step dies on obsolete 'tools')
 
       - name: Install Platform 34 & Build-Tools 34.0.0
         run: |
@@ -28,14 +28,14 @@ jobs:
 
       - name: Build Vortex Engine Studio APK & Runtime Toolchain
         env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ ANDROID_HOME || '/usr/local/lib/android/sdk' }}
         run: |
           chmod +x scripts/*.sh scripts/termux/*.sh
           ./scripts/build_studio_apk.sh
 
       - name: Run End-to-End Termux APK Pipeline Test
         env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ ANDROID_HOME || '/usr/local/lib/android/sdk' }}
         run: |
           ./scripts/test_termux_pipeline.sh
 
