@@ -24,7 +24,8 @@ jobs:
 
       - name: Install Platform 34 & Build-Tools 34.0.0
         run: |
-          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+          SDKM="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKM" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Build Vortex Engine Studio APK & Runtime Toolchain
         env:

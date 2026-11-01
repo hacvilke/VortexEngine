@@ -27,8 +27,9 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 zip unzip file curl
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+          SDKM="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses >/dev/null || true
+          "$SDKM" "platforms;android-34" "build-tools;34.0.0"
           curl -fsSL https://raw.githubusercontent.com/hacvilke/lrm/main/scripts/install.sh | sh || true
 
       - name: Build Android Studio v4.6.0 APK
