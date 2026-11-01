@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
         title.setSingleLine(true);
         brandRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView verChip = VortexMobileUi.makeBadge(this, "v4.9.0 STUDIO", true);
+        TextView verChip = VortexMobileUi.makeBadge(this, "v4.9.1 STUDIO", true);
         brandRow.addView(verChip);
         header.addView(brandRow);
 

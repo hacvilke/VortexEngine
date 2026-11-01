@@ -642,7 +642,7 @@ public class DesktopSoftware3DViewport extends JPanel {
      */
     /** Cream stock + faint rule-blue squares: the "paper" the 2D scene is drawn on. */
     private void paintGraphPaper(Graphics2D g2, int w, int h) {
-        g2.setColor(new java.awt.Color(0xFB, 0xF6, 0xEA));
+        g2.setColor(new java.awt.Color(0xFF, 0xFD, 0xF6));
         g2.fillRect(0, 0, w, h);
         float zoom = Math.max(4f, editor2DZoom);
         float step = Math.max(8f, zoom);                 // one world unit per square, clamped

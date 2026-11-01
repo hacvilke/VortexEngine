@@ -88,31 +88,31 @@ public final class DesktopUiKit {
     // Palette mirrors hacvilke/paper-trader: nothing here is pure white or pure black,
     // because paper never is; contrast comes from ink weight, not from neon.
     // =====================================================================
-    public static final Color C_PAPER        = new Color(0xFB, 0xF6, 0xEA); // #fbf6ea sheet
-    public static final Color C_PAPER_2      = new Color(0xF4, 0xEC, 0xDA); // #f4ecda secondary stock
-    public static final Color C_PAPER_DEEP   = new Color(0xEA, 0xDF, 0xC6); // #eadfc6 kraft / headers
+    public static final Color C_PAPER        = new Color(0xFF, 0xFD, 0xF6); // #fffdf6 sheet (site-accurate)
+    public static final Color C_PAPER_2      = new Color(0xFB, 0xF6, 0xEA); // #fbf6ea secondary stock
+    public static final Color C_PAPER_DEEP   = new Color(0xF3, 0xEB, 0xD6); // #f3ebd6 kraft / headers
     public static final Color C_INK          = new Color(0x33, 0x29, 0x1D); // #33291d ink
     public static final Color C_PENCIL       = new Color(0x6F, 0x65, 0x58); // #6f6558 pencil
     public static final Color C_INK_GREEN    = new Color(0x1E, 0x7A, 0x44); // #1e7a44
     public static final Color C_INK_RED      = new Color(0xC0, 0x39, 0x2B); // #c0392b
     public static final Color C_INK_BLUE     = new Color(0x24, 0x56, 0xA6); // #2456a6
-    public static final Color C_INK_AMBER    = new Color(0xA8, 0x62, 0x10);
+    public static final Color C_INK_AMBER    = new Color(0xB8, 0x86, 0x0B); // gold, per site
 
     // Same names as before, re-pointed at paper. (C_WHITE == "ink" and C_DARK_INK == "paper" is
     // deliberate: it inverts stamps/buttons in one place instead of touching 300 call sites.)
     public static final Color C_VOID          = C_PAPER;       // canvas / code / console sheet
-    public static final Color C_INPUT_BG      = new Color(0xFF, 0xFD, 0xF7);
+    public static final Color C_INPUT_BG      = new Color(0xFF, 0xFE, 0xF8);
     public static final Color C_PANEL         = C_PAPER_2;     // docks
-    public static final Color C_PANEL_ALT     = new Color(0xFF, 0xFC, 0xF3);
+    public static final Color C_PANEL_ALT     = new Color(0xFF, 0xFD, 0xF3);
     public static final Color C_HEADER        = C_PAPER_DEEP;  // dock headers (kraft tab)
-    public static final Color C_SURFACE       = new Color(0xEF, 0xE6, 0xD3);
-    public static final Color C_SURFACE_HOV   = new Color(0xE4, 0xD8, 0xBC);
-    public static final Color C_BORDER_SUBTLE = new Color(0xE3, 0xD7, 0xBD);
-    public static final Color C_BORDER        = new Color(0xD2, 0xC2, 0x9F);
-    public static final Color C_BORDER_STRONG = new Color(0xA9, 0x96, 0x70);
+    public static final Color C_SURFACE       = new Color(0xF7, 0xEF, 0xDC);
+    public static final Color C_SURFACE_HOV   = new Color(0xEF, 0xE3, 0xC6);
+    public static final Color C_BORDER_SUBTLE = new Color(0xE9, 0xDE, 0xC6);
+    public static final Color C_BORDER        = new Color(0xD9, 0xC9, 0xA6);
+    public static final Color C_BORDER_STRONG = new Color(0xB0, 0x9B, 0x74);
     public static final Color C_WHITE         = C_INK;         // "strongest foreground" == ink
     public static final Color C_WHITE_SOFT    = new Color(0x3E, 0x33, 0x25);
-    public static final Color C_ACCENT_TINT   = new Color(0xEE, 0xE2, 0xC6);
+    public static final Color C_ACCENT_TINT   = new Color(0xFF, 0xEE, 0x9C); // site highlight
     public static final Color C_DARK_INK      = C_PAPER;       // text stamped on ink fills
     public static final Color C_TEXT          = C_INK;
     public static final Color C_TEXT_LABEL    = new Color(0x3A, 0x2F, 0x22);
@@ -163,14 +163,14 @@ public final class DesktopUiKit {
             pickInstalledFont("JetBrains Mono", "Consolas", "Liberation Mono", "DejaVu Sans Mono", "Monospaced"));
 
     private static float uiScale = 1.00f;
-    private static int baseUiPt = 14;
-    private static int baseMonoPt = 14;
+    private static int baseUiPt = 16;
+    private static int baseMonoPt = 15;
 
-    public static Font FONT_SMALL      = new Font(UI_FAMILY, Font.PLAIN, scaledFontPt(12));
-    public static Font FONT_SMALL_BOLD = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(16));
+    public static Font FONT_SMALL      = new Font(UI_FAMILY, Font.PLAIN, scaledFontPt(14));
+    public static Font FONT_SMALL_BOLD = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(17));
     public static Font FONT_UI         = new Font(UI_FAMILY, Font.PLAIN, scaledFontPt(baseUiPt));
-    public static Font FONT_UI_BOLD    = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 3));
-    public static Font FONT_TITLE      = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 5));
+    public static Font FONT_UI_BOLD    = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 4));
+    public static Font FONT_TITLE      = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 7));
     public static Font FONT_MONO       = new Font(MONO_FAMILY, Font.PLAIN, scaledFontPt(baseMonoPt));
 
     private static String pickInstalledFont(String... candidates) {
@@ -208,7 +208,8 @@ public final class DesktopUiKit {
     }
 
     public static int scaledFontPt(int basePt) {
-        return Math.max(12, Math.round(basePt * uiScale));
+        // 13pt floor: below that the hand faces lose their counters and stop being readable.
+        return Math.max(13, Math.round(basePt * uiScale));
     }
 
     public static void setUiScale(float scale) {
@@ -217,17 +218,17 @@ public final class DesktopUiKit {
     }
 
     public static void adjustFontPt(int delta) {
-        baseUiPt = Math.max(12, Math.min(18, baseUiPt + delta));
-        baseMonoPt = Math.max(12, Math.min(19, baseMonoPt + delta));
+        baseUiPt = Math.max(13, Math.min(20, baseUiPt + delta));
+        baseMonoPt = Math.max(13, Math.min(20, baseMonoPt + delta));
         rebuildFonts();
     }
 
     private static void rebuildFonts() {
-        FONT_SMALL      = new Font(UI_FAMILY, Font.PLAIN, Math.max(11, scaledFontPt(baseUiPt - 1)));
-        FONT_SMALL_BOLD = new Font(HAND_FAMILY, Font.BOLD, Math.max(13, scaledFontPt(baseUiPt + 1)));
+        FONT_SMALL      = new Font(UI_FAMILY, Font.PLAIN, Math.max(13, scaledFontPt(baseUiPt - 2)));
+        FONT_SMALL_BOLD = new Font(HAND_FAMILY, Font.BOLD, Math.max(15, scaledFontPt(baseUiPt + 1)));
         FONT_UI         = new Font(UI_FAMILY, Font.PLAIN, scaledFontPt(baseUiPt));
-        FONT_UI_BOLD    = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 3));
-        FONT_TITLE      = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 5));
+        FONT_UI_BOLD    = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 4));
+        FONT_TITLE      = new Font(HAND_FAMILY, Font.BOLD, scaledFontPt(baseUiPt + 7));
         FONT_MONO       = new Font(MONO_FAMILY, Font.PLAIN, scaledFontPt(baseMonoPt));
         UIManager.put("Label.font", FONT_UI);
         UIManager.put("Button.font", FONT_UI);
@@ -268,11 +269,11 @@ public final class DesktopUiKit {
                     // two octaves: high-frequency speckle + soft tonal blotches
                     int speck = rnd.nextInt(100);
                     double blot = Math.sin(x * 0.055) * Math.cos(y * 0.043) * 0.5 + 0.5;
-                    int a = (int) (speck < 55 ? 7 : (speck < 90 ? 12 : 18));
-                    a += (int) (blot * 8);
-                    int tone = speck < 50 ? 0x5A4632 : 0xFFF8E8;
+                    int a = (int) (speck < 60 ? 4 : (speck < 92 ? 7 : 10));
+                    a += (int) (blot * 5);
+                    int tone = speck < 44 ? 0xA98A5C : 0xFFF8E8;
                     int r = (tone >> 16) & 0xFF, g = (tone >> 8) & 0xFF, b = tone & 0xFF;
-                    img.setRGB(x, y, (Math.min(26, a) << 24) | (r << 16) | (g << 8) | b);
+                    img.setRGB(x, y, (Math.min(14, a) << 24) | (r << 16) | (g << 8) | b);
                 }
             }
             paperGrain = img;

@@ -174,7 +174,7 @@ Manifest-Version: 1.0
 Main-Class: com.vortex.engine.desktop.VortexDesktopStudio
 EOF
 
-FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.9.0.jar"
+FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.9.1.jar"
 "$JAR" cfm "$FAT_JAR" "$BUILD_DESK/manifest.mf" -C "$BUILD_DESK/fatjar" .
 
 echo "=== [4/5] Building Self-Contained Windows x64 .EXE & Linux x86_64 Binary ==="

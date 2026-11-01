@@ -43,9 +43,9 @@ public final class VortexMobileUi {
     // PAPER THEME (same palette as hacvilke/paper-trader): cream stock, ink text,
     // pencil rules. No pure white, no pure black — contrast comes from ink weight.
     // =====================================================================
-    public static final int C_PAPER        = Color.parseColor("#FBF6EA");
-    public static final int C_PAPER_2      = Color.parseColor("#F4ECDA");
-    public static final int C_PAPER_DEEP   = Color.parseColor("#EADFC6");
+    public static final int C_PAPER        = Color.parseColor("#FFFDF6");
+    public static final int C_PAPER_2      = Color.parseColor("#FBF6EA");
+    public static final int C_PAPER_DEEP   = Color.parseColor("#F3EBD6");
     public static final int C_INK          = Color.parseColor("#33291D");
     public static final int C_PENCIL       = Color.parseColor("#6F6558");
     public static final int C_INK_GREEN    = Color.parseColor("#1E7A44");
@@ -54,12 +54,12 @@ public final class VortexMobileUi {
     public static final int C_VOID         = C_PAPER;
     public static final int C_HEADER       = C_PAPER_DEEP;
     public static final int C_PANEL        = C_PAPER_2;
-    public static final int C_SURFACE      = Color.parseColor("#EFE6D3");
-    public static final int C_SURFACE_HI   = Color.parseColor("#E4D8BC");
+    public static final int C_SURFACE      = Color.parseColor("#F7EFDC");
+    public static final int C_SURFACE_HI   = Color.parseColor("#EFE3C6");
     public static final int C_INPUT_BG     = Color.parseColor("#FFFDF7");
     public static final int C_BORDER       = Color.parseColor("#D2C29F");
     public static final int C_CYAN         = C_INK;
-    public static final int C_CYAN_TINT    = Color.parseColor("#EEE2C6");
+    public static final int C_CYAN_TINT    = Color.parseColor("#FFEE9C");
     public static final int C_CYAN_DARK_TX = C_PAPER;
     public static final int C_TEXT         = C_INK;
     public static final int C_TEXT_MUTED   = Color.parseColor("#4A3E2E");

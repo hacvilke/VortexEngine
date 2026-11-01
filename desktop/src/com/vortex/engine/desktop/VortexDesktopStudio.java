@@ -168,12 +168,13 @@ public class VortexDesktopStudio extends JFrame {
             }
             if (("--shot".equals(args[i]) || "--docs-shot".equals(args[i])) && i + 1 < args.length) {
                 final boolean withDocs = "--docs-shot".equals(args[i]);
+                final String shotTab = (i + 2 < args.length && !args[i + 2].startsWith("--")) ? args[i + 2] : null;
                 // GUI verification hook: open the studio, open the docs browser, screenshot, exit.
                 final String shotPath = args[i + 1];
                 DesktopUiKit.installDarkDefaults();
                 SwingUtilities.invokeLater(() -> {
                     final VortexDesktopStudio studio = new VortexDesktopStudio(true);
-                    studio.setSize(1440, 900);
+                    studio.setSize(1440, 940);
                     studio.setVisible(true);
                     javax.swing.Timer kick = new javax.swing.Timer(1400, e -> {
                         javax.swing.Timer grab = new javax.swing.Timer(1600, ev -> {
@@ -193,6 +194,9 @@ public class VortexDesktopStudio extends JFrame {
                         });
                         grab.setRepeats(false);
                         grab.start();
+                        if (shotTab != null && studio.rightTabs != null) {
+                            studio.rightTabs.selectTabByKey(shotTab.toUpperCase(java.util.Locale.US), true);
+                        }
                         if (withDocs) studio.showDocsBrowser();
                     });
                     kick.setRepeats(false);
@@ -232,7 +236,7 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio(boolean checkStartupDependencies) {
-        super("Vortex Engine Studio v4.9.0 — Voxel Worlds • Tile Maps • Prefabs • In-App Docs • Forge AI Chat");
+        super("Vortex Engine Studio v4.9.1 — Voxel Worlds • Tile Maps • Prefabs • In-App Docs • Forge AI Chat");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         // Laptop-aware sizing: fit cleanly inside 1280x720 / 1366x768 / 1536x864 / 1440x900 screens!
@@ -805,7 +809,7 @@ public class VortexDesktopStudio extends JFrame {
     // =====================================================================
 
     // =====================================================================
-    // v4.9.0 — API reference = one offline index.html, generated from this build
+    // v4.9.1 — API reference = one offline index.html, generated from this build
     // =====================================================================
 
     private void openApiReference() {
@@ -898,6 +902,7 @@ public class VortexDesktopStudio extends JFrame {
             javax.swing.SwingUtilities.invokeLater(() -> {
                 bodyArea.setCaretPosition(0);
                 bodyScroll.getVerticalScrollBar().setValue(0);
+                bodyScroll.getViewport().setViewPosition(new java.awt.Point(0, 0));
             });
         });
 
@@ -953,7 +958,17 @@ public class VortexDesktopStudio extends JFrame {
         dlg.setLocationRelativeTo(this);
         split.setDividerLocation(DesktopUiKit.scaled(250));
         list.setSelectedIndex(0);
+        // setVisible() is modal, so schedule the scroll fix on the EDT timer: it fires while the
+        // dialog is up and guarantee the first line is not clipped by a stale viewport position.
+        final javax.swing.Timer scrollFix = new javax.swing.Timer(160, ev -> {
+            bodyArea.setCaretPosition(0);
+            bodyScroll.getVerticalScrollBar().setValue(0);
+            bodyScroll.getViewport().setViewPosition(new java.awt.Point(0, 0));
+        });
+        scrollFix.setRepeats(false);
+        scrollFix.start();
         dlg.setVisible(true);
+        scrollFix.stop();
     }
 
     private void showDocsTopic(String id) {
@@ -991,8 +1006,8 @@ public class VortexDesktopStudio extends JFrame {
                 "Physics",
                 "2D: JBox2D rigid bodies (CCD bullets)\n3D: substepped impulse solver + terrain\nLayers: collisionLayer / collisionMask")));
         items.add(new DesktopUiKit.MenuAction("---", null));
-        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.9.0", () -> DesktopUiKit.showInfoModal(this,
-                "Vortex Engine Studio v4.9.0",
+        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.9.1", () -> DesktopUiKit.showInfoModal(this,
+                "Vortex Engine Studio v4.9.1",
                 "Free & open-source 2D/3D game engine\nWindows • Linux • Android • Web")));
         return items;
     }
@@ -1419,7 +1434,7 @@ public class VortexDesktopStudio extends JFrame {
         headerBar.add(rightBar, BorderLayout.EAST);
         bottomWrapperPanel.add(headerBar, BorderLayout.NORTH);
 
-        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.9.0 Desktop Studio Ready.");
+        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.9.1 Desktop Studio Ready.");
 
         JScrollPane consoleScroll = DesktopUiKit.createScrollPane(consoleArea);
         bottomDeck.addCard("CONSOLE", consoleScroll, 0);
@@ -4316,7 +4331,7 @@ public class VortexDesktopStudio extends JFrame {
     // Headless Verification Suite (Java VM + ES6 JS + Lua + LRM + Forge + UI)
     // =========================================================================
     private static void runHeadlessSelfTests() throws Exception {
-        System.out.println("=== Vortex Engine v4.9.0 Headless Verification Suite ===");
+        System.out.println("=== Vortex Engine v4.9.1 Headless Verification Suite ===");
 
         // 1) Zero-Blue Monochrome Palette + Laptop UI Scale Verification
         Color[] uiColors = {
@@ -4788,6 +4803,6 @@ public class VortexDesktopStudio extends JFrame {
         tmpExe.delete();
         tmpZip.delete();
 
-        System.out.println("=== ALL VORTEX v4.9.0 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
+        System.out.println("=== ALL VORTEX v4.9.1 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
     }
 }

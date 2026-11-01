@@ -162,13 +162,13 @@ public final class DocsSite {
 
     /** Paper theme: cream stock, ink text, pencil rules — same palette as the studio. */
     private static final String CSS =
-            ":root{--paper:#fbf6ea;--paper2:#f4ecda;--deep:#eadfc6;--ink:#33291d;--pencil:#6f6558;" +
+            ":root{--paper:#fffdf6;--paper2:#fbf6ea;--deep:#f3ebd6;--ink:#33291d;--pencil:#6f6558;" +
             "--green:#1e7a44;--red:#c0392b;--blue:#2456a6;}" +
             "*{box-sizing:border-box}" +
             "html{background:#6b4523}" +
             "body{margin:0;padding:26px 14px 60px;background:#6b4523;" +
             "font-family:'Patrick Hand','Segoe Print','Comic Sans MS',ui-rounded,cursive,sans-serif;" +
-            "color:var(--ink);font-size:17px;line-height:1.55;}" +
+            "color:var(--ink);font-size:19px;line-height:1.6;}" +
             ".sheet{max-width:920px;margin:0 auto;background:var(--paper);" +
             "padding:34px 38px 44px;border-radius:3px;" +
             "box-shadow:0 1px 0 #e5dac2 inset,0 18px 45px rgba(28,15,3,.45);" +
@@ -191,11 +191,11 @@ public final class DocsSite {
             "p{margin:6px 0}" +
             "ul{margin:6px 0 6px 4px;padding-left:20px}" +
             "li{margin:2px 0}" +
-            "code{font-family:'Special Elite','Courier New',monospace;font-size:14.5px;" +
+            "code{font-family:'Special Elite','Courier New',monospace;font-size:16px;" +
             "background:var(--deep);border-radius:3px;padding:1px 5px}" +
             "pre{background:var(--paper2);border:1px solid #ddd0b4;border-left:4px solid var(--green);" +
             "border-radius:4px;padding:12px 14px;overflow:auto;margin:10px 0}" +
-            "pre code{background:none;padding:0;font-size:14px;line-height:1.5}" +
+            "pre code{background:none;padding:0;font-size:16px;line-height:1.55}" +
             ".api code{display:inline-block;min-width:210px;margin:3px 8px 3px 0}" +
             ".trow{display:grid;grid-template-columns:1fr 2fr;gap:6px;border-bottom:1px dotted #d8c9a8;" +
             "padding:3px 0}" +

@@ -430,12 +430,16 @@ public final class DesktopSceneTree extends JPanel {
             }
             Entity e = (Entity) uo;
             int depth = project == null ? 0 : SceneHierarchy.depth(project.entities, e);
-            Color nameColor = e.visible ? (selected ? DesktopUiKit.C_WHITE : DesktopUiKit.C_TEXT) : DesktopUiKit.C_TEXT_MUTED;
-            Color typeColor = selected ? DesktopUiKit.C_TEXT_LABEL : DesktopUiKit.C_TEXT_MUTED;
+            // On the amber highlight everything must be ink or it washes out.
+            Color nameColor = selected ? DesktopUiKit.C_INK
+                    : (e.visible ? DesktopUiKit.C_TEXT : DesktopUiKit.C_TEXT_MUTED);
+            Color typeColor = selected ? new Color(0x5A, 0x4E, 0x3C) : DesktopUiKit.C_TEXT_MUTED;
             String type = e.primitive + " \u00b7 " + e.bodyType;
             lab.setIcon(nodeIcon(e));
-            lab.setText("<html><span style='color:#" + hex(nameColor) + ";font-weight:" + (e.bodyType.equals("STATIC") ? "600" : "400") + "'>"
-                    + escape(e.name) + "</span><span style='color:#" + hex(typeColor) + "'>  " + escape(type) + "</span></html>");
+            lab.setText("<html><span style=\"color:#" + hex(nameColor) + ";font-weight:"
+                    + (e.bodyType.equals("STATIC") ? "600" : "400") + "\">"
+                    + escape(e.name) + "</span><span style=\"color:#" + hex(typeColor) + "\">  "
+                    + escape(type) + "</span></html>");
             lab.setToolTipText(SceneHierarchy.path(project == null ? new ArrayList<Entity>() : project.entities, e)
                     + "  \u00b7  depth " + depth + (e.parentId == null || e.parentId.isEmpty() ? "" : "  \u00b7  parent " + e.parentId));
             return lab;

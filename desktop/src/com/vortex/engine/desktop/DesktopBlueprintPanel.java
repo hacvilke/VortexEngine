@@ -477,8 +477,8 @@ public final class DesktopBlueprintPanel extends JPanel {
                 Point2D.Float p0 = outputPinPos(from, link.fromPin);
                 Point2D.Float p1 = inputPinPos(to);
                 Color wireCol = "FALSE".equalsIgnoreCase(link.fromPin)
-                        ? new Color(248, 113, 113, 230)
-                        : new Color(255, 255, 255, 235);
+                        ? new Color(0xFF, 0xB4, 0xA8, 240)
+                        : new Color(0xF2, 0xF8, 0xFF, 240);
                 drawBezierWire(wg, p0.x, p0.y, p1.x, p1.y, wireCol, 2.4f);
             }
 
@@ -486,7 +486,7 @@ public final class DesktopBlueprintPanel extends JPanel {
             if (wireFromNode != null && wireMousePt != null) {
                 Point2D.Float p0 = outputPinPos(wireFromNode, wireFromPin);
                 Point2D.Float p1 = toGraph(wireMousePt);
-                drawBezierWire(wg, p0.x, p0.y, p1.x, p1.y, new Color(255, 255, 255, 190), 2.0f);
+                drawBezierWire(wg, p0.x, p0.y, p1.x, p1.y, new Color(0xE8, 0xF1, 0xFF, 200), 2.0f);
             }
 
             // 2. Paint Blueprint Nodes
@@ -497,25 +497,33 @@ public final class DesktopBlueprintPanel extends JPanel {
 
             // Corner HUD Hint
             g2.setFont(DesktopUiKit.FONT_SMALL);
-            g2.setColor(new Color(161, 161, 170, 210));
+            g2.setColor(new Color(0xC6, 0xDC, 0xF7, 235));
             g2.drawString("Blueprint Graph (" + project.blueprintNodes.size() + " blocks, "
                     + project.blueprintLinks.size() + " wires) • Drag ▶ pin to connect • Right-click pin to unwire • Wheel zoom", 12, h - 10);
             g2.dispose();
         }
 
+        // Classic drafting blueprint: deep blue stock, white rules, white ink wires.
+        private final java.awt.Color BP_BLUE       = new java.awt.Color(0x12, 0x33, 0x63);
+        private final java.awt.Color BP_BLUE_DEEP  = new java.awt.Color(0x0B, 0x22, 0x45);
+        private final java.awt.Color BP_RULE       = new java.awt.Color(255, 255, 255, 30);
+        private final java.awt.Color BP_RULE_MAJOR = new java.awt.Color(255, 255, 255, 62);
+
         private void paintGrid(Graphics2D g2, int w, int h) {
-            g2.setColor(new Color(10, 10, 13));
+            g2.setPaint(new java.awt.GradientPaint(0, 0, BP_BLUE, 0, h, BP_BLUE_DEEP));
             g2.fillRect(0, 0, w, h);
+            g2.setPaint(null);
+
             int step = Math.max(14, Math.round(24 * zoom));
             int ox = ((Math.round(panX) % step) + step) % step;
             int oy = ((Math.round(panY) % step) + step) % step;
-            g2.setColor(DesktopUiKit.C_PAPER_2);
+            g2.setColor(BP_RULE);
             for (int x = ox; x < w; x += step) g2.drawLine(x, 0, x, h);
             for (int y = oy; y < h; y += step) g2.drawLine(0, y, w, y);
             int major = step * 4;
             int mox = ((Math.round(panX) % major) + major) % major;
             int moy = ((Math.round(panY) % major) + major) % major;
-            g2.setColor(DesktopUiKit.C_PAPER_DEEP);
+            g2.setColor(BP_RULE_MAJOR);
             for (int x = mox; x < w; x += major) g2.drawLine(x, 0, x, h);
             for (int y = moy; y < h; y += major) g2.drawLine(0, y, w, y);
         }
@@ -523,7 +531,7 @@ public final class DesktopBlueprintPanel extends JPanel {
         private void drawBezierWire(Graphics2D g2, float x0, float y0, float x1, float y1, Color col, float width) {
             float tang = Math.max(48f, Math.abs(x1 - x0) * 0.48f);
             CubicCurve2D.Float curve = new CubicCurve2D.Float(x0, y0, x0 + tang, y0, x1 - tang, y1, x1, y1);
-            g2.setColor(new Color(0, 0, 0, 120));
+            g2.setColor(new Color(4, 16, 34, 150));
             g2.setStroke(new BasicStroke(width + 2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             g2.draw(curve);
             g2.setColor(col);
@@ -536,36 +544,36 @@ public final class DesktopBlueprintPanel extends JPanel {
             RoundRectangle2D.Float card = new RoundRectangle2D.Float(n.x, n.y, NODE_W, nh, 10f, 10f);
 
             // Drop shadow
-            g2.setColor(new Color(0, 0, 0, 130));
+            g2.setColor(new Color(4, 16, 34, 150));
             g2.fill(new RoundRectangle2D.Float(n.x + 2f, n.y + 3f, NODE_W, nh, 10f, 10f));
 
-            // Body
-            g2.setColor(new Color(22, 22, 26, 244));
+            // Body: vellum sheet pinned to the blueprint
+            g2.setColor(new Color(0xFF, 0xFD, 0xF4, 250));
             g2.fill(card);
 
             // Semantic Category Header Band (strictly ZERO blue!)
             String cat = n.getCategory();
             Color hdrCol;
-            if ("EVENT".equalsIgnoreCase(cat)) hdrCol = new Color(68, 28, 34);
-            else if ("GUI".equalsIgnoreCase(cat)) hdrCol = new Color(0xE0, 0xD3, 0xB4);
-            else if ("BRANCH".equalsIgnoreCase(cat)) hdrCol = new Color(58, 46, 24);
-            else hdrCol = DesktopUiKit.C_SURFACE;
+            if ("EVENT".equalsIgnoreCase(cat)) hdrCol = new Color(0x8E, 0x24, 0x1A);
+            else if ("GUI".equalsIgnoreCase(cat)) hdrCol = new Color(0x24, 0x56, 0xA6);
+            else if ("BRANCH".equalsIgnoreCase(cat)) hdrCol = new Color(0xB8, 0x86, 0x0B);
+            else hdrCol = new Color(0x1B, 0x4A, 0x8A);
 
             g2.setClip(card);
             g2.setColor(hdrCol);
             g2.fillRect(Math.round(n.x), Math.round(n.y), NODE_W, 26);
             g2.setClip(null);
 
-            g2.setColor(sel ? DesktopUiKit.C_INK : DesktopUiKit.C_BORDER_STRONG);
-            g2.setStroke(new BasicStroke(sel ? 1.8f : 1.0f));
+            g2.setColor(sel ? new Color(0xFF, 0xEE, 0x9C) : new Color(0x7F, 0xA9, 0xDC));
+            g2.setStroke(new BasicStroke(sel ? 2.2f : 1.2f));
             g2.draw(card);
 
             // Title + Category Pill
             g2.setFont(DesktopUiKit.FONT_SMALL_BOLD);
-            g2.setColor(Color.WHITE);
-            g2.drawString(trimToWidth(g2, n.title, NODE_W - 52), n.x + 10f, n.y + 17f);
+            g2.setColor(new Color(0xFF, 0xFD, 0xF4));
+            g2.drawString(trimToWidth(g2, n.title, NODE_W - 52), n.x + 10f, n.y + 18f);
 
-            g2.setFont(new Font(DesktopUiKit.UI_FAMILY, Font.BOLD, Math.max(10, DesktopUiKit.FONT_SMALL.getSize() - 1)));
+            g2.setFont(new Font(DesktopUiKit.UI_FAMILY, Font.BOLD, Math.max(12, DesktopUiKit.FONT_SMALL.getSize() - 1)));
             int cw = g2.getFontMetrics().stringWidth(cat) + 8;
             g2.setColor(new Color(255, 255, 255, 32));
             g2.fillRoundRect(Math.round(n.x + NODE_W - cw - 7), Math.round(n.y + 6), cw, 14, 5, 5);
@@ -575,38 +583,38 @@ public final class DesktopBlueprintPanel extends JPanel {
             // Input Exec Pin (▶)
             if (n.hasExecIn()) {
                 Point2D.Float ip = inputPinPos(n);
-                drawExecPin(g2, ip.x, ip.y, Color.WHITE);
+                drawExecPin(g2, ip.x, ip.y, new Color(0xE8, 0xF1, 0xFF));
             }
 
             // Output Exec Pin(s)
             if (n.isBranch()) {
                 Point2D.Float pt = outputPinPos(n, "TRUE");
                 Point2D.Float pf = outputPinPos(n, "FALSE");
-                drawExecPin(g2, pt.x, pt.y, new Color(134, 239, 172));
-                drawExecPin(g2, pf.x, pf.y, new Color(252, 165, 165));
-                g2.setFont(new Font(DesktopUiKit.UI_FAMILY, Font.BOLD, Math.max(10, DesktopUiKit.FONT_SMALL.getSize() - 1)));
-                g2.setColor(new Color(134, 239, 172));
+                drawExecPin(g2, pt.x, pt.y, new Color(0x2F, 0x9E, 0x5C));
+                drawExecPin(g2, pf.x, pf.y, new Color(0xD2, 0x3F, 0x31));
+                g2.setFont(new Font(DesktopUiKit.UI_FAMILY, Font.BOLD, Math.max(12, DesktopUiKit.FONT_SMALL.getSize() - 1)));
+                g2.setColor(new Color(0x1E, 0x7A, 0x44));
                 g2.drawString("TRUE", pt.x - 36f, pt.y + 3.5f);
-                g2.setColor(new Color(252, 165, 165));
+                g2.setColor(new Color(0xC0, 0x39, 0x2B));
                 g2.drawString("FALSE", pf.x - 40f, pf.y + 3.5f);
             } else {
                 Point2D.Float op = outputPinPos(n, "OUT");
-                drawExecPin(g2, op.x, op.y, Color.WHITE);
+                drawExecPin(g2, op.x, op.y, new Color(0xE8, 0xF1, 0xFF));
             }
 
             // Node Parameter Summary Preview
             g2.setFont(DesktopUiKit.FONT_MONO);
-            g2.setColor(new Color(212, 212, 220));
+            g2.setColor(new Color(0x33, 0x29, 0x1D));
             String line1 = n.param1 == null ? "" : n.param1;
             String line2 = n.param2 == null ? "" : n.param2;
             if (!line1.isEmpty()) {
                 g2.drawString(trimToWidth(g2, line1, NODE_W - 56), n.x + 26f, n.y + 48f);
             }
             if (!line2.isEmpty()) {
-                g2.setColor(new Color(165, 165, 176));
+                g2.setColor(new Color(0x6F, 0x65, 0x58));
                 g2.drawString(trimToWidth(g2, line2, NODE_W - 44), n.x + 26f, n.y + 66f);
             } else if (n.param3 != null && !n.param3.isEmpty()) {
-                g2.setColor(new Color(165, 165, 176));
+                g2.setColor(new Color(0x6F, 0x65, 0x58));
                 g2.drawString(trimToWidth(g2, n.param3, NODE_W - 44), n.x + 26f, n.y + 66f);
             }
         }
