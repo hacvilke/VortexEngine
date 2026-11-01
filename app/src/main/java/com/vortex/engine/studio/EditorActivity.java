@@ -112,6 +112,7 @@ public class EditorActivity extends Activity {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         // Paper theme lettering must be ready before any view is built.
+        VortexMobileUi.applyActiveTheme(this);
         VortexMobileUi.loadPaperFonts(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         VortexMobileUi.applyDarkSystemBars(this);
@@ -1503,6 +1504,9 @@ public class EditorActivity extends Activity {
      */
     private void openOfflineDocs() {
         try {
+            // the teaching figures ship in assets/docs; DocsSite embeds them as data URIs
+            com.vortex.engine.core.docs.DocsSite.setAssetSource(name ->
+                    getAssets().open("docs/" + name));
             java.io.File dir = new java.io.File(getCacheDir(), "docs");
             java.io.File index = com.vortex.engine.core.docs.DocsSite.write(dir);
             android.webkit.WebView web = new android.webkit.WebView(this);
@@ -1530,7 +1534,7 @@ public class EditorActivity extends Activity {
             }
             dlg.setOnDismissListener(d -> web.destroy());
             dlg.show();
-            toast("Offline API reference • " + (index.length() / 1024) + " KB");
+            toast("Offline docs • how to use + API reference");
         } catch (Throwable ex) {
             LinearLayout body = new LinearLayout(this);
             TextView t = new TextView(this);

@@ -102,6 +102,12 @@ public class GenWinIco {
 EOF
 "$JAVAC" -d "$BUILD_DESK/win" "$BUILD_DESK/win/GenWinIco.java"
 "$JAVA" -cp "$BUILD_DESK/win" GenWinIco "$BUILD_DESK/win/vortex.ico"
+# The real app mark (scripts/make_icon.py) wins over the generator fallback, so the .exe in the
+# taskbar, alt-tab and Explorer all show the same drawn icon as the APK.
+if [ -f "desktop/resources/icon.ico" ]; then
+    cp desktop/resources/icon.ico "$BUILD_DESK/win/vortex.ico"
+    echo "[ICON] using desktop/resources/icon.ico"
+fi
 cp desktop/win/vortex.rc "$BUILD_DESK/win/vortex.rc"
 
 x86_64-w64-mingw32-windres "$BUILD_DESK/win/vortex.rc" -O coff -o "$BUILD_DESK/win/vortex.res"
@@ -126,6 +132,7 @@ find app/src/main/java/com/vortex/engine/core/ai \
      app/src/main/java/com/vortex/engine/core/physics \
      app/src/main/java/com/vortex/engine/core/script \
      app/src/main/java/com/vortex/engine/core/storage \
+     app/src/main/java/com/vortex/engine/core/theme \
      app/src/main/java/com/vortex/engine/core/tween \
      app/src/main/java/com/vortex/engine/core/voxel \
      desktop/src \
@@ -174,7 +181,7 @@ Manifest-Version: 1.0
 Main-Class: com.vortex.engine.desktop.VortexDesktopStudio
 EOF
 
-FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.9.1.jar"
+FAT_JAR="$DIST_DIR/VortexEngine-Studio-Desktop-v4.9.2.jar"
 "$JAR" cfm "$FAT_JAR" "$BUILD_DESK/manifest.mf" -C "$BUILD_DESK/fatjar" .
 
 echo "=== [4/5] Building Self-Contained Windows x64 .EXE & Linux x86_64 Binary ==="

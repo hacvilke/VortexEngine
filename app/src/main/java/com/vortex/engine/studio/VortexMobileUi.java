@@ -33,6 +33,7 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 /**
  * VortexMobileUi — PAPER UI kit for the phone studio (cream stock, ink, pencil rules).
@@ -46,31 +47,81 @@ public final class VortexMobileUi {
     // PAPER THEME (same palette as hacvilke/paper-trader): cream stock, ink text,
     // pencil rules. No pure white, no pure black — contrast comes from ink weight.
     // =====================================================================
-    public static final int C_PAPER        = Color.parseColor("#FFFDF6");
-    public static final int C_PAPER_2      = Color.parseColor("#FBF6EA");
-    public static final int C_PAPER_DEEP   = Color.parseColor("#F3EBD6");
-    public static final int C_INK          = Color.parseColor("#33291D");
-    public static final int C_PENCIL       = Color.parseColor("#6F6558");
-    public static final int C_INK_GREEN    = Color.parseColor("#1E7A44");
-    public static final int C_INK_RED      = Color.parseColor("#C0392B");
+    // Mutable on purpose: the active VortexTheme rewrites these before any view is built, so a
+    // palette import or dark mode repaints the whole phone studio (Activities recreate()).
+    public static int C_PAPER        = Color.parseColor("#FFFDF6");
+    public static int C_PAPER_2      = Color.parseColor("#FBF6EA");
+    public static int C_PAPER_DEEP   = Color.parseColor("#F3EBD6");
+    public static int C_INK          = Color.parseColor("#33291D");
+    public static int C_PENCIL       = Color.parseColor("#6F6558");
+    public static int C_INK_GREEN    = Color.parseColor("#1E7A44");
+    public static int C_INK_RED      = Color.parseColor("#C0392B");
 
-    public static final int C_VOID         = C_PAPER;
-    public static final int C_HEADER       = C_PAPER_DEEP;
-    public static final int C_PANEL        = C_PAPER_2;
-    public static final int C_SURFACE      = Color.parseColor("#F7EFDC");
-    public static final int C_SURFACE_HI   = Color.parseColor("#EFE3C6");
-    public static final int C_INPUT_BG     = Color.parseColor("#FFFDF7");
-    public static final int C_BORDER       = Color.parseColor("#D2C29F");
-    public static final int C_CYAN         = C_INK;
-    public static final int C_CYAN_TINT    = Color.parseColor("#FFEE9C");
-    public static final int C_CYAN_DARK_TX = C_PAPER;
-    public static final int C_TEXT         = C_INK;
-    public static final int C_TEXT_MUTED   = Color.parseColor("#4A3E2E");
-    public static final int C_TEXT_DIM     = C_PENCIL;
-    public static final int C_DANGER_BG    = Color.parseColor("#F7E3DF");
-    public static final int C_DANGER_BDR   = Color.parseColor("#D9A79F");
-    public static final int C_DANGER_TX    = C_INK_RED;
-    public static final int C_OK_TX        = C_INK_GREEN;
+    public static int C_VOID         = C_PAPER;
+    public static int C_HEADER       = C_PAPER_DEEP;
+    public static int C_PANEL        = C_PAPER_2;
+    public static int C_SURFACE      = Color.parseColor("#F7EFDC");
+    public static int C_SURFACE_HI   = Color.parseColor("#EFE3C6");
+    public static int C_INPUT_BG     = Color.parseColor("#FFFDF7");
+    public static int C_BORDER       = Color.parseColor("#D2C29F");
+    public static int C_CYAN         = C_INK;
+    public static int C_CYAN_TINT    = Color.parseColor("#FFEE9C");
+    public static int C_CYAN_DARK_TX = C_PAPER;
+    public static int C_TEXT         = C_INK;
+    public static int C_TEXT_MUTED   = Color.parseColor("#4A3E2E");
+    public static int C_TEXT_DIM     = C_PENCIL;
+    public static int C_DANGER_BG    = Color.parseColor("#F7E3DF");
+    public static int C_DANGER_BDR   = Color.parseColor("#D9A79F");
+    public static int C_DANGER_TX    = C_INK_RED;
+    public static int C_OK_TX        = C_INK_GREEN;
+
+    /** True when the active theme is dark (the desk tone and bars follow it). */
+    public static boolean DARK = false;
+
+    /**
+     * Reads the active palette and rewrites the whole colour set. Call it at the top of every
+     * Activity's onCreate, before any view is built; after changing the theme call recreate().
+     */
+    public static void applyActiveTheme(Context ctx) {
+        com.vortex.engine.core.theme.VortexTheme t = com.vortex.engine.core.theme.ThemeRegistry.active();
+        if (t == null) return;
+        DARK = t.dark;
+        C_PAPER        = argb(t.get(com.vortex.engine.core.theme.VortexTheme.SHEET));
+        C_PAPER_2      = argb(t.get(com.vortex.engine.core.theme.VortexTheme.SHEET_2));
+        C_PAPER_DEEP   = argb(t.get(com.vortex.engine.core.theme.VortexTheme.HEADER));
+        C_INK          = argb(t.get(com.vortex.engine.core.theme.VortexTheme.INK));
+        C_PENCIL       = argb(t.get(com.vortex.engine.core.theme.VortexTheme.TEXT_MUTED));
+        C_INK_GREEN    = argb(t.get(com.vortex.engine.core.theme.VortexTheme.OK));
+        C_INK_RED      = argb(t.get(com.vortex.engine.core.theme.VortexTheme.DANGER));
+
+        C_VOID         = C_PAPER;
+        C_HEADER       = C_PAPER_DEEP;
+        C_PANEL        = C_PAPER_2;
+        C_SURFACE      = argb(t.get(com.vortex.engine.core.theme.VortexTheme.SURFACE));
+        C_SURFACE_HI   = argb(t.get(com.vortex.engine.core.theme.VortexTheme.SURFACE_HOV));
+        C_INPUT_BG     = argb(t.get(com.vortex.engine.core.theme.VortexTheme.INPUT_BG));
+        C_BORDER       = argb(t.get(com.vortex.engine.core.theme.VortexTheme.BORDER));
+        C_CYAN         = C_INK;
+        C_CYAN_TINT    = argb(t.get(com.vortex.engine.core.theme.VortexTheme.ACCENT));
+        C_CYAN_DARK_TX = argb(t.get(com.vortex.engine.core.theme.VortexTheme.ON_ACCENT));
+        C_TEXT         = C_INK;
+        C_TEXT_MUTED   = C_PENCIL;
+        C_TEXT_DIM     = argb(com.vortex.engine.core.theme.ThemeRegistry.mix(
+                t.get(com.vortex.engine.core.theme.VortexTheme.SHEET),
+                t.get(com.vortex.engine.core.theme.VortexTheme.INK), 0.62));
+        C_DANGER_BG    = argb(t.get(com.vortex.engine.core.theme.VortexTheme.DANGER_BG));
+        C_DANGER_BDR   = argb(com.vortex.engine.core.theme.ThemeRegistry.mix(
+                t.get(com.vortex.engine.core.theme.VortexTheme.DANGER_BG),
+                t.get(com.vortex.engine.core.theme.VortexTheme.DANGER), 0.42));
+        C_DANGER_TX    = argb(t.get(com.vortex.engine.core.theme.VortexTheme.DANGER));
+        C_OK_TX        = argb(t.get(com.vortex.engine.core.theme.VortexTheme.OK));
+
+        deskTile = null;   // the wooden desk tone is baked, so drop the cached tile
+    }
+
+    private static int argb(String hex) {
+        return Color.parseColor(hex == null ? "#FFFDF6" : hex);
+    }
 
     // ---- bundled hand lettering (assets/fonts) ----
     private static Typeface FACE_HAND = null;
@@ -135,7 +186,8 @@ public final class VortexMobileUi {
                 // Paper is a LIGHT surface: ask for dark status/nav icons.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     View dv = w.getDecorView();
-                    dv.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+                    // paper wants dark glyphs; a dark theme wants light ones
+                    dv.setSystemUiVisibility(DARK ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     View dv = w.getDecorView();
@@ -771,6 +823,141 @@ public final class VortexMobileUi {
         card.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(175)
                 .setInterpolator(new OvershootInterpolator(1.1f)).start();
         return dlg;
+    }
+
+
+    // =====================================================================
+    // THEME PICKER (v4.9.2) — palette sheet + import, then recreate() the activity
+    // =====================================================================
+
+    /** Opens the palette sheet: built-in themes, dark mode and custom-theme import. */
+    public static void showThemeSheet(final Activity act) {
+        final com.vortex.engine.core.theme.VortexTheme cur =
+                com.vortex.engine.core.theme.ThemeRegistry.active();
+
+        LinearLayout body = new LinearLayout(act);
+        body.setOrientation(LinearLayout.VERTICAL);
+
+        TextView hint = new TextView(act);
+        hint.setText("Pick a palette. Import accepts a Vortex theme JSON, a slot map, or a plain list of #hex colours.");
+        hint.setTextColor(C_TEXT_MUTED);
+        hint.setTextSize(12.5f);
+        hint.setPadding(0, 0, 0, dp(act, 10));
+        body.addView(hint);
+
+        for (final com.vortex.engine.core.theme.VortexTheme t
+                : com.vortex.engine.core.theme.ThemeRegistry.all()) {
+            body.addView(themeRow(act, t, t.id.equals(cur.id)));
+        }
+
+        TextView importBtn = makeButton(act, "＋ IMPORT THEME", ButtonVariant.ACCENT, false);
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        ip.topMargin = dp(act, 12);
+        importBtn.setOnClickListener(v -> showThemeImport(act));
+        body.addView(importBtn, ip);
+
+        showModal(act, "Palette", body, "CLOSE", null, null, null, null);
+    }
+
+    private static View themeRow(final Activity act, final com.vortex.engine.core.theme.VortexTheme t,
+                                 boolean isActive) {
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(act, 10), dp(act, 9), dp(act, 10), dp(act, 9));
+        row.setBackgroundColor(isActive ? C_CYAN_TINT : C_PANEL);
+
+        LinearLayout chips = new LinearLayout(act);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        String[] slots = {com.vortex.engine.core.theme.VortexTheme.SHEET,
+                com.vortex.engine.core.theme.VortexTheme.PANEL,
+                com.vortex.engine.core.theme.VortexTheme.SURFACE,
+                com.vortex.engine.core.theme.VortexTheme.ACCENT,
+                com.vortex.engine.core.theme.VortexTheme.INK};
+        for (String slot : slots) {
+            View chip = new View(act);
+            chip.setBackgroundColor(argb(t.get(slot)));
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(dp(act, 16), dp(act, 16));
+            clp.rightMargin = dp(act, 3);
+            chips.addView(chip, clp);
+        }
+        row.addView(chips);
+
+        TextView name = new TextView(act);
+        name.setText((isActive ? "● " : "") + t.name);
+        name.setTextColor(C_TEXT);
+        name.setTextSize(14.0f);
+        name.setTypeface(bodyTypeface());
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        nlp.leftMargin = dp(act, 10);
+        row.addView(name, nlp);
+
+        row.setOnClickListener(v -> {
+            com.vortex.engine.core.theme.ThemeRegistry.setActive(t.id);
+            Toast.makeText(act, "Palette: " + t.name, Toast.LENGTH_SHORT).show();
+            act.recreate();
+        });
+
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rlp.bottomMargin = dp(act, 6);
+        row.setLayoutParams(rlp);
+        return row;
+    }
+
+    /** Paste-a-theme dialog (no file picker needed on a phone). */
+    public static void showThemeImport(final Activity act) {
+        LinearLayout body = new LinearLayout(act);
+        body.setOrientation(LinearLayout.VERTICAL);
+
+        TextView hint = new TextView(act);
+        hint.setText("Paste theme JSON or colours:");
+        hint.setTextColor(C_TEXT_MUTED);
+        hint.setTextSize(12.5f);
+        body.addView(hint);
+
+        final EditText input = createInput(act,
+                "{\"sheet\":\"#fffdf6\",\"ink\":\"#33291d\",\"accent\":\"#ffee9c\"}", false, true);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(act, 120));
+        lp.topMargin = dp(act, 8);
+        body.addView(input, lp);
+
+        showModal(act, "Import palette", body, "IMPORT & APPLY", () -> {
+            try {
+                com.vortex.engine.core.theme.VortexTheme t =
+                        com.vortex.engine.core.theme.ThemeRegistry.importText(
+                                input.getText().toString(), "Imported palette");
+                com.vortex.engine.core.theme.ThemeRegistry.setActive(t.id);
+                Toast.makeText(act, "Imported " + t.name, Toast.LENGTH_SHORT).show();
+                act.recreate();
+            } catch (Exception ex) {
+                Toast.makeText(act, "Could not import: " + ex.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        }, null, null, "CANCEL");
+    }
+
+    /** Header chip that opens the palette sheet; shows the active palette (or DARK). */
+    public static TextView makePaletteChip(final Activity act) {
+        com.vortex.engine.core.theme.VortexTheme t = com.vortex.engine.core.theme.ThemeRegistry.active();
+        TextView chip = new TextView(act);
+        chip.setText("◐ " + (t.dark ? "DARK" : shortThemeName(t)));
+        chip.setTextColor(C_TEXT);
+        chip.setTextSize(11.5f);
+        chip.setTypeface(bodyTypeface());
+        chip.setSingleLine(true);
+        chip.setPadding(dp(act, 9), dp(act, 5), dp(act, 9), dp(act, 5));
+        chip.setBackgroundColor(C_SURFACE);
+        chip.setOnClickListener(v -> showThemeSheet(act));
+        return chip;
+    }
+
+    private static String shortThemeName(com.vortex.engine.core.theme.VortexTheme t) {
+        String n = t.name == null ? "PAPER" : t.name.toUpperCase(java.util.Locale.US);
+        int cut = n.indexOf(' ');
+        return cut > 0 ? n.substring(0, cut) : n;
     }
 
     public static Dialog showMessageModal(

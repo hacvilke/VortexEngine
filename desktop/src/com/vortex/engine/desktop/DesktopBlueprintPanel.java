@@ -287,6 +287,24 @@ public final class DesktopBlueprintPanel extends JPanel {
     // =========================================================================
     // Interactive Node + Bezier Wire Graph Canvas
     // =========================================================================
+    // ---- Blueprint sheet colours: blueprint-blue by default, theme-tintable ----
+    private static java.awt.Color THEME_BP_BLUE       = new java.awt.Color(0x12, 0x33, 0x63);
+    private static java.awt.Color THEME_BP_BLUE_DEEP  = new java.awt.Color(0x0B, 0x22, 0x45);
+    private static java.awt.Color THEME_BP_RULE       = new java.awt.Color(255, 255, 255, 30);
+    private static java.awt.Color THEME_BP_RULE_MAJOR = new java.awt.Color(255, 255, 255, 62);
+
+    /** Re-tints the blueprint sheet from the active app theme (dark themes get a deeper vellum). */
+    public static void applyTheme(com.vortex.engine.core.theme.VortexTheme t) {
+        if (t == null) return;
+        java.awt.Color base = new java.awt.Color(
+                com.vortex.engine.core.theme.VortexTheme.parseInt(t.get("blueprint")));
+        THEME_BP_BLUE = base;
+        THEME_BP_BLUE_DEEP = base.darker();
+        boolean dark = t.dark;
+        THEME_BP_RULE = new java.awt.Color(255, 255, 255, dark ? 20 : 30);
+        THEME_BP_RULE_MAJOR = new java.awt.Color(255, 255, 255, dark ? 46 : 62);
+    }
+
     private final class GraphCanvas extends JPanel {
         GraphCanvas() {
             setBackground(C_VOID);
@@ -504,10 +522,11 @@ public final class DesktopBlueprintPanel extends JPanel {
         }
 
         // Classic drafting blueprint: deep blue stock, white rules, white ink wires.
-        private final java.awt.Color BP_BLUE       = new java.awt.Color(0x12, 0x33, 0x63);
-        private final java.awt.Color BP_BLUE_DEEP  = new java.awt.Color(0x0B, 0x22, 0x45);
-        private final java.awt.Color BP_RULE       = new java.awt.Color(255, 255, 255, 30);
-        private final java.awt.Color BP_RULE_MAJOR = new java.awt.Color(255, 255, 255, 62);
+        // themeable blueprint sheet colours (set by applyTheme)
+        private java.awt.Color BP_BLUE       = THEME_BP_BLUE;
+        private java.awt.Color BP_BLUE_DEEP  = THEME_BP_BLUE_DEEP;
+        private java.awt.Color BP_RULE       = THEME_BP_RULE;
+        private java.awt.Color BP_RULE_MAJOR = THEME_BP_RULE_MAJOR;
 
         private void paintGrid(Graphics2D g2, int w, int h) {
             g2.setPaint(new java.awt.GradientPaint(0, 0, BP_BLUE, 0, h, BP_BLUE_DEEP));

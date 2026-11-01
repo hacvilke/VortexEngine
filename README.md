@@ -1,10 +1,43 @@
-# Vortex Engine Studio — v4.9.1 ("Blockfall Edition")
+# Vortex Engine Studio — v4.9.2 ("Studio Kit Edition")
 
 **Vortex Engine** is an open-source, mobile-first **AND** desktop-ready **2D & 3D Game Engine + Visual/Code Studio IDE** that runs natively on **Android**, **Windows (`.exe`)**, **Linux**, and **HTML5 Web**, and compiles standalone Android `.apk` games directly on-device via **Termux** — zero PC or cloud backend required.
 
 ---
 
-## What's New in v4.8.0 (Voxel Worlds, In-App Docs & an Honest Forge)
+## What's New in v4.9.2 (Theme changer, honest Forge, docs that teach, a real icon, calmer audio)
+
+### 1. Theme changer — palette dropdown, import, dark mode
+- New `core/theme` package: **`VortexTheme`** (25 semantic colour slots) + **`ThemeRegistry`** (built-in themes, JSON themes on disk at `~/.vortex/themes/`, `importText()`, `mix()`, settings store at `~/.vortex/settings.properties`).
+- **Ships three themes:** `Paper (light)` (the site-accurate cream/ink/gold), `Midnight ink (dark)`, `Drafting grey`.
+- **Desktop:** a swatch strip + **Palette** dropdown in the top bar — pick a theme, flip **Dark mode**, **Import theme…** (file or paste), export the current theme, or open **All themes…** for the full picker.
+- **Phone:** a `◐ PALETTE` chip in the header opens the same sheet (list with swatches, import, dark mode); the Activity rebuilds on change.
+- **Import is forgiving:** a theme JSON, a bare `{"sheet":"#fffdf6", …}` slot map, or just a list of `#hex` colours — the last form is auto-mapped onto all 25 slots by lightness and chroma.
+- Everything follows the palette: docks, inspector, console, menus, scrollbars, the **2D paper grid**, the **grain texture** (it brightens on dark sheets instead of turning to dust) and the **wooden desk** (walnut → espresso). The **Blueprint graph stays blueprint-blue**, tinted deeper in dark mode.
+- Your *game* colours never move — sky, sun, entity tints and HUD live in the project, not the theme.
+
+### 2. Docs now open with **how to use the engine**
+- `index.html` is a **guided tour**, not an API wall: the real studio in a screenshot with **highlighted regions + numbered callouts** for Scene Hierarchy, Viewport, Inspector, dock tabs, code editor, console/terminal and the palette; then a real **in-game UI** (score/health HUD, objective chip, banner, dialog box, hint strip, hotbar) annotated element by element with the exact call that draws it; then the theme changer, Forge AI and audio levels.
+- The old corpus — every topic plus the generated `vortex.*` index — moved to **`api.html`**, linked from the landing page and from the in-app docs button.
+- Pages are generated from the running build and are fully offline; the four teaching figures are embedded as data URIs (real captures, produced by `scripts/make_docs_figures.py`).
+
+### 3. Forge AI finally knows your workspace
+- `buildWorkspaceContext` now sends **every script file in full** (28 KB budget, active file first) instead of a 2.4 KB preview, plus **every entity** with tag/mesh/position/scale/rotation/colour/material/body/collider, **every blueprint node and wire**, flow rules, custom sprites/meshes and the full project facts (mode, VM, gravity, sky, fog, sun rig, camera, UI, audio, voxel seed).
+- It also gets a **runtime environment report**: desktop vs phone, which script VMs exist in this build, the physics and renderer behaviour, the audio mix and where saves live.
+- A **WORKSPACE LAW** block in the system prompt: work in the existing tree, reuse existing paths and names, `edit_file` before `write_file`, keep every hook, and never replace the project with a fresh standalone sample.
+
+### 4. The app has an icon
+- `scripts/make_icon.py` draws the mark (cream sheet, gold vortex sweep, ink counter-sweep, drafting ticks) at 8× supersampling and writes **every** density the builds need: `mipmap-*/ic_launcher.png` (48–192), `desktop/resources/icon.png` + `icon.ico`, and `docs/icon-512.png`.
+- The APK launcher, the Windows `.exe` (via `windres`), the Linux binary and the desktop taskbar/alt-tab icon are all the same artwork.
+
+### 5. Calmer audio, on purpose
+- The synth bed used to sum to a `0.92` clamp — effectively 0 dBFS. Voices were trimmed ~6 dB (lead 0.22→0.125, bass 0.20→0.11, kick 0.24→0.15, hats 0.08→0.042), the mix runs through a soft-knee limiter with a **−2.2 dBFS ceiling**, and the engine gained **separate buses** (effects 0.72 / music 0.42 on desktop, 0.55 on Android).
+- That lands the music bed at **−13.6 dBFS peak** and keeps music well under a footstep or a hit, which is the game-audio convention (whole mix ≈ −23 LUFS, music 6–12 LU under effects, ~2 dB true-peak headroom). All of it is measured by a headless test now.
+
+### 6. Build fixes found along the way
+- The APK never actually bundled `app/src/main/assets` — the **paper fonts** (Caveat / Patrick Hand / Special Elite) and the docs figures were silently missing from every build. They ship now.
+- `--theme <id>` and `--palette-shot <png>` CLI hooks for verification screenshots.
+
+## What's New in v4.8.0## What's New in v4.8.0 (Voxel Worlds, In-App Docs & an Honest Forge)
 
 ### 1. 3D Voxel: **Blockfall** — a Minecraft-style game, playable today
 - New engine subsystem `core/voxel`: a **96 × 96 × 64** block world (one byte per block) with seed-based hills, lakes, beaches, mountains, caves-free strata and oak trees.

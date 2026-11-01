@@ -125,7 +125,29 @@ public class GenStudioIcons {
 EOF
 "$JAVAC" -d "$BUILD_DIR/icon_tool" "$BUILD_DIR/icon_tool/GenStudioIcons.java"
 "$JAVA" -cp "$BUILD_DIR/icon_tool" GenStudioIcons "$BUILD_DIR/res"
+# The real mark drawn by scripts/make_icon.py wins over the generator fallback, so the
+# launcher icon, the taskbar icon and the docs favicon are the same artwork.
+if [ -f "app/src/main/res/mipmap-mdpi/ic_launcher.png" ]; then
+    for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+        if [ -f "app/src/main/res/mipmap-$d/ic_launcher.png" ]; then
+            mkdir -p "$BUILD_DIR/res/mipmap-$d"
+            cp "app/src/main/res/mipmap-$d/ic_launcher.png" "$BUILD_DIR/res/mipmap-$d/ic_launcher.png"
+        fi
+    done
+    echo "[ICON] using app/src/main/res/mipmap-*/ic_launcher.png"
+fi
 cp -R app/src/main/res/values/* "$BUILD_DIR/res/values/"
+
+# Bundle the studio's own assets (paper fonts + docs figures). Copy ONLY those folders:
+# assets/toolchain is generated above (fresh runtime dex) and must never be shadowed by the
+# stale copy that lives in the repo.
+for adir in fonts docs; do
+    if [ -d "app/src/main/assets/$adir" ]; then
+        mkdir -p "$BUILD_DIR/assets/$adir"
+        cp -R "app/src/main/assets/$adir/." "$BUILD_DIR/assets/$adir/"
+        echo "[ASSETS] bundled app/src/main/assets/$adir"
+    fi
+done
 
 echo "=== [4/7] Compiling & Linking Studio APK Resources with aapt2 ==="
 "$AAPT2" compile --dir "$BUILD_DIR/res" -o "$BUILD_DIR/resources.zip"
@@ -170,7 +192,7 @@ KEYSTORE="$BUILD_DIR/studio-release.keystore"
     -keypass vortex123 \
     -dname "CN=Vortex Engine Studio, OU=GameEngine, O=VortexEngine, L=Global, S=Mobile, C=US" >/dev/null 2>&1
 
-OUT_APK="$DIST_DIR/VortexEngine-Studio-v4.9.1.apk"
+OUT_APK="$DIST_DIR/VortexEngine-Studio-v4.9.2.apk"
 "$APKSIGNER" sign \
     --ks "$KEYSTORE" \
     --ks-pass pass:vortex123 \
@@ -183,4 +205,4 @@ OUT_APK="$DIST_DIR/VortexEngine-Studio-v4.9.1.apk"
 
 "$APKSIGNER" verify --verbose "$OUT_APK" | head -n 10
 ls -lh "$OUT_APK"
-echo "[SUCCESS] Vortex Engine Studio v4.9.1 APK ready at: $OUT_APK"
+echo "[SUCCESS] Vortex Engine Studio v4.9.2 APK ready at: $OUT_APK"

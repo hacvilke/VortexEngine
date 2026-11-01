@@ -21,6 +21,8 @@ import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
 import java.awt.GridLayout;
 import java.awt.Point;
@@ -48,6 +50,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -84,6 +87,8 @@ public class VortexDesktopStudio extends JFrame {
     private File currentProjectFile = null;
 
     private final DesktopSoftware3DViewport viewport = new DesktopSoftware3DViewport();
+    private JPanel topBar;
+    private JComponent paletteButton;
     private DesktopSceneTree sceneTree;
     private String pendingParentId = null;
 
@@ -162,8 +167,40 @@ public class VortexDesktopStudio extends JFrame {
         VortexSaveStore.setSaveRootDir(new File(System.getProperty("user.home", "."), ".vortex-saves"));
 
         for (int i = 0; i < args.length; i++) {
+            if ("--theme".equals(args[i]) && i + 1 < args.length) {
+                com.vortex.engine.core.theme.ThemeRegistry.setActive(args[++i]);
+                continue;
+            }
             if ("--headless-test".equals(args[i])) {
                 runHeadlessSelfTests();
+                return;
+            }
+            if ("--palette-shot".equals(args[i]) && i + 1 < args.length) {
+                // verification hook: open the studio with the palette dropdown showing
+                final String shotPath = args[i + 1];
+                DesktopUiKit.installDarkDefaults();
+                SwingUtilities.invokeLater(() -> {
+                    final VortexDesktopStudio studio = new VortexDesktopStudio(false);
+                    studio.setSize(1440, 940);
+                    studio.setVisible(true);
+                    javax.swing.Timer kick = new javax.swing.Timer(1500, e -> studio.showThemePopup(studio.paletteButton));
+                    kick.setRepeats(false);
+                    kick.start();
+                    javax.swing.Timer grab = new javax.swing.Timer(2600, ev -> {
+                        try {
+                            java.awt.Robot robot = new java.awt.Robot();
+                            java.awt.Rectangle all = new java.awt.Rectangle(
+                                    java.awt.Toolkit.getDefaultToolkit().getScreenSize());
+                            javax.imageio.ImageIO.write(robot.createScreenCapture(all), "png", new File(shotPath));
+                            System.out.println("[SHOT] wrote " + shotPath);
+                        } catch (Throwable ex) {
+                            System.out.println("[SHOT] failed: " + ex);
+                        }
+                        System.exit(0);
+                    });
+                    grab.setRepeats(false);
+                    grab.start();
+                });
                 return;
             }
             if (("--shot".equals(args[i]) || "--docs-shot".equals(args[i])) && i + 1 < args.length) {
@@ -217,6 +254,9 @@ public class VortexDesktopStudio extends JFrame {
         }
 
         DesktopUiKit.installDarkDefaults();
+        try {
+            DesktopUiKit.applyTheme(com.vortex.engine.core.theme.ThemeRegistry.active());
+        } catch (Throwable ignored) { }
 
         String embeddedJson = readEmbeddedGameJson();
         if (embeddedJson != null && !embeddedJson.trim().isEmpty()) {
@@ -236,8 +276,14 @@ public class VortexDesktopStudio extends JFrame {
     }
 
     public VortexDesktopStudio(boolean checkStartupDependencies) {
-        super("Vortex Engine Studio v4.9.1 — Voxel Worlds • Tile Maps • Prefabs • In-App Docs • Forge AI Chat");
+        super("Vortex Engine Studio v4.9.2 — Voxel Worlds • Tile Maps • Prefabs • In-App Docs • Forge AI Chat");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        DesktopUiKit.brandWindow(this);
+
+        // v4.9.2: restore the saved palette before any component is built
+        try {
+            DesktopUiKit.applyTheme(com.vortex.engine.core.theme.ThemeRegistry.active());
+        } catch (Throwable ignored) { }
 
         // Laptop-aware sizing: fit cleanly inside 1280x720 / 1366x768 / 1536x864 / 1440x900 screens!
         int winW = 1360;
@@ -336,6 +382,9 @@ public class VortexDesktopStudio extends JFrame {
         });
 
         loadProjectIntoStudio(project);
+
+        // v5.0.0: push the saved palette into the parts that paint themselves
+        applyThemeEverywhere(com.vortex.engine.core.theme.ThemeRegistry.active());
 
         if (checkStartupDependencies) {
             runStartupDependencyCheckAsync();
@@ -476,6 +525,7 @@ public class VortexDesktopStudio extends JFrame {
     // =========================================================================
     private JPanel buildTopToolbar() {
         JPanel bar = new JPanel(new BorderLayout(0, 0));
+        this.topBar = bar;
         bar.setBackground(DesktopUiKit.C_HEADER);
         bar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, DesktopUiKit.C_BORDER));
 
@@ -511,6 +561,7 @@ public class VortexDesktopStudio extends JFrame {
                 if (bottomTabs != null) bottomTabs.selectTabByKey("CONSOLE", true);
             }
         });
+        menuRight.add(makePaletteButton());
         menuRight.add(globalStatusPill);
         menuRow.add(menuRight, BorderLayout.EAST);
         bar.add(menuRow, BorderLayout.NORTH);
@@ -729,6 +780,17 @@ public class VortexDesktopStudio extends JFrame {
 
     private List<DesktopUiKit.MenuAction> buildViewMenuItems() {
         List<DesktopUiKit.MenuAction> items = new ArrayList<>();
+        items.add(new DesktopUiKit.MenuAction("Theme…", this::showThemePicker));
+        items.add(new DesktopUiKit.MenuAction("Dark mode", () -> {
+            boolean dark = com.vortex.engine.core.theme.ThemeRegistry.active().dark;
+            com.vortex.engine.core.theme.VortexTheme t =
+                    com.vortex.engine.core.theme.ThemeRegistry.setActive(dark ? "paper" : "dark");
+            DesktopUiKit.applyTheme(t);
+            applyThemeEverywhere(t);
+            log("\u25B8 Theme: " + t.name);
+        }));
+        items.add(new DesktopUiKit.MenuAction("Import theme…", this::showThemeImport));
+        items.add(new DesktopUiKit.MenuAction("---", null));
         items.add(new DesktopUiKit.MenuAction(
                 viewportFocusMode ? "Exit Viewport Focus" : "Focus Viewport (hide docks)", this::toggleViewportFocusMode));
         items.add(new DesktopUiKit.MenuAction("---", null));
@@ -809,7 +871,7 @@ public class VortexDesktopStudio extends JFrame {
     // =====================================================================
 
     // =====================================================================
-    // v4.9.1 — API reference = one offline index.html, generated from this build
+    // v4.9.2 — docs are two offline pages: index.html (how to use) + api.html (reference)
     // =====================================================================
 
     private void openApiReference() {
@@ -829,6 +891,377 @@ public class VortexDesktopStudio extends JFrame {
         } catch (Throwable ex) {
             DesktopUiKit.showInfoModal(this, "API reference", "Could not open the docs site: " + ex);
         }
+    }
+
+    // =====================================================================
+    // THEME / PALETTE (v4.9.2)
+    //   * swatch strip + "Palette" dropdown in the top bar
+    //   * full theme picker dialog (list, apply, delete)
+    //   * import (file or paste) and export of .theme.json
+    // =====================================================================
+    private JComponent makePaletteButton() {
+        final com.vortex.engine.core.theme.VortexTheme t = com.vortex.engine.core.theme.ThemeRegistry.active();
+        DesktopUiKit.VortexButton btn = new DesktopUiKit.VortexButton(
+                "Palette", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.NONE);
+        btn.setToolTipText("Theme palette — pick a theme, import one, or switch to dark mode");
+        this.paletteButton = btn;
+        btn.addActionListener(e -> showThemePopup(btn));
+
+        JPanel chips = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        chips.setOpaque(false);
+        String[] slots = {com.vortex.engine.core.theme.VortexTheme.SHEET,
+                com.vortex.engine.core.theme.VortexTheme.PANEL,
+                com.vortex.engine.core.theme.VortexTheme.SURFACE,
+                com.vortex.engine.core.theme.VortexTheme.ACCENT,
+                com.vortex.engine.core.theme.VortexTheme.INK};
+        for (String slot : slots) {
+            final String hv = t.get(slot);
+            JComponent c = new JComponent() {
+                @Override protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    DesktopUiKit.enableAA(g2);
+                    g2.setColor(new Color(com.vortex.engine.core.theme.VortexTheme.parseInt(hv)));
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 4, 4);
+                    g2.setColor(new Color(0, 0, 0, 45));
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 4, 4);
+                    g2.dispose();
+                }
+            };
+            c.setPreferredSize(new Dimension(DesktopUiKit.scaled(11), DesktopUiKit.scaled(20)));
+            chips.add(c);
+        }
+        JPanel wrap = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        wrap.setOpaque(false);
+        wrap.add(chips);
+        wrap.add(btn);
+        return wrap;
+    }
+
+    private void showThemePopup(java.awt.Component anchor) {
+        final com.vortex.engine.core.theme.VortexTheme cur = com.vortex.engine.core.theme.ThemeRegistry.active();
+        javax.swing.JPopupMenu pm = new javax.swing.JPopupMenu();
+        pm.setBackground(DesktopUiKit.C_PANEL);
+        pm.setBorder(BorderFactory.createLineBorder(DesktopUiKit.C_BORDER_STRONG));
+        javax.swing.JMenuItem head = new javax.swing.JMenuItem("Palette \u00B7 " + cur.name);
+        head.setEnabled(false);
+        head.setFont(DesktopUiKit.FONT_UI_BOLD);
+        head.setForeground(DesktopUiKit.C_INK);
+        pm.add(head);
+        pm.addSeparator();
+        for (final com.vortex.engine.core.theme.VortexTheme t : com.vortex.engine.core.theme.ThemeRegistry.all()) {
+            javax.swing.JMenuItem mi = new javax.swing.JMenuItem(
+                    (t.id.equals(cur.id) ? "\u25CF  " : "\u2003") + t.name + (t.dark ? "  \u00B7 dark" : ""));
+            mi.setFont(DesktopUiKit.FONT_UI);
+            mi.setBackground(DesktopUiKit.C_PANEL);
+            mi.setForeground(DesktopUiKit.C_INK);
+            mi.addActionListener(e -> {
+                com.vortex.engine.core.theme.ThemeRegistry.setActive(t.id);
+                DesktopUiKit.applyTheme(t);
+                applyThemeEverywhere(t);
+                log("\u25B8 Theme: " + t.name);
+            });
+            pm.add(mi);
+        }
+        pm.addSeparator();
+        javax.swing.JMenuItem dark = new javax.swing.JMenuItem(
+                (cur.dark ? "\u25CF  " : "\u2003") + "Dark mode");
+        dark.setFont(DesktopUiKit.FONT_UI);
+        dark.setBackground(DesktopUiKit.C_PANEL);
+        dark.setForeground(DesktopUiKit.C_INK);
+        dark.addActionListener(e -> {
+            com.vortex.engine.core.theme.VortexTheme t = com.vortex.engine.core.theme.ThemeRegistry
+                    .setActive(cur.dark ? "paper" : "dark");
+            DesktopUiKit.applyTheme(t);
+            applyThemeEverywhere(t);
+            log("\u25B8 Theme: " + t.name);
+        });
+        pm.add(dark);
+        javax.swing.JMenuItem imp = new javax.swing.JMenuItem("Import theme\u2026");
+        imp.setFont(DesktopUiKit.FONT_UI);
+        imp.setBackground(DesktopUiKit.C_PANEL);
+        imp.setForeground(DesktopUiKit.C_INK);
+        imp.addActionListener(e -> showThemeImport());
+        pm.add(imp);
+        javax.swing.JMenuItem all = new javax.swing.JMenuItem("All themes\u2026");
+        all.setFont(DesktopUiKit.FONT_UI);
+        all.setBackground(DesktopUiKit.C_PANEL);
+        all.setForeground(DesktopUiKit.C_INK);
+        all.addActionListener(e -> showThemePicker());
+        pm.add(all);
+        // anchored under the swatch strip so it reads as a dropdown
+        pm.show(anchor, -DesktopUiKit.scaled(150), DesktopUiKit.scaled(30));
+    }
+
+    private void showThemePicker() {
+        final com.vortex.engine.core.theme.VortexTheme current =
+                com.vortex.engine.core.theme.ThemeRegistry.active();
+
+        final javax.swing.JDialog dlg = new javax.swing.JDialog(this, "Theme", true);
+        DesktopUiKit.trackWindow(dlg);
+        JPanel root = new JPanel(new BorderLayout(0, 12));
+        root.setBackground(DesktopUiKit.C_PANEL);
+        root.setBorder(BorderFactory.createEmptyBorder(16, 18, 14, 18));
+
+        JLabel head = new JLabel("Theme");
+        head.setFont(DesktopUiKit.FONT_TITLE);
+        head.setForeground(DesktopUiKit.C_INK);
+        JLabel sub = new JLabel("Pick a built-in palette, or import your own (Vortex JSON, a slot map, or any list of #hex colours).");
+        sub.setFont(DesktopUiKit.FONT_SMALL);
+        sub.setForeground(DesktopUiKit.C_TEXT_MUTED);
+        JPanel headBox = new JPanel(new BorderLayout(0, 2));
+        headBox.setOpaque(false);
+        headBox.add(head, BorderLayout.NORTH);
+        headBox.add(sub, BorderLayout.SOUTH);
+        root.add(headBox, BorderLayout.NORTH);
+
+        final JPanel listBox = new JPanel();
+        listBox.setLayout(new javax.swing.BoxLayout(listBox, javax.swing.BoxLayout.Y_AXIS));
+        listBox.setBackground(DesktopUiKit.C_PANEL);
+
+        final java.util.List<com.vortex.engine.core.theme.VortexTheme> themes =
+                com.vortex.engine.core.theme.ThemeRegistry.all();
+
+        for (final com.vortex.engine.core.theme.VortexTheme t : themes) {
+            final boolean isActive = t.id.equals(current.id);
+            JPanel row = new JPanel(new BorderLayout(10, 0)) {
+                @Override protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    DesktopUiKit.enableAA(g2);
+                    g2.setColor(isActive ? DesktopUiKit.C_ACCENT_TINT : DesktopUiKit.C_PANEL_ALT);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+                    g2.setColor(isActive ? DesktopUiKit.C_INK : DesktopUiKit.C_BORDER);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+                    g2.dispose();
+                }
+            };
+            row.setOpaque(false);
+            row.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+            row.setMaximumSize(new Dimension(Integer.MAX_VALUE, DesktopUiKit.scaled(52)));
+
+            // palette swatches
+            JPanel sw = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+            sw.setOpaque(false);
+            String[] slots = {com.vortex.engine.core.theme.VortexTheme.SHEET,
+                    com.vortex.engine.core.theme.VortexTheme.PANEL,
+                    com.vortex.engine.core.theme.VortexTheme.HEADER,
+                    com.vortex.engine.core.theme.VortexTheme.SURFACE,
+                    com.vortex.engine.core.theme.VortexTheme.ACCENT,
+                    com.vortex.engine.core.theme.VortexTheme.INK};
+            for (String slot : slots) {
+                JComponent chip = new JComponent() {
+                    @Override protected void paintComponent(Graphics g) {
+                        Graphics2D g2 = (Graphics2D) g.create();
+                        DesktopUiKit.enableAA(g2);
+                        g2.setColor(new Color(com.vortex.engine.core.theme.VortexTheme.parseInt(t.get(slot))));
+                        g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 5, 5);
+                        g2.setColor(new Color(0, 0, 0, 40));
+                        g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 5, 5);
+                        g2.dispose();
+                    }
+                };
+                chip.setPreferredSize(new Dimension(DesktopUiKit.scaled(22), DesktopUiKit.scaled(22)));
+                sw.add(chip);
+            }
+            row.add(sw, BorderLayout.WEST);
+
+            JLabel name = new JLabel(t.name + (t.dark ? "  · dark" : "") + (isActive ? "  ✓" : ""));
+            name.setFont(DesktopUiKit.FONT_UI_BOLD);
+            name.setForeground(DesktopUiKit.C_INK);
+            row.add(name, BorderLayout.CENTER);
+
+            JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+            actions.setOpaque(false);
+            DesktopUiKit.VortexButton use = new DesktopUiKit.VortexButton(
+                    isActive ? "Active" : "Use", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.CHECK);
+            use.setEnabled(!isActive);
+            use.addActionListener(e -> {
+                com.vortex.engine.core.theme.ThemeRegistry.setActive(t.id);
+                DesktopUiKit.applyTheme(t);
+                applyThemeEverywhere(t);
+                log("\u25B8 Theme: " + t.name);
+                dlg.dispose();
+            });
+            actions.add(use);
+            if (!com.vortex.engine.core.theme.ThemeRegistry.builtin(t.id).equals(t)
+                    && com.vortex.engine.core.theme.ThemeRegistry.builtin(t.id) == null) {
+                DesktopUiKit.VortexButton del = new DesktopUiKit.VortexButton(
+                        "", DesktopUiKit.Variant.DANGER, DesktopUiKit.Icon.CLOSE);
+                del.setToolTipText("Delete this imported theme");
+                del.addActionListener(e -> {
+                    com.vortex.engine.core.theme.ThemeRegistry.delete(t);
+                    dlg.dispose();
+                    showThemePicker();
+                });
+                actions.add(del);
+            }
+            row.add(actions, BorderLayout.EAST);
+
+            row.setAlignmentX(Component.LEFT_ALIGNMENT);
+            listBox.add(row);
+            listBox.add(javax.swing.Box.createVerticalStrut(6));
+        }
+
+        JScrollPane scroll = new JScrollPane(listBox);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getViewport().setBackground(DesktopUiKit.C_PANEL);
+        scroll.setPreferredSize(new Dimension(DesktopUiKit.scaled(520), DesktopUiKit.scaled(300)));
+        root.add(scroll, BorderLayout.CENTER);
+
+        JPanel foot = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        foot.setOpaque(false);
+        DesktopUiKit.VortexButton importBtn = new DesktopUiKit.VortexButton(
+                "Import theme…", DesktopUiKit.Variant.ACCENT, DesktopUiKit.Icon.FOLDER);
+        importBtn.setToolTipText("Import a .json theme, a palette file, or paste hex colours");
+        importBtn.addActionListener(e -> {
+            dlg.dispose();
+            showThemeImport();
+        });
+        DesktopUiKit.VortexButton exportBtn = new DesktopUiKit.VortexButton(
+                "Export current…", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.EXPORT);
+        exportBtn.addActionListener(e -> exportCurrentTheme());
+        DesktopUiKit.VortexButton folderBtn = new DesktopUiKit.VortexButton(
+                "Themes folder", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.FOLDER);
+        folderBtn.addActionListener(e -> {
+            java.io.File dir = com.vortex.engine.core.theme.ThemeRegistry.themesDir();
+            try {
+                if (java.awt.Desktop.isDesktopSupported()
+                        && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.OPEN)) {
+                    java.awt.Desktop.getDesktop().open(dir);
+                } else {
+                    DesktopUiKit.showInfoModal(this, "Themes folder", dir.getAbsolutePath());
+                }
+            } catch (Throwable ex) {
+                DesktopUiKit.showInfoModal(this, "Themes folder", dir.getAbsolutePath());
+            }
+        });
+        DesktopUiKit.VortexButton close = new DesktopUiKit.VortexButton(
+                "Close", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.CLOSE);
+        close.addActionListener(e -> dlg.dispose());
+        foot.add(importBtn);
+        foot.add(exportBtn);
+        foot.add(folderBtn);
+        foot.add(close);
+        root.add(foot, BorderLayout.SOUTH);
+
+        dlg.setContentPane(root);
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    /** Applies a theme beyond the kit: viewport backdrop, blueprint sheet, consoles. */
+    private void applyThemeEverywhere(com.vortex.engine.core.theme.VortexTheme t) {
+        if (viewport != null) {
+            viewport.setThemeColors(
+                    new Color(com.vortex.engine.core.theme.VortexTheme.parseInt(t.get("viewport"))),
+                    new Color(com.vortex.engine.core.theme.VortexTheme.parseInt(t.get("ink"))));
+        }
+        DesktopBlueprintPanel.applyTheme(t);
+        consoleArea.setBackground(DesktopUiKit.C_VOID);
+        consoleArea.setForeground(DesktopUiKit.C_TEXT);
+        consoleArea.setCaretColor(DesktopUiKit.C_INK);
+        scriptArea.setBackground(DesktopUiKit.C_VOID);
+        scriptArea.setForeground(DesktopUiKit.C_TEXT);
+        scriptArea.setCaretColor(DesktopUiKit.C_INK);
+        scriptArea.setSelectionColor(DesktopUiKit.C_ACCENT_TINT);
+        scriptArea.setSelectedTextColor(DesktopUiKit.C_DARK_INK);
+        terminalPanel.setBackground(DesktopUiKit.C_PANEL);
+        if (sceneTree != null) sceneTree.repaint();
+        if (rightTabs != null) rightTabs.repaint();
+        if (topBar != null) topBar.revalidate();
+        revalidate();
+        repaint();
+    }
+
+    private void exportCurrentTheme() {
+        try {
+            javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+            fc.setSelectedFile(new java.io.File(
+                    com.vortex.engine.core.theme.ThemeRegistry.active().id + ".theme.json"));
+            if (fc.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) return;
+            java.io.File f = fc.getSelectedFile();
+            java.io.OutputStreamWriter w = new java.io.OutputStreamWriter(
+                    new java.io.FileOutputStream(f), java.nio.charset.Charset.forName("UTF-8"));
+            try {
+                w.write(com.vortex.engine.core.theme.ThemeRegistry
+                        .toJson(com.vortex.engine.core.theme.ThemeRegistry.active()).toString(2));
+            } finally {
+                w.close();
+            }
+            log("\u25B8 Theme exported: " + f.getAbsolutePath());
+        } catch (Exception ex) {
+            DesktopUiKit.showInfoModal(this, "Export failed", String.valueOf(ex));
+        }
+    }
+
+    private void showThemeImport() {
+        JPanel body = new JPanel(new BorderLayout(0, 8));
+        body.setOpaque(false);
+        JLabel hint = new JLabel("<html>Paste a theme JSON, a slot map like "
+                + "<code>{\"sheet\":\"#fffdf6\",\"ink\":\"#33291d\"}</code>, or just a list of colours: "
+                + "<code>#fffdf6 #f3ebd6 #33291d #ffee9c</code></html>");
+        hint.setFont(DesktopUiKit.FONT_SMALL);
+        hint.setForeground(DesktopUiKit.C_TEXT_MUTED);
+        body.add(hint, BorderLayout.NORTH);
+        final JTextArea ta = new JTextArea(10, 54);
+        ta.setFont(DesktopUiKit.FONT_MONO);
+        ta.setBackground(DesktopUiKit.C_INPUT_BG);
+        ta.setForeground(DesktopUiKit.C_INK);
+        ta.setCaretColor(DesktopUiKit.C_INK);
+        ta.setBorder(BorderFactory.createLineBorder(DesktopUiKit.C_BORDER));
+        body.add(new JScrollPane(ta), BorderLayout.CENTER);
+
+        JPanel foot = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        foot.setOpaque(false);
+        DesktopUiKit.VortexButton fromFile = new DesktopUiKit.VortexButton(
+                "Load file…", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.FOLDER);
+        fromFile.addActionListener(e -> {
+            javax.swing.JFileChooser fc = new javax.swing.JFileChooser();
+            if (fc.showOpenDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) return;
+            try {
+                byte[] data = java.nio.file.Files.readAllBytes(fc.getSelectedFile().toPath());
+                ta.setText(new String(data, java.nio.charset.StandardCharsets.UTF_8));
+            } catch (Exception ex) {
+                DesktopUiKit.showInfoModal(this, "Read failed", String.valueOf(ex));
+            }
+        });
+        foot.add(fromFile);
+        body.add(foot, BorderLayout.SOUTH);
+
+        final javax.swing.JDialog dlg = new javax.swing.JDialog(this, "Import theme", true);
+        DesktopUiKit.trackWindow(dlg);
+        JPanel wrap = new JPanel(new BorderLayout(0, 10));
+        wrap.setBackground(DesktopUiKit.C_PANEL);
+        wrap.setBorder(BorderFactory.createEmptyBorder(14, 16, 12, 16));
+        wrap.add(body, BorderLayout.CENTER);
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        actions.setOpaque(false);
+        DesktopUiKit.VortexButton cancel = new DesktopUiKit.VortexButton(
+                "Cancel", DesktopUiKit.Variant.SECONDARY, DesktopUiKit.Icon.CLOSE);
+        cancel.addActionListener(e -> dlg.dispose());
+        DesktopUiKit.VortexButton apply = new DesktopUiKit.VortexButton(
+                "Import & apply", DesktopUiKit.Variant.PRIMARY, DesktopUiKit.Icon.CHECK);
+        apply.addActionListener(e -> {
+            try {
+                com.vortex.engine.core.theme.VortexTheme t =
+                        com.vortex.engine.core.theme.ThemeRegistry.importText(ta.getText(), "Imported palette");
+                com.vortex.engine.core.theme.ThemeRegistry.setActive(t.id);
+                DesktopUiKit.applyTheme(t);
+                applyThemeEverywhere(t);
+                log("\u25B8 Imported theme '" + t.name + "' (" + t.colors.size() + " slots)");
+                dlg.dispose();
+            } catch (Exception ex) {
+                DesktopUiKit.showInfoModal(this, "Could not import", String.valueOf(ex.getMessage()));
+            }
+        });
+        actions.add(cancel);
+        actions.add(apply);
+        wrap.add(actions, BorderLayout.SOUTH);
+        dlg.setContentPane(wrap);
+        dlg.setSize(DesktopUiKit.scaled(620), DesktopUiKit.scaled(420));
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
     }
 
     private void showDocsBrowser() {
@@ -1006,8 +1439,8 @@ public class VortexDesktopStudio extends JFrame {
                 "Physics",
                 "2D: JBox2D rigid bodies (CCD bullets)\n3D: substepped impulse solver + terrain\nLayers: collisionLayer / collisionMask")));
         items.add(new DesktopUiKit.MenuAction("---", null));
-        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.9.1", () -> DesktopUiKit.showInfoModal(this,
-                "Vortex Engine Studio v4.9.1",
+        items.add(new DesktopUiKit.MenuAction("Vortex Engine v4.9.2", () -> DesktopUiKit.showInfoModal(this,
+                "Vortex Engine Studio v4.9.2",
                 "Free & open-source 2D/3D game engine\nWindows • Linux • Android • Web")));
         return items;
     }
@@ -1434,7 +1867,7 @@ public class VortexDesktopStudio extends JFrame {
         headerBar.add(rightBar, BorderLayout.EAST);
         bottomWrapperPanel.add(headerBar, BorderLayout.NORTH);
 
-        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.9.1 Desktop Studio Ready.");
+        consoleArea.appendColoredLine("✓ [SUCCESS] Vortex Engine v4.9.2 Desktop Studio Ready.");
 
         JScrollPane consoleScroll = DesktopUiKit.createScrollPane(consoleArea);
         bottomDeck.addCard("CONSOLE", consoleScroll, 0);
@@ -4331,7 +4764,7 @@ public class VortexDesktopStudio extends JFrame {
     // Headless Verification Suite (Java VM + ES6 JS + Lua + LRM + Forge + UI)
     // =========================================================================
     private static void runHeadlessSelfTests() throws Exception {
-        System.out.println("=== Vortex Engine v4.9.1 Headless Verification Suite ===");
+        System.out.println("=== Vortex Engine v4.9.2 Headless Verification Suite ===");
 
         // 1) Zero-Blue Monochrome Palette + Laptop UI Scale Verification
         Color[] uiColors = {
@@ -4803,6 +5236,116 @@ public class VortexDesktopStudio extends JFrame {
         tmpExe.delete();
         tmpZip.delete();
 
-        System.out.println("=== ALL VORTEX v4.9.1 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
+
+        // ---- v4.9.2: theme system (swappable palettes, import, dark mode) -------------
+        {
+            java.io.File tmpHome = java.nio.file.Files.createTempDirectory("vortex-theme-test").toFile();
+            String oldHome = System.getProperty("user.home");
+            com.vortex.engine.core.theme.VortexTheme before = com.vortex.engine.core.theme.ThemeRegistry.active();
+
+            com.vortex.engine.core.theme.VortexTheme paper =
+                    com.vortex.engine.core.theme.ThemeRegistry.find("paper");
+            com.vortex.engine.core.theme.VortexTheme dark =
+                    com.vortex.engine.core.theme.ThemeRegistry.find("dark");
+            com.vortex.engine.core.theme.VortexTheme drafting =
+                    com.vortex.engine.core.theme.ThemeRegistry.find("drafting");
+            boolean threeBuiltins = paper != null && dark != null && drafting != null
+                    && dark.dark && !paper.dark && paper.isComplete() && dark.isComplete();
+
+            // slot map import
+            com.vortex.engine.core.theme.VortexTheme imported =
+                    com.vortex.engine.core.theme.ThemeRegistry.importText(
+                            "{\"name\":\"Ledger Test\",\"sheet\":\"#fbf6ea\",\"ink\":\"#33291d\","
+                                    + "\"accent\":\"#ffee9c\",\"panel\":\"#f4ecda\"}", "Imported");
+            // bare hex palette import maps onto all 25 slots
+            com.vortex.engine.core.theme.VortexTheme fromHexes =
+                    com.vortex.engine.core.theme.ThemeRegistry.importText(
+                            "#fffdf6 #f3ebd6 #33291d #ffee9c #b8860b #1e7a44", "Palette");
+            boolean importedOk = imported != null && fromHexes != null && fromHexes.isComplete()
+                    && "#fbf6ea".equalsIgnoreCase(imported.get("sheet"));
+
+            // JSON round-trip survives
+            String json = com.vortex.engine.core.theme.ThemeRegistry.toJson(dark).toString(2);
+            com.vortex.engine.core.theme.VortexTheme reparsed =
+                    com.vortex.engine.core.theme.ThemeRegistry.importText(json, "Roundtrip");
+            boolean roundTrip = reparsed.isComplete()
+                    && reparsed.get(com.vortex.engine.core.theme.VortexTheme.SHEET)
+                        .equalsIgnoreCase(dark.get(com.vortex.engine.core.theme.VortexTheme.SHEET));
+
+            // applying a theme really rewrites the kit
+            DesktopUiKit.applyTheme(dark);
+            java.awt.Color darkSheet = DesktopUiKit.C_PAPER;
+            DesktopUiKit.applyTheme(paper);
+            java.awt.Color paperSheet = DesktopUiKit.C_PAPER;
+            boolean kitFollows = !darkSheet.equals(paperSheet)
+                    && paperSheet.equals(new java.awt.Color(
+                        com.vortex.engine.core.theme.VortexTheme.parseInt(paper.get("sheet"))));
+
+            // persistence
+            com.vortex.engine.core.theme.ThemeRegistry.setActive("dark");
+            String saved = com.vortex.engine.core.theme.ThemeRegistry.Settings.get("theme", "");
+            boolean persisted = "dark".equals(saved);
+            com.vortex.engine.core.theme.ThemeRegistry.setActive(before.id);
+            // leave no test themes behind in ~/.vortex/themes
+            for (com.vortex.engine.core.theme.VortexTheme tmp
+                    : com.vortex.engine.core.theme.ThemeRegistry.customThemes()) {
+                com.vortex.engine.core.theme.ThemeRegistry.delete(tmp);
+            }
+
+            System.out.println("  [PASS] Theme Changer (" + com.vortex.engine.core.theme.ThemeRegistry.all().size()
+                    + " themes, palettes=" + threeBuiltins + ", import=" + importedOk
+                    + ", json=" + roundTrip + ", kit=" + kitFollows + ", saved=" + persisted + ") Verified!");
+            if (!(threeBuiltins && importedOk && roundTrip && kitFollows && persisted)) {
+                throw new IllegalStateException("theme system verification failed");
+            }
+        }
+
+        // ---- v4.9.2: Forge AI really sees the workspace ---------------------------------
+        {
+            GameProject gp = ProjectTemplates.create("PLATFORMER_2D", "Forge Snapshot Test", "com.vortex.test");
+            gp.scriptFiles.put("objects/boss.js",
+                    "function onStart(){ vortex.setBanner('BOSS'); }\n"
+                    + "function onUpdate(dt){ vortex.chaseTagAI('boss','Player',2.4); }\n");
+            gp.scriptFiles.put("ui/hud.js", "function onStart(){ vortex.addScore(0); }");
+            gp.activeScriptFile = "objects/boss.js";
+            Entity gate = new Entity();
+            gate.name = "Gate_1";
+            gate.tag = "solid";
+            gate.primitive = "RECT";
+            gate.x = 4f;
+            gate.y = 2f;
+            gp.entities.add(gate);
+            gp.blueprintNodes.add(new com.vortex.engine.core.flow.VortexBlueprintGraph.BpNode());
+            String ctx = VortexForgeAgent.buildWorkspaceContext(gp);
+            boolean hasFullSource = ctx.contains("chaseTagAI('boss','Player',2.4)")
+                    && ctx.contains("vortex.setBanner('BOSS')")
+                    && ctx.contains("vortex.addScore(0)");
+            boolean hasEntities = ctx.contains("Gate_1") && ctx.contains("tag=solid");
+            boolean hasBlueprint = ctx.contains("BLUEPRINT/LOGIC GRAPH");
+            boolean hasEnvironment = ctx.contains("RUNTIME ENVIRONMENT")
+                    && ctx.contains("script VMs available in this build");
+            boolean hasActive = ctx.contains("[ACTIVE");
+            System.out.println("  [PASS] Forge Workspace Snapshot (" + ctx.length() / 1024 + " KB: full files="
+                    + hasFullSource + ", entities=" + hasEntities + ", blueprint=" + hasBlueprint
+                    + ", environment=" + hasEnvironment + ", activeFile=" + hasActive + ") Verified!");
+            if (!(hasFullSource && hasEntities && hasBlueprint && hasEnvironment && hasActive)) {
+                throw new IllegalStateException("forge workspace context verification failed");
+            }
+        }
+
+        // ---- v4.9.2: audio mix is toned down -------------------------------------------
+        {
+            short[] bed = ChiptuneGenerator.synthesizeLoop(ChiptuneGenerator.PRESET_CYBERPUNK, 128);
+            int peak = 0;
+            for (short v : bed) peak = Math.max(peak, Math.abs(v));
+            double peakDb = 20 * Math.log10(peak / 32768.0);
+            boolean inRange = peakDb < -3.0 && peakDb > -22.0;
+            System.out.println(String.format(java.util.Locale.US,
+                    "  [PASS] Audio Mix (music bed peak %.1f dBFS, SFX bus %.2f, music bus %.2f) Verified!",
+                    peakDb, DesktopAudioEngine.sfxBus, DesktopAudioEngine.musicBus));
+            if (!inRange) throw new IllegalStateException("music bed peak out of range: " + peakDb);
+        }
+
+        System.out.println("=== ALL VORTEX v4.9.2 HEADLESS VERIFICATION TESTS PASSED 100%! ===");
     }
 }

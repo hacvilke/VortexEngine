@@ -752,44 +752,167 @@ public class VortexForgeAgent {
         public boolean usedOffline = false;
     }
 
+    // Total character budget for the file dump. Enough for a real multi-file project while
+    // staying inside one provider request; files past the budget are still listed with sizes.
+    private static final int FILE_BUDGET = 28_000;
+
+    /**
+     * The real, complete snapshot of the developer's project: every fact the AI needs to extend the
+     * workspace that already exists instead of inventing a parallel one.
+     *
+     * v5.0.0: file contents are sent in FULL (was 2 400 chars for the active file only, 900 for the
+     * rest), every entity is listed with its physics/material state, blueprint nodes and links are
+     * included, and the runtime environment is described so the model writes code that matches the
+     * engine it is actually running inside.
+     */
     public static String buildWorkspaceContext(GameProject p) {
         if (p == null) return "{}";
         p.ensureScriptFilesInitialized();
-        StringBuilder sb = new StringBuilder();
-        sb.append("PROJECT: \"").append(p.title).append("\" | Mode=").append(p.dimensionMode)
+        StringBuilder sb = new StringBuilder(16_384);
+
+        sb.append("=== WORKSPACE (this project already exists — extend it in place) ===\n");
+        sb.append("PROJECT: \"").append(p.title).append("\" | package=").append(p.packageName)
+          .append(" | version=").append(p.versionName).append(" (").append(p.versionCode).append(")")
+          .append(" | orientation=").append(p.orientation).append("\n");
+        sb.append("MODE: ").append(p.dimensionMode)
           .append(" | VM=").append(p.scriptLanguage)
-          .append(" | GravityY=").append(p.gravityY)
-          .append(" | BlueprintNodes=").append(p.blueprintNodes.size()).append("\n");
-
-        sb.append("FILES (").append(p.scriptFiles.size()).append("):\n");
-        for (java.util.Map.Entry<String, String> sf : p.scriptFiles.entrySet()) {
-            String content = sf.getValue() == null ? "" : sf.getValue();
-            int lines = content.isEmpty() ? 0 : content.split("\n", -1).length;
-            sb.append("  - ").append(sf.getKey()).append(" (").append(lines).append(" lines)")
-              .append(sf.getKey().equals(p.activeScriptFile) ? " [ACTIVE]\n" : "\n");
+          .append(" | extension=").append(p.getScriptExtension())
+          .append(" | box2D=").append(p.useBox2D).append("\n");
+        sb.append("WORLD: gravity=(").append(fmt(p.gravityX)).append(",").append(fmt(p.gravityY))
+          .append(",").append(fmt(p.gravityZ)).append(")")
+          .append(" | sky=").append(p.skyColorHex)
+          .append(" | ambient=").append(p.ambientColorHex)
+          .append(" | fog=").append(p.fogEnabled)
+          .append("(").append(fmt(p.fogNear)).append("-").append(fmt(p.fogFar)).append(")\n");
+        sb.append("LIGHTING: sun=(").append(fmt(p.sunYawDeg)).append(" deg yaw, ")
+          .append(fmt(p.sunPitchDeg)).append(" deg pitch) intensity=").append(fmt(p.sunIntensity))
+          .append(" colour=").append(p.sunColorHex)
+          .append(" ambientStrength=").append(fmt(p.ambientStrength))
+          .append(" shadows=").append(p.shadows).append(" shadowStrength=").append(fmt(p.shadowStrength)).append("\n");
+        sb.append("CAMERA: ").append(p.cameraMode).append(" target=").append(p.cameraTargetName)
+          .append(" dist=").append(fmt(p.cameraDistance)).append(" height=").append(fmt(p.cameraHeight))
+          .append(" fov=").append(fmt(p.cameraFov)).append(" | zoom2D=").append(fmt(p.zoom2D)).append("\n");
+        sb.append("UI: grid=").append(p.showGrid).append(" joystick=").append(p.showJoystick)
+          .append(" actionButtons=").append(p.showActionButtons).append("\n");
+        sb.append("AUDIO: music=").append(p.musicEnabled).append(" bpm=").append(p.musicBpm)
+          .append(" pattern=").append(p.musicPattern).append("\n");
+        if (p.voxelEnabled) {
+            sb.append("VOXEL: seed=").append(p.voxelSeed).append(" spawn=(")
+              .append(fmt(p.voxelSpawnX)).append(",").append(fmt(p.voxelSpawnZ)).append(")")
+              .append(" radius=").append(p.voxelRenderRadius).append("\n");
         }
 
-        sb.append("ENTITIES (").append(p.entities.size()).append("): ");
-        int lim = Math.min(20, p.entities.size());
-        for (int i = 0; i < lim; i++) {
-            Entity e = p.entities.get(i);
-            if (i > 0) sb.append(", ");
-            sb.append(e.name).append("[").append(e.tag).append("/").append(e.primitive)
-              .append("@(").append(Math.round(e.x)).append(",").append(Math.round(e.y)).append(")]");
+        // ---- files -------------------------------------------------------
+        sb.append("\n=== FILES (").append(p.scriptFiles.size()).append(") — full source, edit these keys ===\n");
+        int used = 0;
+        String active = p.activeScriptFile;
+        // active file first so it always survives the budget
+        java.util.List<String> order = new java.util.ArrayList<>();
+        if (active != null && p.scriptFiles.containsKey(active)) order.add(active);
+        for (String k : p.scriptFiles.keySet()) if (!k.equals(active)) order.add(k);
+        for (String key : order) {
+            String c = p.scriptFiles.get(key);
+            if (c == null) c = "";
+            int lines = c.isEmpty() ? 0 : c.split("\n", -1).length;
+            sb.append("--- FILE: ").append(key).append("  (").append(lines).append(" lines, ")
+              .append(c.length()).append(" chars)")
+              .append(key.equals(active) ? "  [ACTIVE — the user is looking at this one]" : "")
+              .append(" ---\n");
+            if (used + c.length() > FILE_BUDGET) {
+                int room = Math.max(0, FILE_BUDGET - used);
+                if (room > 400) {
+                    sb.append(c, 0, room).append("\n// ... [truncated to fit the context budget]\n");
+                    used = FILE_BUDGET;
+                } else {
+                    sb.append("// ... [omitted: context budget reached — ask before rewriting this file]\n");
+                }
+            } else {
+                sb.append(c).append(c.endsWith("\n") ? "" : "\n");
+                used += c.length();
+            }
+            sb.append("--- END FILE: ").append(key).append(" ---\n");
         }
-        if (p.entities.size() > lim) sb.append(" ... +").append(p.entities.size() - lim).append(" more");
-        sb.append("\n");
 
-        String syn = VortexScriptEngine.validateProjectSyntax(p);
-        sb.append("SYNTAX_CHECK: ").append(syn).append("\n");
-
-        // Include full content of active file (clamped to 2400 chars) + compact excerpts of other files
-        for (java.util.Map.Entry<String, String> sf : p.scriptFiles.entrySet()) {
-            String c = sf.getValue() == null ? "" : sf.getValue();
-            int maxLen = sf.getKey().equals(p.activeScriptFile) ? 2400 : 900;
-            if (c.length() > maxLen) c = c.substring(0, maxLen) + "\n// ... [truncated]";
-            sb.append("--- FILE: ").append(sf.getKey()).append(" ---\n").append(c).append("\n");
+        // ---- scene -------------------------------------------------------
+        sb.append("\n=== SCENE ENTITIES (").append(p.entities.size()).append(") ===\n");
+        for (Entity e : p.entities) {
+            sb.append("  * ").append(e.name)
+              .append("  tag=").append(e.tag)
+              .append("  mesh=").append(e.primitive);
+            if (e.customObjName != null && !e.customObjName.isEmpty()) sb.append(" obj=").append(e.customObjName);
+            if (e.customSpriteName != null && !e.customSpriteName.isEmpty()) sb.append(" sprite=").append(e.customSpriteName);
+            if (e.is3D) {
+                sb.append("  pos=(").append(fmt(e.x)).append(",").append(fmt(e.y)).append(",").append(fmt(e.z)).append(")");
+                sb.append("  scale=(").append(fmt(e.scaleX)).append(",").append(fmt(e.scaleY)).append(",").append(fmt(e.scaleZ)).append(")");
+                sb.append("  rot=(").append(fmt(e.rotX)).append(",").append(fmt(e.rotY)).append(",").append(fmt(e.rotZ)).append(")");
+            } else {
+                sb.append("  pos=(").append(fmt(e.x)).append(",").append(fmt(e.y)).append(")");
+                sb.append("  scale=(").append(fmt(e.scaleX)).append(",").append(fmt(e.scaleY)).append(")");
+                sb.append("  rotZ=").append(fmt(e.rotZ));
+            }
+            sb.append("  colour=").append(e.colorHex);
+            if (e.secondaryColorHex != null && !e.secondaryColorHex.isEmpty()) sb.append(" secondary=").append(e.secondaryColorHex);
+            sb.append("  material=").append(e.material).append(" body=").append(e.bodyType)
+              .append(" collider=").append(e.collider).append(" trigger=").append(e.isTrigger);
+            if (!e.visible) sb.append(" hidden");
+            if (e.emissive) sb.append(" emissive");
+            if (e.alpha < 0.999f) sb.append(" alpha=").append(fmt(e.alpha));
+            sb.append("\n");
         }
+
+        // ---- blueprint ---------------------------------------------------
+        sb.append("\n=== BLUEPRINT/LOGIC GRAPH: ").append(p.blueprintNodes.size())
+          .append(" nodes, ").append(p.blueprintLinks.size()).append(" links ===\n");
+        for (com.vortex.engine.core.flow.VortexBlueprintGraph.BpNode n : p.blueprintNodes) {
+            sb.append("  node ").append(n.id).append(" type=").append(n.type)
+              .append(" \"").append(n.title == null ? "" : n.title).append("\"");
+            if (n.param1 != null && !n.param1.isEmpty()) sb.append(" p1=\"").append(n.param1).append("\"");
+            if (n.param2 != null && !n.param2.isEmpty()) sb.append(" p2=\"").append(n.param2).append("\"");
+            if (n.param3 != null && !n.param3.isEmpty()) sb.append(" p3=\"").append(n.param3).append("\"");
+            sb.append("\n");
+        }
+        for (com.vortex.engine.core.flow.VortexBlueprintGraph.BpLink l : p.blueprintLinks) {
+            sb.append("  link ").append(l.fromNodeId).append(" -> ").append(l.toNodeId)
+              .append(" (out pin ").append(l.fromPin).append(")\n");
+        }
+        if (!p.flowRules.isEmpty()) {
+            sb.append("  flow rules: ").append(p.flowRules.size()).append(" (event -> action chain)\n");
+        }
+
+        // ---- assets ------------------------------------------------------
+        if (!p.customSprites.isEmpty() || !p.customObjMeshes.isEmpty()) {
+            sb.append("\n=== CUSTOM ASSETS ===\n");
+            if (!p.customSprites.isEmpty()) sb.append("  sprites: ").append(p.customSprites.keySet()).append("\n");
+            if (!p.customObjMeshes.isEmpty()) sb.append("  meshes: ").append(p.customObjMeshes.keySet()).append("\n");
+        }
+
+        // ---- environment --------------------------------------------------
+        sb.append("\n=== RUNTIME ENVIRONMENT ===\n").append(buildEnvironmentContext());
+
+        sb.append("\nSYNTAX_CHECK: ").append(VortexScriptEngine.validateProjectSyntax(p)).append("\n");
+        return sb.toString();
+    }
+
+    private static String fmt(float f) {
+        if (Math.abs(f - Math.round(f)) < 0.001f) return String.valueOf(Math.round(f));
+        return String.format(java.util.Locale.US, "%.2f", f);
+    }
+
+    /** Where this AI is actually running, so it never writes code for a platform that is not there. */
+    public static String buildEnvironmentContext() {
+        StringBuilder sb = new StringBuilder();
+        String os = System.getProperty("os.name", "?");
+        sb.append("  host: ").append(os).append(" / Java ").append(System.getProperty("java.version", "?")).append("\n");
+        boolean android = os.toLowerCase(java.util.Locale.US).contains("android");
+        sb.append("  surface: ").append(android
+                ? "Android phone studio (VortexMobileUi) — touch input, resizable dialogs, no window chrome"
+                : "desktop studio (Swing DesktopUiKit) — mouse + keyboard, docks, viewport").append("\n");
+        sb.append("  script VMs available in this build: JS (Rhino ES6), LUA (luaj), JAVA (BeanShell), VXS (native)\n");
+        sb.append("  physics: JBox2D for 2D rigid bodies, built-in 3D swept-sphere solver; gravity is per-project\n");
+        sb.append("  renderer: software rasteriser with sun+ambient lighting, fog, contact shadows, emissive materials\n");
+        sb.append("  audio: ChiptuneGenerator synth (music presets) + SynthAudioEngine SFX, mixed at -23 LUFS style headroom\n");
+        java.io.File saveRoot = new java.io.File(System.getProperty("user.home", "."), ".vortex-saves");
+        sb.append("  saves: ").append(saveRoot.getAbsolutePath()).append("\n");
         return sb.toString();
     }
 
@@ -828,6 +951,13 @@ public class VortexForgeAgent {
         String sys =
                 "You are Vortex Forge AI, a contextual game engine IDE assistant inside Vortex Engine Studio.\n"
                 + "You collaborate with the developer in a continuous multi-turn conversation and can inspect/modify their multi-file codebase, scene entities, visual Blueprint GUI nodes, and run headless playtests.\n"
+                + "\nWORKSPACE LAW (the most important rule):\n"
+                + "- The workspace in LIVE WORKSPACE SNAPSHOT already exists and is the user's real project. WORK INSIDE IT.\n"
+                + "- Read the files it lists. When you change behaviour, prefer edit_file on an existing path (find/replace) or rewrite that same path with write_file. Match the existing style, helper names, entity names and file layout.\n"
+                + "- Only create a new file when the current layout genuinely has no home for the feature; put it beside the existing scripts and wire it from the existing hooks.\n"
+                + "- NEVER replace the project with a fresh standalone sample, never emit a brand-new 2D game when a project is already loaded, never rename or delete existing entities/files the user did not ask about, and never ignore the entities and nodes already in the scene.\n"
+                + "- If the snapshot and the request disagree, extend the snapshot (keep what is there) and say in `reply` what you extended.\n"
+                + "- Keep every existing hook working: onStart/onUpdate(dt)/onButton/onCollide stay present and chained.\n"
                 + "Respond ONLY with a single valid JSON object (no markdown fences outside JSON) matching this schema:\n"
                 + "{\n"
                 + "  \"reply\": \"1-3 short sentences. What you did, in the user's language. No planning, no analysis.\",\n"
@@ -850,7 +980,8 @@ public class VortexForgeAgent {
                 + "2. `reply` is the only text the human sees — keep it short and concrete, no markdown fences.\n"
                 + "3. If the request is ambiguous or needs a decision you cannot infer (camera, genre, art style, input, difficulty, save format...), return `actions: []` plus 1-3 `questions` with 2-4 `options` each so the user can answer with one click, then act on their answer next turn.\n"
                 + "4. If the request is clear, DO THE WORK with actions and do not ask questions.\n"
-                + "5. Prefer real, runnable code with the APIs listed above. Never invent API names.\n\n"
+                + "5. Prefer real, runnable code with the APIs listed above. Never invent API names.\n"
+                + "6. Every `path` in actions MUST be a path that already appears in the snapshot (or a clearly adjacent new one under the same folder). File content you write should keep what that file already does and add to it.\n\n"
                 + "LIVE WORKSPACE SNAPSHOT:\n" + buildWorkspaceContext(p);
 
         String model = (customModelId != null && !customModelId.trim().isEmpty())

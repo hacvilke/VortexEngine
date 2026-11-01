@@ -88,51 +88,51 @@ public final class DesktopUiKit {
     // Palette mirrors hacvilke/paper-trader: nothing here is pure white or pure black,
     // because paper never is; contrast comes from ink weight, not from neon.
     // =====================================================================
-    public static final Color C_PAPER        = new Color(0xFF, 0xFD, 0xF6); // #fffdf6 sheet (site-accurate)
-    public static final Color C_PAPER_2      = new Color(0xFB, 0xF6, 0xEA); // #fbf6ea secondary stock
-    public static final Color C_PAPER_DEEP   = new Color(0xF3, 0xEB, 0xD6); // #f3ebd6 kraft / headers
-    public static final Color C_INK          = new Color(0x33, 0x29, 0x1D); // #33291d ink
-    public static final Color C_PENCIL       = new Color(0x6F, 0x65, 0x58); // #6f6558 pencil
-    public static final Color C_INK_GREEN    = new Color(0x1E, 0x7A, 0x44); // #1e7a44
-    public static final Color C_INK_RED      = new Color(0xC0, 0x39, 0x2B); // #c0392b
-    public static final Color C_INK_BLUE     = new Color(0x24, 0x56, 0xA6); // #2456a6
-    public static final Color C_INK_AMBER    = new Color(0xB8, 0x86, 0x0B); // gold, per site
+    public static Color C_PAPER        = new Color(0xFF, 0xFD, 0xF6); // #fffdf6 sheet (site-accurate)
+    public static Color C_PAPER_2      = new Color(0xFB, 0xF6, 0xEA); // #fbf6ea secondary stock
+    public static Color C_PAPER_DEEP   = new Color(0xF3, 0xEB, 0xD6); // #f3ebd6 kraft / headers
+    public static Color C_INK          = new Color(0x33, 0x29, 0x1D); // #33291d ink
+    public static Color C_PENCIL       = new Color(0x6F, 0x65, 0x58); // #6f6558 pencil
+    public static Color C_INK_GREEN    = new Color(0x1E, 0x7A, 0x44); // #1e7a44
+    public static Color C_INK_RED      = new Color(0xC0, 0x39, 0x2B); // #c0392b
+    public static Color C_INK_BLUE     = new Color(0x24, 0x56, 0xA6); // #2456a6
+    public static Color C_INK_AMBER    = new Color(0xB8, 0x86, 0x0B); // gold, per site
 
     // Same names as before, re-pointed at paper. (C_WHITE == "ink" and C_DARK_INK == "paper" is
     // deliberate: it inverts stamps/buttons in one place instead of touching 300 call sites.)
-    public static final Color C_VOID          = C_PAPER;       // canvas / code / console sheet
-    public static final Color C_INPUT_BG      = new Color(0xFF, 0xFE, 0xF8);
-    public static final Color C_PANEL         = C_PAPER_2;     // docks
-    public static final Color C_PANEL_ALT     = new Color(0xFF, 0xFD, 0xF3);
-    public static final Color C_HEADER        = C_PAPER_DEEP;  // dock headers (kraft tab)
-    public static final Color C_SURFACE       = new Color(0xF7, 0xEF, 0xDC);
-    public static final Color C_SURFACE_HOV   = new Color(0xEF, 0xE3, 0xC6);
-    public static final Color C_BORDER_SUBTLE = new Color(0xE9, 0xDE, 0xC6);
-    public static final Color C_BORDER        = new Color(0xD9, 0xC9, 0xA6);
-    public static final Color C_BORDER_STRONG = new Color(0xB0, 0x9B, 0x74);
-    public static final Color C_WHITE         = C_INK;         // "strongest foreground" == ink
-    public static final Color C_WHITE_SOFT    = new Color(0x3E, 0x33, 0x25);
-    public static final Color C_ACCENT_TINT   = new Color(0xFF, 0xEE, 0x9C); // site highlight
-    public static final Color C_DARK_INK      = C_PAPER;       // text stamped on ink fills
-    public static final Color C_TEXT          = C_INK;
-    public static final Color C_TEXT_LABEL    = new Color(0x3A, 0x2F, 0x22);
-    public static final Color C_TEXT_MUTED    = C_PENCIL;
+    public static Color C_VOID          = C_PAPER;       // canvas / code / console sheet
+    public static Color C_INPUT_BG      = new Color(0xFF, 0xFE, 0xF8);
+    public static Color C_PANEL         = C_PAPER_2;     // docks
+    public static Color C_PANEL_ALT     = new Color(0xFF, 0xFD, 0xF3);
+    public static Color C_HEADER        = C_PAPER_DEEP;  // dock headers (kraft tab)
+    public static Color C_SURFACE       = new Color(0xF7, 0xEF, 0xDC);
+    public static Color C_SURFACE_HOV   = new Color(0xEF, 0xE3, 0xC6);
+    public static Color C_BORDER_SUBTLE = new Color(0xE9, 0xDE, 0xC6);
+    public static Color C_BORDER        = new Color(0xD9, 0xC9, 0xA6);
+    public static Color C_BORDER_STRONG = new Color(0xB0, 0x9B, 0x74);
+    public static Color C_WHITE         = C_INK;         // "strongest foreground" == ink
+    public static Color C_WHITE_SOFT    = new Color(0x3E, 0x33, 0x25);
+    public static Color C_ACCENT_TINT   = new Color(0xFF, 0xEE, 0x9C); // site highlight
+    public static Color C_DARK_INK      = C_PAPER;       // text stamped on ink fills
+    public static Color C_TEXT          = C_INK;
+    public static Color C_TEXT_LABEL    = new Color(0x3A, 0x2F, 0x22);
+    public static Color C_TEXT_MUTED    = C_PENCIL;
 
-    public static final Color C_CYAN          = C_INK;
-    public static final Color C_CYAN_HOV      = C_PENCIL;
-    public static final Color C_CYAN_TINT     = C_ACCENT_TINT;
-    public static final Color C_CYAN_DARK_TX  = C_PAPER;
+    public static Color C_CYAN          = C_INK;
+    public static Color C_CYAN_HOV      = C_PENCIL;
+    public static Color C_CYAN_TINT     = C_ACCENT_TINT;
+    public static Color C_CYAN_DARK_TX  = C_PAPER;
 
     // Semantic ink washes (stamps, not neon)
-    public static final Color C_DANGER_BG    = new Color(0xF7, 0xE3, 0xDF);
-    public static final Color C_DANGER_HOV   = new Color(0xF1, 0xD3, 0xCD);
-    public static final Color C_DANGER_BD    = new Color(0xD9, 0xA7, 0x9F);
-    public static final Color C_DANGER_TX    = C_INK_RED;
-    public static final Color C_OK_BG        = new Color(0xE4, 0xEF, 0xE2);
-    public static final Color C_OK_BD        = new Color(0xA8, 0xC9, 0xA9);
-    public static final Color C_OK_TX        = C_INK_GREEN;
-    public static final Color C_WARN_BG      = new Color(0xF6, 0xEC, 0xD5);
-    public static final Color C_WARN_TX      = C_INK_AMBER;
+    public static Color C_DANGER_BG    = new Color(0xF7, 0xE3, 0xDF);
+    public static Color C_DANGER_HOV   = new Color(0xF1, 0xD3, 0xCD);
+    public static Color C_DANGER_BD    = new Color(0xD9, 0xA7, 0x9F);
+    public static Color C_DANGER_TX    = C_INK_RED;
+    public static Color C_OK_BG        = new Color(0xE4, 0xEF, 0xE2);
+    public static Color C_OK_BD        = new Color(0xA8, 0xC9, 0xA9);
+    public static Color C_OK_TX        = C_INK_GREEN;
+    public static Color C_WARN_BG      = new Color(0xF6, 0xEC, 0xD5);
+    public static Color C_WARN_TX      = C_INK_AMBER;
 
     // ---------------------------------------------------------------------
     // Paper lettering: three OFL fonts are bundled with the app (fonts/*.ttf) so the hand-lettered
@@ -260,6 +260,8 @@ public final class DesktopUiKit {
     /** Fine film grain over the cream stock (subtle by design: it must never hurt legibility). */
     public static java.awt.TexturePaint paperGrainPaint() {
         if (paperPaint == null) {
+            // on a dark sheet the grain has to lift instead of darken, or it reads as dust
+            boolean dark = isDarkTheme();
             int n = 192;
             java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(
                     n, n, java.awt.image.BufferedImage.TYPE_INT_ARGB);
@@ -271,9 +273,11 @@ public final class DesktopUiKit {
                     double blot = Math.sin(x * 0.055) * Math.cos(y * 0.043) * 0.5 + 0.5;
                     int a = (int) (speck < 60 ? 4 : (speck < 92 ? 7 : 10));
                     a += (int) (blot * 5);
-                    int tone = speck < 44 ? 0xA98A5C : 0xFFF8E8;
+                    int tone = speck < 44 ? (dark ? 0x6A5B45 : 0xA98A5C)
+                            : (dark ? 0x2E2822 : 0xFFF8E8);
                     int r = (tone >> 16) & 0xFF, g = (tone >> 8) & 0xFF, b = tone & 0xFF;
-                    img.setRGB(x, y, (Math.min(14, a) << 24) | (r << 16) | (g << 8) | b);
+                    int alpha = Math.min(dark ? 20 : 14, a + (dark ? 4 : 0));
+                    img.setRGB(x, y, (alpha << 24) | (r << 16) | (g << 8) | b);
                 }
             }
             paperGrain = img;
@@ -310,13 +314,16 @@ public final class DesktopUiKit {
 
     /** The wooden desk the sheet of paper lies on. */
     public static void paintDesk(Graphics2D g2, int w, int h) {
-        java.awt.GradientPaint wood = new java.awt.GradientPaint(
-                0, 0, new Color(0x9C, 0x6E, 0x40), 0, h, new Color(0x6B, 0x45, 0x23));
+        // light paper lies on warm walnut; a dark theme lies on espresso so the sheets still read
+        boolean dark = isDarkTheme();
+        Color top = dark ? new Color(0x3A, 0x2A, 0x1B) : new Color(0x9C, 0x6E, 0x40);
+        Color bot = dark ? new Color(0x1E, 0x15, 0x0D) : new Color(0x6B, 0x45, 0x23);
+        java.awt.GradientPaint wood = new java.awt.GradientPaint(0, 0, top, 0, h, bot);
         g2.setPaint(wood);
         g2.fillRect(0, 0, w, h);
-        g2.setColor(new Color(0x2B, 0x18, 0x08, 26));
+        g2.setColor(new Color(0x2B, 0x18, 0x08, dark ? 40 : 26));
         for (int x = 0; x < w; x += 118) g2.fillRect(x, 0, 2, h);
-        g2.setColor(new Color(0x2B, 0x18, 0x08, 16));
+        g2.setColor(new Color(0x2B, 0x18, 0x08, dark ? 26 : 16));
         for (int y = 0; y < h; y += 13) g2.fillRect(0, y, w, 1);
         g2.setPaint(null);
     }
@@ -411,6 +418,143 @@ public final class DesktopUiKit {
         }
     }
 
+    // =====================================================================
+    // THEME ENGINE (v4.9.2) — every colour below the sheet comes from a VortexTheme, so a
+    // palette import, a custom theme or dark mode repaints the studio without touching a view.
+    // =====================================================================
+    private static final java.util.List<java.awt.Window> LIVE_WINDOWS = new java.util.ArrayList<>();
+
+    /** Registers a window so theme changes repaint it. */
+    public static void trackWindow(java.awt.Window w) {
+        if (w == null) return;
+        synchronized (LIVE_WINDOWS) {
+            if (!LIVE_WINDOWS.contains(w)) LIVE_WINDOWS.add(w);
+        }
+    }
+
+    private static Color c(String hex) {
+        return new Color(com.vortex.engine.core.theme.VortexTheme.parseInt(hex));
+    }
+
+    private static String mixHex(String a, String b, double t) {
+        return com.vortex.engine.core.theme.ThemeRegistry.mix(a, b, t);
+    }
+
+    /** True when the active theme paints a dark sheet. */
+    public static boolean isDarkTheme() {
+        return com.vortex.engine.core.theme.ThemeRegistry.active().dark;
+    }
+
+    /** Applies a theme to the whole kit, then repaints every live window. */
+    public static void applyTheme(com.vortex.engine.core.theme.VortexTheme t) {
+        if (t == null) return;
+        C_PAPER        = c(t.get(com.vortex.engine.core.theme.VortexTheme.SHEET));
+        C_PAPER_2      = c(t.get(com.vortex.engine.core.theme.VortexTheme.SHEET_2));
+        C_PAPER_DEEP   = c(t.get(com.vortex.engine.core.theme.VortexTheme.HEADER));
+        C_INK          = c(t.get(com.vortex.engine.core.theme.VortexTheme.INK));
+        C_PENCIL       = c(t.get(com.vortex.engine.core.theme.VortexTheme.TEXT_MUTED));
+        C_INK_GREEN    = c(t.get(com.vortex.engine.core.theme.VortexTheme.OK));
+        C_INK_RED      = c(t.get(com.vortex.engine.core.theme.VortexTheme.DANGER));
+        C_INK_AMBER    = c(t.get(com.vortex.engine.core.theme.VortexTheme.WARN));
+
+        C_VOID          = C_PAPER;
+        C_INPUT_BG      = c(t.get(com.vortex.engine.core.theme.VortexTheme.INPUT_BG));
+        C_PANEL         = c(t.get(com.vortex.engine.core.theme.VortexTheme.PANEL));
+        C_PANEL_ALT     = c(t.get(com.vortex.engine.core.theme.VortexTheme.PANEL_ALT));
+        C_HEADER        = C_PAPER_DEEP;
+        C_SURFACE       = c(t.get(com.vortex.engine.core.theme.VortexTheme.SURFACE));
+        C_SURFACE_HOV   = c(t.get(com.vortex.engine.core.theme.VortexTheme.SURFACE_HOV));
+        C_BORDER_SUBTLE = c(t.get(com.vortex.engine.core.theme.VortexTheme.BORDER_SUB));
+        C_BORDER        = c(t.get(com.vortex.engine.core.theme.VortexTheme.BORDER));
+        C_BORDER_STRONG = c(t.get(com.vortex.engine.core.theme.VortexTheme.BORDER_STR));
+        C_ACCENT_TINT   = c(t.get(com.vortex.engine.core.theme.VortexTheme.ACCENT));
+        C_WHITE         = C_INK;
+        C_WHITE_SOFT    = C_INK;
+        C_DARK_INK      = c(t.get(com.vortex.engine.core.theme.VortexTheme.ON_ACCENT));
+        C_TEXT          = C_INK;
+        C_TEXT_LABEL    = C_INK;
+        C_TEXT_MUTED    = C_PENCIL;
+        C_CYAN          = C_INK;
+        C_CYAN_HOV      = C_PENCIL;
+        C_CYAN_TINT     = C_ACCENT_TINT;
+        C_CYAN_DARK_TX  = C_DARK_INK;
+
+        C_DANGER_BG  = c(t.get(com.vortex.engine.core.theme.VortexTheme.DANGER_BG));
+        C_DANGER_HOV = c(mixHex(t.get(com.vortex.engine.core.theme.VortexTheme.DANGER_BG),
+                t.get(com.vortex.engine.core.theme.VortexTheme.DANGER), 0.18));
+        C_DANGER_BD  = c(mixHex(t.get(com.vortex.engine.core.theme.VortexTheme.DANGER_BG),
+                t.get(com.vortex.engine.core.theme.VortexTheme.DANGER), 0.45));
+        C_DANGER_TX  = c(t.get(com.vortex.engine.core.theme.VortexTheme.DANGER));
+        C_OK_BG      = c(t.get(com.vortex.engine.core.theme.VortexTheme.OK_BG));
+        C_OK_BD      = c(mixHex(t.get(com.vortex.engine.core.theme.VortexTheme.OK_BG),
+                t.get(com.vortex.engine.core.theme.VortexTheme.OK), 0.45));
+        C_OK_TX      = c(t.get(com.vortex.engine.core.theme.VortexTheme.OK));
+        C_WARN_BG    = c(t.get(com.vortex.engine.core.theme.VortexTheme.WARN_BG));
+        C_WARN_TX    = c(t.get(com.vortex.engine.core.theme.VortexTheme.WARN));
+
+        paperPaint = null;      // the grain texture is baked from the old colours
+
+        refreshUiDefaults();
+        repaintEverything();
+    }
+
+    public static void repaintEverything() {
+        for (java.awt.Window w : java.awt.Window.getWindows()) {
+            w.repaint();
+            if (w instanceof java.awt.Container) {
+                for (java.awt.Component k : ((java.awt.Container) w).getComponents()) k.repaint();
+            }
+        }
+        synchronized (LIVE_WINDOWS) {
+            for (java.awt.Window w : LIVE_WINDOWS) if (w.isDisplayable()) w.repaint();
+        }
+    }
+
+    // =====================================================================
+    // APP ICON — one drawn mark (scripts/make_icon.py) for the taskbar, alt-tab and window
+    // =====================================================================
+    private static java.util.List<java.awt.Image> APP_ICONS = null;
+
+    /** The Vortex mark at every size the shell asks for; falls back to a drawn glyph. */
+    public static java.util.List<java.awt.Image> appIcons() {
+        if (APP_ICONS != null) return APP_ICONS;
+        java.util.List<java.awt.Image> out = new java.util.ArrayList<>();
+        int[] sizes = {16, 24, 32, 48, 64, 128, 256};
+        try {
+            java.awt.image.BufferedImage src = javax.imageio.ImageIO.read(
+                    DesktopUiKit.class.getResourceAsStream("/icon.png"));
+            if (src != null) {
+                for (int px : sizes) {
+                    out.add(src.getScaledInstance(px, px, java.awt.Image.SCALE_SMOOTH));
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        if (out.isEmpty()) {
+            java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(
+                    64, 64, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g2 = img.createGraphics();
+            enableAA(g2);
+            g2.setColor(C_PAPER);
+            g2.fillRoundRect(0, 0, 64, 64, 16, 16);
+            g2.setColor(C_INK);
+            g2.fillOval(20, 20, 24, 24);
+            g2.dispose();
+            out.add(img);
+        }
+        APP_ICONS = out;
+        return out;
+    }
+
+    /** Gives a window the app icon (idempotent). */
+    public static void brandWindow(java.awt.Window w) {
+        if (!(w instanceof java.awt.Frame)) return;
+        try {
+            ((java.awt.Frame) w).setIconImages(appIcons());
+        } catch (Throwable ignored) {
+        }
+    }
+
     public static void installDarkDefaults() {
         System.setProperty("awt.useSystemAAFontSettings", "lcd");
         System.setProperty("swing.aatext", "true");
@@ -418,6 +562,11 @@ public final class DesktopUiKit {
             UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
         } catch (Exception ignored) {}
         rebuildFonts();
+        refreshUiDefaults();
+    }
+
+    /** Re-installs UI defaults from the live colours — called on startup and after a theme swap. */
+    public static void refreshUiDefaults() {
         UIManager.put("Panel.background", C_VOID);
         // the gaps between docks are the wooden desk under the paper
         UIManager.put("SplitPane.background", new Color(0x8A, 0x5F, 0x36));

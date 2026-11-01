@@ -26,6 +26,15 @@ import javax.sound.sampled.SourceDataLine;
  */
 public class DesktopAudioEngine {
 
+    // =====================================================================
+    // MIX BUSES (v4.9.2) — SFX lead the mix, music sits under them.
+    // Targets from game-audio practice: whole mix ~-23 LUFS, music 6-12 LU quieter than effects,
+    // ~2 dB true-peak headroom. Voices were also trimmed so nothing rides the 0 dB stop.
+    // =====================================================================
+    public static float sfxBus = 0.72f;
+    public static float musicBus = 0.42f;
+
+
     private static final int SAMPLE_RATE = 22050;
     private static final AtomicInteger THREAD_SEQ = new AtomicInteger(1);
 
@@ -163,11 +172,19 @@ public class DesktopAudioEngine {
         pool.execute(() -> {
             SourceDataLine line = null;
             try {
-                short[] samples = synthesize(presetName.trim().toLowerCase());
+                String kind = presetName.trim().toLowerCase();
+                short[] samples = synthesize(kind);
+                // music presets are the long beds; everything else is a one-shot effect
+                boolean isMusic = kind.contains("cyberpunk") || kind.contains("dungeon")
+                        || kind.contains("boss") || kind.contains("skychill");
+                float bus = isMusic ? musicBus : sfxBus;
                 byte[] pcm = new byte[samples.length * 2];
                 for (int i = 0; i < samples.length; i++) {
-                    pcm[i * 2] = (byte) (samples[i] & 0xFF);
-                    pcm[i * 2 + 1] = (byte) ((samples[i] >> 8) & 0xFF);
+                    int v = Math.round(samples[i] * bus);
+                    if (v > 32767) v = 32767;
+                    if (v < -32768) v = -32768;
+                    pcm[i * 2] = (byte) (v & 0xFF);
+                    pcm[i * 2 + 1] = (byte) ((v >> 8) & 0xFF);
                 }
                 AudioFormat fmt = new AudioFormat(SAMPLE_RATE, 16, 1, true, false);
                 line = AudioSystem.getSourceDataLine(fmt);
@@ -206,8 +223,8 @@ public class DesktopAudioEngine {
             case "jump":      return sweepWave(220f, 640f, 0.16f, true);
             case "coin":      return coinChime();
             case "laser":     return sweepWave(920f, 170f, 0.13f, true);
-            case "explosion": return noiseBurst(0.32f, 0.85f);
-            case "hit":       return noiseBurst(0.11f, 0.65f);
+            case "explosion": return noiseBurst(0.32f, 0.52f);
+            case "hit":       return noiseBurst(0.11f, 0.38f);
             case "powerup":   return arpeggio(new float[]{330f, 440f, 554f, 660f}, 0.28f);
             default:          return sweepWave(440f, 520f, 0.09f, false);
         }
@@ -221,7 +238,7 @@ public class DesktopAudioEngine {
             float t = (float) i / n;
             float f = f0 + (f1 - f0) * t;
             phase += 2.0 * Math.PI * f / SAMPLE_RATE;
-            float env = (1.0f - t) * 0.40f;
+            float env = (1.0f - t) * 0.24f;
             double w = Math.sin(phase);
             if (square) w = w >= 0 ? 0.8 : -0.8;
             out[i] = (short) (w * env * Short.MAX_VALUE);
@@ -237,7 +254,7 @@ public class DesktopAudioEngine {
         for (int i = 0; i < n; i++) {
             float f = (i < split) ? 987.77f : 1318.51f;
             phase += 2.0 * Math.PI * f / SAMPLE_RATE;
-            float env = (1.0f - (float) i / n) * 0.42f;
+            float env = (1.0f - (float) i / n) * 0.26f;
             out[i] = (short) (Math.sin(phase) * env * Short.MAX_VALUE);
         }
         return out;
@@ -250,7 +267,7 @@ public class DesktopAudioEngine {
         for (int i = 0; i < n; i++) {
             int idx = Math.min(notes.length - 1, (i * notes.length) / n);
             phase += 2.0 * Math.PI * notes[idx] / SAMPLE_RATE;
-            float env = (1.0f - (float) i / n * 0.7f) * 0.40f;
+            float env = (1.0f - (float) i / n * 0.7f) * 0.24f;
             out[i] = (short) (Math.sin(phase) * env * Short.MAX_VALUE);
         }
         return out;

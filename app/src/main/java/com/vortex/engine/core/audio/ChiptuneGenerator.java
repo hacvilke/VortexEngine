@@ -10,6 +10,22 @@ package com.vortex.engine.core.audio;
  * Automatically synthesizes Lead Pulse Wave + Sub-Octave Triangle Bass + Kick/HiHat Drums!
  */
 public class ChiptuneGenerator {
+    // =====================================================================
+    // MIX LEVELS (v4.9.2 "tone it down")
+    //
+    // The old bed summed a 0.55 pulse lead at 0.22 plus bass 0.20, kick 0.24 and hats 0.08, all
+    // clamped at 0.92 — i.e. it sat on the 0 dB stop and flattened the rest of the mix. Games
+    // target roughly -23 LUFS for the whole mix with music sitting 6-12 LU *under* the effects
+    // (Sony/SCEA guidance), so voices are trimmed ~5-6 dB here, the sum is soft-limited, and the
+    // engine's music bus trims another ~6 dB against SFX.
+    // =====================================================================
+    private static final float LEAD_GAIN   = 0.125f; // was 0.22
+    private static final float BASS_GAIN   = 0.110f; // was 0.20
+    private static final float KICK_GAIN   = 0.150f; // was 0.24
+    private static final float HAT_GAIN    = 0.042f; // was 0.08
+    private static final float MUSIC_MASTER = 0.62f;
+    private static final float CEILING      = 0.78f; // ~-2.2 dBFS ceiling for the music bus
+
 
     public static final int SAMPLE_RATE = 22050;
 
@@ -105,7 +121,7 @@ public class ChiptuneGenerator {
                     leadPhase += leadFreq / SAMPLE_RATE;
                     if (leadPhase >= 1.0) leadPhase -= 1.0;
                     float pulse = (leadPhase < 0.28) ? 0.55f : -0.35f;
-                    float env = (1.0f - t * 0.72f) * 0.22f;
+                    float env = (1.0f - t * 0.72f) * LEAD_GAIN;
                     mix += pulse * env;
                 }
 
@@ -113,23 +129,26 @@ public class ChiptuneGenerator {
                 bassPhase += bassFreq / SAMPLE_RATE;
                 if (bassPhase >= 1.0) bassPhase -= 1.0;
                 float tri = (float) (4.0 * Math.abs(bassPhase - 0.5) - 1.0);
-                float bassEnv = ((s % 2 == 0) ? (1.0f - t * 0.5f) : (0.6f - t * 0.4f)) * 0.20f;
+                float bassEnv = ((s % 2 == 0) ? (1.0f - t * 0.5f) : (0.6f - t * 0.4f)) * BASS_GAIN;
                 mix += tri * Math.max(0f, bassEnv);
 
                 // 3. Punchy Synth Kick & Crisp Hi-Hat
                 if (isKick && t < 0.45f) {
                     float kt = t / 0.45f;
                     float kf = 135f * (1.0f - kt * 0.72f);
-                    mix += (float) Math.sin(2.0 * Math.PI * kf * (i / (double) SAMPLE_RATE)) * (1.0f - kt) * 0.24f;
+                    mix += (float) Math.sin(2.0 * Math.PI * kf * (i / (double) SAMPLE_RATE)) * (1.0f - kt) * KICK_GAIN;
                 }
                 if (isHat && t < 0.18f) {
                     noiseSeed = (noiseSeed * 1664525L + 1013904223L) & 0xFFFFFFFFL;
                     float wn = ((noiseSeed / (float) 0x80000000L) - 1.0f);
-                    mix += wn * (1.0f - t / 0.18f) * 0.08f;
+                    mix += wn * (1.0f - t / 0.18f) * HAT_GAIN;
                 }
 
-                if (mix > 0.92f) mix = 0.92f;
-                if (mix < -0.92f) mix = -0.92f;
+                // Soft knee limiter rounds transients instead of clipping, and the ceiling
+                // leaves headroom so SFX and UI clicks sit on top of the music bed.
+                mix = (float) Math.tanh(mix * 1.15f) * MUSIC_MASTER;
+                if (mix > CEILING) mix = CEILING;
+                if (mix < -CEILING) mix = -CEILING;
                 pcm[baseOffset + i] = (short) (mix * Short.MAX_VALUE);
             }
         }

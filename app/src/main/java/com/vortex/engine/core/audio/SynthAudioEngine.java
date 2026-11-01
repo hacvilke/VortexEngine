@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * v4.3.0: Instantaneous pause+flush+stop+release cutoff on stopMusicLoop()/stopAll() and daemon threads.
  */
 public class SynthAudioEngine {
+    /** Music bed gain relative to one-shot effects (music should sit 6-12 LU under SFX). */
+    public static final float MUSIC_BUS_VOLUME = 0.55f;
     private static final int SAMPLE_RATE = 22050;
     private static final AtomicInteger THREAD_SEQ = new AtomicInteger(1);
     private final Map<String, short[]> clips = new HashMap<>();
@@ -51,12 +53,14 @@ public class SynthAudioEngine {
     }
 
     private void generatePresets() {
-        clips.put("jump", synthSweep(210.0, 560.0, 0.16, 0.45, false));
-        clips.put("coin", synthCoin(0.20));
-        clips.put("laser", synthSweep(880.0, 170.0, 0.14, 0.40, true));
-        clips.put("explosion", synthNoise(0.34, 0.55));
-        clips.put("hit", synthSweep(180.0, 65.0, 0.12, 0.50, true));
-        clips.put("powerup", synthArpeggio(new double[]{523.25, 659.25, 783.99, 1046.50}, 0.28));
+        // v4.9.2 mix: effects sit around -20 dBFS peak (was riding near 0 dB) so they never
+        // clip and leave room for the music bed underneath.
+        clips.put("jump", synthSweep(210.0, 560.0, 0.16, 0.24, false));
+        clips.put("coin", synthCoin(0.11));
+        clips.put("laser", synthSweep(880.0, 170.0, 0.14, 0.22, true));
+        clips.put("explosion", synthNoise(0.34, 0.30));
+        clips.put("hit", synthSweep(180.0, 65.0, 0.12, 0.26, true));
+        clips.put("powerup", synthArpeggio(new double[]{523.25, 659.25, 783.99, 1046.50}, 0.15));
     }
 
     private short[] synthSweep(double startHz, double endHz, double durationSec, double amp, boolean square) {
@@ -83,7 +87,7 @@ public class SynthAudioEngine {
             double hz = t < 0.35 ? 987.77 : 1318.51;
             phase += 2.0 * Math.PI * hz / SAMPLE_RATE;
             double env = Math.pow(1.0 - t, 1.3);
-            pcm[i] = (short) (Math.sin(phase) * env * 0.45 * Short.MAX_VALUE);
+            pcm[i] = (short) (Math.sin(phase) * env * 0.24 * Short.MAX_VALUE);
         }
         return pcm;
     }
@@ -97,7 +101,7 @@ public class SynthAudioEngine {
             int idx = Math.min(notes.length - 1, (int) (t * notes.length));
             phase += 2.0 * Math.PI * notes[idx] / SAMPLE_RATE;
             double env = 1.0 - t * 0.75;
-            pcm[i] = (short) (Math.sin(phase) * env * 0.42 * Short.MAX_VALUE);
+            pcm[i] = (short) (Math.sin(phase) * env * 0.23 * Short.MAX_VALUE);
         }
         return pcm;
     }
@@ -190,6 +194,8 @@ public class SynthAudioEngine {
                     AudioTrack.MODE_STATIC, AudioManager.AUDIO_SESSION_ID_GENERATE);
             musicTrack.write(pcm, 0, pcm.length);
             musicTrack.setLoopPoints(0, pcm.length, -1);
+            // music bus sits under the effects (see ChiptuneGenerator MIX LEVELS)
+            musicTrack.setVolume(MUSIC_BUS_VOLUME);
             musicTrack.play();
         } catch (Throwable ignored) {
         }

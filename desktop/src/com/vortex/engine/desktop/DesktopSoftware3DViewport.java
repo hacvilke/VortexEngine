@@ -118,6 +118,17 @@ public class DesktopSoftware3DViewport extends JPanel {
     public float editorDist = 19f;
     public float editor2DCamX = 0f, editor2DCamY = 1.5f, editor2DZoom = 18f;
 
+    /** Backdrop + rule colours, replaced by the active theme. */
+    private java.awt.Color themePaper = new java.awt.Color(0xFF, 0xFD, 0xF6);
+    private java.awt.Color themeInk = new java.awt.Color(0x33, 0x29, 0x1D);
+
+    /** Called by the studio when the theme changes. */
+    public void setThemeColors(java.awt.Color paper, java.awt.Color ink) {
+        if (paper != null) themePaper = paper;
+        if (ink != null) themeInk = ink;
+        repaint();
+    }
+
     private float playCamX = 0f, playCamY = 6f, playCamZ = 12f;
     private float playLookX = 0f, playLookY = 1f, playLookZ = 0f;
     private float shakeIntensity = 0f, shakeTimer = 0f;
@@ -144,7 +155,7 @@ public class DesktopSoftware3DViewport extends JPanel {
     private final Timer frameTimer;
 
     public DesktopSoftware3DViewport() {
-        setBackground(new Color(9, 9, 11));
+        setBackground(new Color(0xFF, 0xFD, 0xF6));
         setFocusable(true);
         setupInputs();
 
@@ -640,15 +651,21 @@ public class DesktopSoftware3DViewport extends JPanel {
      * Sky + atmosphere (v4.7.0): vertical sky gradient from the light rig, warm horizon band, sun
      * disc with bloom, and stars when the sun is low. Cheap, resolution independent, no textures.
      */
+    /** Theme-aware rule colour: ink at low alpha over the sheet. */
+    private java.awt.Color withAlpha(java.awt.Color fg, java.awt.Color bg, int alpha) {
+        int a = Math.max(14, Math.min(120, alpha));
+        return new java.awt.Color(fg.getRed(), fg.getGreen(), fg.getBlue(), a);
+    }
+
     /** Cream stock + faint rule-blue squares: the "paper" the 2D scene is drawn on. */
     private void paintGraphPaper(Graphics2D g2, int w, int h) {
-        g2.setColor(new java.awt.Color(0xFF, 0xFD, 0xF6));
+        g2.setColor(themePaper);
         g2.fillRect(0, 0, w, h);
         float zoom = Math.max(4f, editor2DZoom);
         float step = Math.max(8f, zoom);                 // one world unit per square, clamped
         if (step < 10f) step *= 2;
         int minor = Math.max(1, Math.round(step));
-        g2.setColor(new java.awt.Color(0x24, 0x56, 0xA6, 26));
+        g2.setColor(withAlpha(themeInk, themePaper, 26));
         for (int x = Math.floorMod(Math.round(w * 0.5f + editor2DCamX * zoom), minor); x < w; x += minor) {
             g2.drawLine(x, 0, x, h);
         }
@@ -656,7 +673,7 @@ public class DesktopSoftware3DViewport extends JPanel {
             g2.drawLine(0, y, w, y);
         }
         // every 5th rule is darker, like real graph paper
-        g2.setColor(new java.awt.Color(0x24, 0x56, 0xA6, 52));
+        g2.setColor(withAlpha(themeInk, themePaper, 52));
         int major = minor * 5;
         for (int x = Math.floorMod(Math.round(w * 0.5f + editor2DCamX * zoom), major); x < w; x += major) {
             g2.drawLine(x, 0, x, h);
@@ -665,7 +682,7 @@ public class DesktopSoftware3DViewport extends JPanel {
             g2.drawLine(0, y, w, y);
         }
         // margin rule at the origin
-        g2.setColor(new java.awt.Color(0xC0, 0x39, 0x2B, 70));
+        g2.setColor(withAlpha(themeInk, themePaper, 70));
         int ox = Math.round(w * 0.5f + editor2DCamX * zoom);
         int oy = Math.round(h * 0.5f - editor2DCamY * zoom);
         if (ox >= 0 && ox < w) g2.drawLine(ox, 0, ox, h);

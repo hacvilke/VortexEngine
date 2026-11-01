@@ -37,6 +37,8 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         // Paper theme lettering must be ready before any view is built.
+        // palette first: every colour below comes from the active theme
+        VortexMobileUi.applyActiveTheme(this);
         VortexMobileUi.loadPaperFonts(this);
         VortexMobileUi.applyDarkSystemBars(this);
 
@@ -66,8 +68,14 @@ public class MainActivity extends Activity {
         title.setSingleLine(true);
         brandRow.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView verChip = VortexMobileUi.makeBadge(this, "v4.9.1 STUDIO", true);
+        TextView verChip = VortexMobileUi.makeBadge(this, "v4.9.2 STUDIO", true);
         brandRow.addView(verChip);
+
+        TextView paletteChip = VortexMobileUi.makePaletteChip(this);
+        LinearLayout.LayoutParams pcLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        pcLp.rightMargin = dp(6);
+        brandRow.addView(paletteChip, pcLp);
         header.addView(brandRow);
 
         TextView subtitle = new TextView(this);
